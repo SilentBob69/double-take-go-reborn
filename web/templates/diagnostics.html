@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Double Take - Diagnostics</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+</head>
+<body>
+    {{template "_navbar.html" .BaseData}}
+
+    <div class="container mt-4">
+        <h2>Diagnostics</h2>
+
+        <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
+            {{/* Configuration Card */}}
+            <div class="col">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header">Configuration</div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Frigate URL
+                            <span><code>{{.Config.FrigateURL}}</code></span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            MQTT
+                            <span class="badge {{if .Config.MQTTEnabled}}bg-success{{else}}bg-secondary{{end}}">
+                                {{if .Config.MQTTEnabled}}Enabled{{else}}Disabled{{end}}
+                            </span>
+                        </li>
+                        {{if .Config.MQTTEnabled}}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            MQTT Broker
+                            <span><code>{{.Config.MQTTBroker}}</code></span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            MQTT Topic
+                            <span><code>{{.Config.MQTTTopic}}</code></span>
+                        </li>
+                        {{end}}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            CompreFace
+                            <span class="badge {{if .Config.CompreEnabled}}bg-success{{else}}bg-secondary{{end}}">
+                                {{if .Config.CompreEnabled}}Enabled{{else}}Disabled{{end}}
+                            </span>
+                        </li>
+                         {{if .Config.CompreEnabled}}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            CompreFace URL
+                            <span><code>{{.Config.CompreFaceURL}}</code></span>
+                        </li>
+                        {{end}}
+                    </ul>
+                </div>
+            </div>
+
+            {{/* Service Status Card */}}
+            <div class="col">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header">Service Status</div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            MQTT Connection
+                            {{if eq .MQTTStatus "Connected"}}
+                                <span class="badge bg-success">{{.MQTTStatus}}</span>
+                            {{else if eq .MQTTStatus "Disconnected"}}
+                                 <span class="badge bg-warning text-dark">{{.MQTTStatus}}</span>
+                            {{else if eq .MQTTStatus "Disabled"}}
+                                 <span class="badge bg-secondary">{{.MQTTStatus}}</span>
+                            {{else}}
+                                 <span class="badge bg-danger">{{.MQTTStatus}}</span> {{/* Error case */}}
+                            {{end}}
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            CompreFace Service
+                             {{if eq .CompreStatus "Reachable"}}
+                                <span class="badge bg-success">{{.CompreStatus}}</span>
+                            {{else if eq .CompreStatus "Unreachable"}}
+                                 <span class="badge bg-danger">{{.CompreStatus}}</span>
+                            {{else if eq .CompreStatus "Disabled"}}
+                                 <span class="badge bg-secondary">{{.CompreStatus}}</span>
+                            {{else}}
+                                 <span class="badge bg-warning text-dark">{{.CompreStatus}}</span> {{/* Unknown/Error case */}}
+                            {{end}}
+                        </li>
+                         {{/* Add Ping check for Frigate later? */}}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        {{/* Database Statistics Card */}}
+        <div class="row">
+            <div class="col">
+                <div class="card shadow-sm">
+                    <div class="card-header">Database Statistics</div>
+                    <div class="card-body">
+                         <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Stored Images
+                                <span class="badge bg-primary rounded-pill">{{.DBStats.ImageCount}}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Detected Faces
+                                <span class="badge bg-primary rounded-pill">{{.DBStats.FaceCount}}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Recognized Matches
+                                <span class="badge bg-primary rounded-pill">{{.DBStats.MatchCount}}</span>
+                            </li>
+                             <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Known Identities
+                                <span class="badge bg-primary rounded-pill">{{.DBStats.IdentityCount}}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Optional: Add specific JS for diagnostics later -->
+</body>
+</html>

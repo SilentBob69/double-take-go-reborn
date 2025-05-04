@@ -1,0 +1,45 @@
+# Sample configuration for Double Take Go
+
+server:
+  host: 0.0.0.0 # Host to bind the server to (use 0.0.0.0 in Docker)
+  port: 3000    # Port to run the server on
+
+log:
+  level: info  # Log level (e.g., debug, info, warn, error, fatal)
+  # file: /data/server.log # Path to the log file inside the container (defaults to this)
+
+# Database configuration (SQLite)
+database:
+  file: /data/double-take.db # Path to the SQLite database file inside the container
+
+# CompreFace face recognition service configuration
+compreface:
+  enabled: false # Set to true to enable CompreFace integration
+  url: "http://compreface:8000" # URL of your CompreFace instance
+  recognition_api_key: "YOUR_RECOGNITION_API_KEY" # API key for the Recognition service
+  # detection_api_key: "YOUR_DETECTION_API_KEY" # Optional: API key for Detection service if used separately
+  det_prob_threshold: 0.8 # Minimum probability for a detected face to be considered (0.0 to 1.0)
+
+# MQTT Broker Configuration (for Frigate events, etc.)
+mqtt:
+  enabled: false # Set to true to enable MQTT connection
+  broker: "tcp://mqtt-broker:1883" # Address of your MQTT broker (use tcp:// prefix)
+  username: "your_mqtt_user" # Optional: MQTT username
+  password: "your_mqtt_password" # Optional: MQTT password
+  client_id: "double-take-go" # Client ID for this application
+  topic: "frigate/events" # Topic to subscribe to for Frigate events
+
+# Frigate Configuration
+frigate:
+  api_url: "http://frigate:5000" # Base URL of your Frigate instance's API
+
+# --- Add other sections below as needed --- 
+# ui:
+#   path: "/" # Base path for the UI and API
+
+# storage:
+#   ...
+
+# detectors:
+#   deepstack:
+#     ...

@@ -1,0 +1,9 @@
+# Ignore build artifacts and local dependencies
+.git/
+*.log
+vendor/
+config/config.yaml # Don't copy local config into image
+
+# Ignore IDE/editor specific files
+.vscode/
+.idea/

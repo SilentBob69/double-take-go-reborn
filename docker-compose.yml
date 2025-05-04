@@ -1,0 +1,37 @@
+services:
+  # Service for running Go development commands (e.g., go mod tidy)
+  go-dev:
+    image: golang:1.24-alpine # Use a specific Go version
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go-cache:/go/pkg/mod # Mount the Go module cache
+    environment:
+      - GOPRIVATE=github.com/hanskrohn/*
+    # Command to keep the container running if needed, or use 'docker-compose run'
+    # command: ["sleep", "infinity"]
+
+  # Service for the compiled Go backend application
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "3000:3000" # Expose backend port on host 3000
+    volumes:
+      - ./config:/config # Mount config directory
+      - ./data:/data     # Mount data directory
+    environment:
+      - TZ=${TZ:-Europe/Berlin} # Set timezone, configurable via .env or host env
+    # Depends on database or other services if added later
+    restart: unless-stopped
+    # Environment variables can be added here or via .env file
+    # env_file:
+    #   - .env
+
+  # Frontend service (SvelteKit) will be added later
+  # frontend:
+  #   ...
+
+volumes:
+  go-cache: # Persist downloaded Go modules

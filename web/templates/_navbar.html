@@ -1,0 +1,22 @@
+{{/* Define the navigation bar partial */}}
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 border-bottom border-secondary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Double Take</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    {{/* Check if 'index' page is active */}}
+                    <a class="nav-link {{if eq .ActivePage "index"}}active{{end}}" {{if eq .ActivePage "index"}}aria-current="page"{{end}} href="/">Recent Activity</a>
+                </li>
+                <li class="nav-item">
+                    {{/* Check if 'diagnostics' page is active */}}
+                    <a class="nav-link {{if eq .ActivePage "diagnostics"}}active{{end}}" {{if eq .ActivePage "diagnostics"}}aria-current="page"{{end}} href="/diagnostics">Diagnostics</a>
+                </li>
+                <!-- Add other nav items here later -->
+            </ul>
+        </div>
+    </div>
+</nav>

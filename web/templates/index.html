@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Double Take - Activity</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <style>
+        /* Optional: Add some margin to the cards */
+        .card {
+            margin-bottom: 1.5rem;
+        }
+        .card-img-top {
+            width: 100%;
+            max-height: 400px; /* Limit image height */
+            object-fit: contain; /* Scale image nicely */
+        }
+    </style>
+</head>
+<body>
+    {{template "_navbar.html" .}}
+
+    <div class="container mt-4">
+        <h1>Recent Activity</h1>
+
+        <!-- Button to delete all images -->
+        <div class="mb-3 d-flex justify-content-end">
+            <button id="deleteAllButton" class="btn btn-danger">
+                <i class="bi bi-trash3-fill me-1"></i> Alle Bilder löschen
+            </button>
+        </div>
+
+        {{ define "imageCard" }}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card shadow-sm bg-body-tertiary" id="image-card-{{.ID}}">
+                <img src="/snapshots/{{.FilePath}}" class="card-img-top" alt="Snapshot {{.ID}}">
+                <div class="card-body">
+                    <h5 class="card-title">Image ID: {{.ID}}</h5>
+                    <p class="card-text">
+                        <small class="text-muted">Timestamp: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
+                        {{if .Faces}}
+                            Detected Faces:
+                            <ul>
+                                {{range .Faces}}
+                                    <li>
+                                        {{if .Matches}}
+                                            {{range .Matches}}
+                                                <strong>{{.Identity.Name}}</strong> (Confidence: {{printf "%.2f" .Confidence}}%)
+                                                <button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="{{.ID}}" title="Match korrigieren">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </button>
+                                            {{end}}
+                                        {{else}}
+                                            <em>Unknown Face</em>
+                                            <button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="{{.ID}}" title="Gesicht zuordnen">
+                                                <i class="bi bi-pencil-square"></i>
+                                            </button>
+                                        {{end}}
+                                    </li>
+                                {{end}}
+                            </ul>
+                        {{else}}
+                            <span class="text-warning">No face detected</span>
+                        {{end}}
+                    </p>
+                    <button class="btn btn-danger btn-sm delete-btn" data-image-id="{{.ID}}" title="Delete Image">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="{{.ID}}" title="Re-recognize Faces">
+                        <i class="bi bi-arrow-repeat"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {{ end }}
+
+        {{if not (or .ImagesWithFaces .ImagesWithoutFaces)}}
+            <p class="text-muted">No recent images found.</p>
+        {{else}}
+            {{if .ImagesWithFaces}}
+                <h2 class="mt-4">Bilder mit erkannten Gesichtern</h2>
+                <div class="row" id="images-with-faces-container">
+                    {{range .ImagesWithFaces}}
+                        {{ template "imageCard" . }}
+                    {{end}}
+                </div>
+            {{end}}
+
+            {{if .ImagesWithoutFaces}}
+                <h2 class="mt-5">Bilder ohne erkannte Gesichter</h2>
+                <div class="row" id="images-without-faces-container">
+                    {{range .ImagesWithoutFaces}}
+                        {{ template "imageCard" . }}
+                    {{end}}
+                </div>
+            {{end}}
+        {{end}}
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Function to create the card HTML (needed for SSE updates)
+        function createImageCardHTML(data) {
+            let facesHTML = '<span class="text-warning">No face detected</span>';
+            if (data.faces && data.faces.length > 0) {
+                facesHTML = 'Detected Faces:<ul>';
+                data.faces.forEach(face => {
+                    facesHTML += '<li>';
+                    if (face.matches && face.matches.length > 0) {
+                        face.matches.forEach(match => {
+                            facesHTML += `<strong>${match.name}</strong> (Confidence: ${match.confidence.toFixed(2)}%)`;
+                            facesHTML += `<button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="${match.id}" title="Match korrigieren"><i class="bi bi-pencil-square"></i></button>`;
+                        });
+                    } else {
+                        facesHTML += '<em>Unknown Face</em>';
+                        facesHTML += `<button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="${face.id}" title="Gesicht zuordnen"><i class="bi bi-pencil-square"></i></button>`;
+                    }
+                    facesHTML += '</li>';
+                });
+                facesHTML += '</ul>';
+            }
+
+            const timestamp = new Date(data.timestamp).toLocaleString('sv-SE'); // Format like Go's '2006-01-02 15:04:05'
+
+            return `
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card shadow-sm bg-body-tertiary" id="image-card-${data.id}">
+                        <img src="/snapshots/${data.filepath}" class="card-img-top" alt="Snapshot ${data.id}">
+                        <div class="card-body">
+                            <h5 class="card-title">Image ID: ${data.id}</h5>
+                            <p class="card-text">
+                                <small class="text-muted">Timestamp: ${timestamp}</small><br>
+                                ${facesHTML}
+                            </p>
+                            <button class="btn btn-danger btn-sm delete-btn" data-image-id="${data.id}" title="Delete Image">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="${data.id}" title="Re-recognize Faces">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Combined event listener for both containers
+            const mainContainer = document.querySelector('.container'); // Or a more specific parent if needed
+            if (mainContainer) {
+                 mainContainer.addEventListener('click', (event) => {
+                    const target = event.target;
+                    const deleteButton = target.closest('.delete-btn');
+                    const recognizeButton = target.closest('.recognize-btn');
+                    const deleteAllButton = target.closest('#deleteAllButton'); // Handle delete all
+                    const editMatchButton = target.closest('.edit-match-btn');
+                    const assignFaceButton = target.closest('.assign-face-btn');
+
+                    if (deleteButton) {
+                        const imageId = deleteButton.dataset.imageId;
+                        if (confirm(`Are you sure you want to delete image ${imageId}?`)) {
+                            deleteImage(imageId);
+                        }
+                    } else if (recognizeButton) {
+                        const imageId = recognizeButton.dataset.imageId;
+                        recognizeImage(imageId);
+                    } else if (deleteAllButton) { // Handle delete all
+                        if (confirm('WARNUNG: Sind Sie sicher, dass Sie ALLE Bilder und zugehörigen Daten löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                            deleteAllImages();
+                        }
+                    } else if (editMatchButton) {
+                        const matchId = editMatchButton.dataset.matchId;
+                        handleEditRequest('match', matchId);
+                    } else if (assignFaceButton) {
+                        const faceId = assignFaceButton.dataset.faceId;
+                        handleEditRequest('face', faceId);
+                    }
+                });
+            }
+
+            // --- SSE Setup ---
+            const eventSource = new EventSource('/sse');
+            const containerWithFaces = document.getElementById('images-with-faces-container');
+            const containerWithoutFaces = document.getElementById('images-without-faces-container');
+            // Make sure the containers exist, even if initially empty, or handle null case
+            if (!containerWithFaces && document.getElementById('images-with-faces-container') == null) { // Check if ID exists at all
+                // Inject container if needed, or handle differently
+                 console.warn("'images-with-faces-container' not found, creating...");
+                 // Example: Create and append the container dynamically if needed
+                 const h2 = document.createElement('h2');
+                 h2.className = 'mt-4';
+                 h2.textContent = 'Bilder mit erkannten Gesichtern';
+                 const newContainer = document.createElement('div');
+                 newContainer.className = 'row';
+                 newContainer.id = 'images-with-faces-container';
+                 mainContainer.appendChild(h2);
+                 mainContainer.appendChild(newContainer);
+                 // Re-assign containerWithFaces after creation
+                 containerWithFaces = newContainer;
+            }
+             if (!containerWithoutFaces && document.getElementById('images-without-faces-container') == null) {
+                 console.warn("'images-without-faces-container' not found, creating...");
+                 const h2 = document.createElement('h2');
+                 h2.className = 'mt-5';
+                 h2.textContent = 'Bilder ohne erkannte Gesichter';
+                 const newContainer = document.createElement('div');
+                 newContainer.className = 'row';
+                 newContainer.id = 'images-without-faces-container';
+                 mainContainer.appendChild(h2);
+                 mainContainer.appendChild(newContainer);
+                 // Re-assign containerWithoutFaces after creation
+                 containerWithoutFaces = newContainer;
+             }
+
+            eventSource.onmessage = function(event) {
+                console.log('SSE Message received:', event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Parsed SSE data:', data);
+
+                    // Check if card already exists
+                    if (document.getElementById(`image-card-${data.id}`)) {
+                        console.log(`Image card ${data.id} already exists, skipping.`);
+                        return;
+                    }
+
+                    const cardHTML = createImageCardHTML(data);
+                    const cardElement = document.createElement('div'); // Create a temporary element to parse the HTML
+                    cardElement.innerHTML = cardHTML.trim();
+                    const newCard = cardElement.firstChild;
+
+                    // Determine the correct container
+                    if (data.faces && data.faces.length > 0) {
+                         if (containerWithFaces) {
+                            containerWithFaces.prepend(newCard);
+                            console.log(`Prepended card ${data.id} to container WITH faces.`);
+                        } else {
+                             console.error("Container 'images-with-faces-container' not found for prepending!");
+                         }
+                    } else {
+                        if (containerWithoutFaces) {
+                            containerWithoutFaces.prepend(newCard);
+                             console.log(`Prepended card ${data.id} to container WITHOUT faces.`);
+                        } else {
+                             console.error("Container 'images-without-faces-container' not found for prepending!");
+                         }
+                    }
+                } catch (e) {
+                    console.error('Error parsing SSE message or adding card:', e);
+                    console.error('Original SSE data:', event.data);
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                console.error('EventSource failed:', err);
+                eventSource.close(); // Close the connection on error
+                // Optional: Add logic to attempt reconnection after a delay
+            };
+        });
+
+        // --- Action Functions (delete, recognize, delete all) ---
+        function deleteImage(imageId) {
+            fetch(`/api/images/${imageId}`, { method: 'DELETE' })
+                .then(response => {
+                    if (response.ok) {
+                        console.log(`Image ${imageId} deleted successfully.`);
+                        // Remove the card from the DOM
+                        const card = document.getElementById(`image-card-${imageId}`);
+                        if (card) {
+                             // Find the parent column (div.col-md-6...) and remove it
+                             const column = card.closest('.col-md-6');
+                             if (column) {
+                                 column.remove();
+                             } else {
+                                 card.remove(); // Fallback just remove the card itself
+                             }
+                        }
+                    } else {
+                        console.error(`Failed to delete image ${imageId}:`, response.statusText);
+                        alert(`Error deleting image ${imageId}: ${response.statusText}`);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during delete request:', error);
+                    alert(`Network error deleting image ${imageId}. See console.`);
+                });
+        }
+
+        function recognizeImage(imageId) {
+             fetch(`/api/images/${imageId}/recognize`, { method: 'POST' })
+                .then(response => {
+                    if (response.ok) {
+                        console.log(`Re-recognition triggered for image ${imageId}.`);
+                        // Optionally, provide user feedback, e.g., a temporary message
+                        // The SSE update should ideally refresh the card content later.
+                        alert(`Re-recognition started for image ${imageId}. The card will update if new results are found.`);
+                    } else {
+                        response.json().then(data => {
+                             console.error(`Failed to trigger re-recognition for image ${imageId}:`, response.status, data.error);
+                             alert(`Error triggering re-recognition for image ${imageId}: ${data.error || response.statusText}`);
+                         }).catch(() => {
+                             console.error(`Failed to trigger re-recognition for image ${imageId}:`, response.statusText);
+                             alert(`Error triggering re-recognition for image ${imageId}: ${response.statusText}`);
+                         });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during recognize request:', error);
+                    alert(`Network error triggering re-recognition for image ${imageId}. See console.`);
+                });
+        }
+
+        function deleteAllImages() {
+            fetch('/api/images/all', { method: 'DELETE' })
+                .then(response => {
+                    if (response.ok) {
+                        console.log('All images deleted successfully.');
+                        // Remove all cards from both containers
+                        const containerWithFaces = document.getElementById('images-with-faces-container');
+                        const containerWithoutFaces = document.getElementById('images-without-faces-container');
+                        if(containerWithFaces) containerWithFaces.innerHTML = '';
+                        if(containerWithoutFaces) containerWithoutFaces.innerHTML = '';
+                        alert('Alle Bilder wurden gelöscht.');
+                         // Optionally, display a message like "No recent images found."
+                         const mainContainer = document.querySelector('.container'); // Adjust selector if needed
+                         if (mainContainer) {
+                             // Remove existing message if present
+                             const existingMsg = mainContainer.querySelector('.text-muted');
+                             if (existingMsg) existingMsg.remove();
+                             // Add new message
+                             const noImagesMsg = document.createElement('p');
+                             noImagesMsg.className = 'text-muted';
+                             noImagesMsg.textContent = 'No recent images found.';
+                             // Find a suitable place to append, e.g., after the h1 and delete button
+                             const h1 = mainContainer.querySelector('h1');
+                             if (h1) {
+                                 h1.insertAdjacentElement('afterend', noImagesMsg);
+                             }
+                         }
+                    } else {
+                         response.json().then(data => {
+                             console.error('Failed to delete all images:', response.status, data.error);
+                            alert(`Fehler beim Löschen aller Bilder: ${data.error || response.statusText}`);
+                         }).catch(() => {
+                             console.error('Failed to delete all images:', response.statusText);
+                            alert(`Fehler beim Löschen aller Bilder: ${response.statusText}`);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error during delete all request:', error);
+                    alert('Netzwerkfehler beim Löschen aller Bilder. Siehe Konsole.');
+                });
+        }
+
+        // --- New functions for identity assignment ---
+
+        // Fetches the list of known identities from the backend
+        async function fetchIdentities() {
+            try {
+                const response = await fetch('/api/identities');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const identities = await response.json();
+                console.log('Fetched identities:', identities);
+                return identities;
+            } catch (error) {
+                console.error('Could not fetch identities:', error);
+                alert('Fehler beim Abrufen der Identitäten. Siehe Konsole.');
+                return null;
+            }
+        }
+
+        // Placeholder function to show the identity selection modal
+        function showIdentityModal(type, id, identities) {
+            console.log(`Showing modal for ${type} ID: ${id}`);
+            console.log('Available identities:', identities);
+
+            const modalElement = document.getElementById('identityModal');
+            const identitySelect = document.getElementById('identitySelect');
+            const objectTypeInput = document.getElementById('modalObjectType');
+            const objectIdInput = document.getElementById('modalObjectId');
+            const saveButton = document.getElementById('saveIdentityButton');
+
+            if (!modalElement || !identitySelect || !objectTypeInput || !objectIdInput || !saveButton) {
+                console.error('Modal elements not found!');
+                return;
+            }
+
+            // Clear previous options
+            identitySelect.innerHTML = '';
+
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Wähle Identität...';
+            defaultOption.disabled = true;
+            defaultOption.selected = true;
+            identitySelect.appendChild(defaultOption);
+
+            // Add 'Unknown' option (using 0 as a convention for unknown/unassign)
+            const unknownOption = document.createElement('option');
+            unknownOption.value = '0';
+            unknownOption.textContent = '--- Unbekannt ---';
+            identitySelect.appendChild(unknownOption);
+
+            // Populate with fetched identities
+            if (identities) {
+                identities.forEach(identity => {
+                    const option = document.createElement('option');
+                    option.value = identity.ID;
+                    option.textContent = identity.Name;
+                    identitySelect.appendChild(option);
+                });
+            }
+
+            // Store context
+            objectTypeInput.value = type;
+            objectIdInput.value = id;
+
+            // Remove previous listener if exists to avoid duplicates
+            // A simple way is to replace the button by cloning it
+            const newSaveButton = saveButton.cloneNode(true);
+            saveButton.parentNode.replaceChild(newSaveButton, saveButton);
+            newSaveButton.addEventListener('click', saveIdentityAssignment);
+
+            // Show the modal
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+        }
+
+        // Handles the click on edit/assign buttons
+        async function handleEditRequest(type, id) {
+            const identities = await fetchIdentities();
+            if (identities !== null) { // Check if fetch was successful
+                showIdentityModal(type, id, identities);
+            }
+        }
+
+        // Placeholder function to handle saving the identity assignment
+        async function saveIdentityAssignment() { // Make async to use await
+            const objectType = document.getElementById('modalObjectType').value;
+            const objectId = document.getElementById('modalObjectId').value;
+            const selectedIdentityId = document.getElementById('identitySelect').value;
+
+            console.log(`Save clicked for type: ${objectType}, id: ${objectId}, selectedIdentityId: ${selectedIdentityId}`);
+
+            if (!selectedIdentityId) {
+                 alert('Bitte wähle eine Identität aus der Liste.');
+                 return;
+            }
+
+            // Close the modal immediately for better UX
+            const modalElement = document.getElementById('identityModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+
+            let url = '';
+            let method = '';
+            let body = {};
+
+            if (objectType === 'match') {
+                url = `/api/matches/${objectId}/identity`;
+                method = 'PUT';
+                body = { identity_id: parseInt(selectedIdentityId, 10) }; // Ensure integer
+            } else if (objectType === 'face') {
+                if (selectedIdentityId === '0') {
+                    alert('Kann kein unbekanntes Gesicht einer unbekannten Identität zuweisen.');
+                    return; // Cannot create a match with identity 0
+                }
+                url = `/api/matches`;
+                method = 'POST';
+                body = {
+                    face_id: parseInt(objectId, 10),
+                    identity_id: parseInt(selectedIdentityId, 10)
+                };
+            } else {
+                console.error('Unknown object type:', objectType);
+                alert('Unbekannter Objekttyp beim Speichern.');
+                return;
+            }
+
+            try {
+                console.log(`Sending ${method} request to ${url} with body:`, body);
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response' }));
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+                console.log('Save successful:', result);
+                alert('Identität erfolgreich gespeichert!');
+                // TODO: Ideally, update the specific card via SSE or manual DOM manipulation
+                // For now, suggest a page reload or wait for SSE update
+                // location.reload(); // Force reload - simple but disruptive
+                console.log('Need to update card display for the change.');
+
+            } catch (error) {
+                console.error('Error saving identity assignment:', error);
+                alert(`Fehler beim Speichern der Identität: ${error.message}`);
+            }
+        }
+
+    </script>
+    <!-- Identity Assignment Modal -->
+    <div class="modal fade" id="identityModal" tabindex="-1" aria-labelledby="identityModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="identityModalLabel">Identität zuweisen/korrigieren</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Wähle die korrekte Identität für dieses Gesicht:</p>
+                    <select class="form-select" id="identitySelect" aria-label="Identity selection">
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                    <input type="hidden" id="modalObjectType"> <!-- Stores 'match' or 'face' -->
+                    <input type="hidden" id="modalObjectId">   <!-- Stores matchId or faceId -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="button" class="btn btn-primary" id="saveIdentityButton">Speichern</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- End Identity Assignment Modal -->
+
+</body>
+</html>
