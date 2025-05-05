@@ -121,8 +121,8 @@ func main() {
 	sseHub := services.NewSSEHub()
 
 	// Initialize Web Handler
-	templatePath := "web/templates" // Relative path within embedded FS or filesystem
-	staticPath := "web/static"     // Relative path for static files
+	templatePath := "/app/web/templates" // Absolute path inside container
+	staticPath := "/app/web/static"     // Absolute path inside container
 	webHandler, err := handlers.NewWebHandler(database.DB, cfg, compreService, mqttClient, templatePath, staticPath, sseHub) // Pass sseHub
 	if err != nil {
 		log.Fatalf("Failed to initialize WebHandler: %v", err)

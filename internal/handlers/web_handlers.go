@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"embed"
 	"fmt"
 	"html/template"
-	"io/fs"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -22,9 +20,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
-
-//go:embed web
-var webFS embed.FS // Embed the web directory relative to module root
 
 // WebHandler handles requests for the web interface
 type WebHandler struct {
@@ -61,13 +56,25 @@ func NewWebHandler(db *gorm.DB, cfg *config.Config, compreService *services.Comp
 }
 
 func (h *WebHandler) loadTemplates() error {
-	// Parse templates from the embedded webFS, using paths relative to 'web'
-	t, err := template.ParseFS(webFS, "web/templates/*.html", "web/templates/layouts/*.html")
+	// Parse templates directly from the filesystem path provided
+	mainPattern := filepath.Join(h.templatePath, "*.html")
+	layoutPattern := filepath.Join(h.templatePath, "layouts", "*.html")
+	log.Infof("Loading templates from filesystem: main='%s', layout='%s'", mainPattern, layoutPattern)
+
+	t, err := template.ParseGlob(mainPattern)
 	if err != nil {
-		return fmt.Errorf("error parsing templates: %w", err)
+		return fmt.Errorf("error parsing main templates (%s): %w", mainPattern, err)
 	}
+	t, err = t.ParseGlob(layoutPattern)
+	if err != nil {
+		// Don't fail if layouts don't exist, maybe they aren't used
+		log.Warnf("Could not parse layout templates (%s), proceeding without them: %v", layoutPattern, err)
+	} else {
+		log.Infof("Successfully parsed layout templates from %s", layoutPattern)
+	}
+
 	h.templates = t
-	log.Infof("Loaded templates from embedded FS: %s", h.templatePath)
+	log.Infof("Successfully loaded templates from %s", h.templatePath)
 	return nil
 }
 
@@ -78,6 +85,12 @@ func (h *WebHandler) executeTemplate(c *gin.Context, name string, data interface
 	pageData := gin.H{
 		"Data": data, // Pass specific data under 'Data'
 		// Add other global fields like "Version", "AppName" here
+	}
+
+	if h.templates == nil {
+		log.Error("Templates not loaded, cannot execute")
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("templates not loaded"))
+		return
 	}
 
 	err := h.templates.ExecuteTemplate(c.Writer, name, pageData)
@@ -152,20 +165,26 @@ func (h *WebHandler) handleSSEUpdates(c *gin.Context) {
 
 // RegisterRoutes sets up the routes for the web interface using Gin router group
 func (h *WebHandler) RegisterRoutes(web *gin.RouterGroup) {
-	// Serve static files from the 'web/static' directory within the embedded webFS
-	staticRoot, err := fs.Sub(webFS, "web/static")
-	if err != nil {
-		log.Fatalf("Failed to create sub FS for static assets: %v", err)
-	}
-	staticServer := http.FileServer(http.FS(staticRoot))
+	// Serve static files directly from the filesystem path provided
+	log.Infof("Serving static files from filesystem path: %s", h.staticPath)
+	fs := http.Dir(h.staticPath)
+	staticServer := http.FileServer(fs)
+	// staticServer := http.StripPrefix(web.BasePath()+"/static/", http.FileServer(fs)) // Alternative strip prefix
 
 	// Serve static files under /static path relative to the group
 	web.GET("/static/*filepath", func(c *gin.Context) {
-		// Strip the group prefix and the static prefix
-		relativePath := strings.TrimPrefix(c.Request.URL.Path, web.BasePath()+"/static")
-		// Update the request URL path for the file server (now relative to the staticRoot)
-		c.Request.URL.Path = relativePath
-		staticServer.ServeHTTP(c.Writer, c.Request)
+		// Manually strip prefix because Gin groups interfere otherwise
+		originalPath := c.Request.URL.Path
+		prefix := web.BasePath() + "/static/"
+		if strings.HasPrefix(originalPath, prefix) {
+			c.Request.URL.Path = strings.TrimPrefix(originalPath, prefix)
+			log.Debugf("Serving static file: original='%s', mapped='%s'", originalPath, c.Request.URL.Path)
+			staticServer.ServeHTTP(c.Writer, c.Request)
+		} else {
+			// Should not happen if routing is correct, but handle defensively
+			log.Warnf("Static path mismatch: expected prefix '%s', got '%s'", prefix, originalPath)
+			c.AbortWithStatus(http.StatusNotFound)
+		}
 	})
 
 	// --- Register handlers using Gin context ---
