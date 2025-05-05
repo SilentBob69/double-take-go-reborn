@@ -6,11 +6,9 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"double-take-go-reborn/internal/config"
-	"double-take-go-reborn/internal/database"
 	"double-take-go-reborn/internal/models"
 	"double-take-go-reborn/internal/mqtt"
 	"double-take-go-reborn/internal/services"
@@ -122,7 +120,7 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	var imagesWithFaces []models.Image
 	var imagesWithoutFaces []models.Image
 	for _, img := range images {
-		if len(img.Recognitions) > 0 {
+		if len(img.Faces) > 0 { // Check for Faces instead of Recognitions
 			imagesWithFaces = append(imagesWithFaces, img)
 		} else {
 			imagesWithoutFaces = append(imagesWithoutFaces, img)
@@ -149,18 +147,64 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	h.executeTemplate(c, "diagnostics.html", data)
 }
 
-// handleSSEUpdates handles Server-Sent Events connection
-func (h *WebHandler) handleSSEUpdates(c *gin.Context) {
-	if h.sseHub == nil {
-		log.Warn("SSE endpoint called but SSE Hub is not initialized.")
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "SSE service not available"})
+// handleSSE handles Server-Sent Events connections.
+// Based on the sse.Hub structure.
+func (h *WebHandler) handleSSE(c *gin.Context) {
+	log.Info("SSE client connecting...")
+
+	// Set headers for SSE
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "*") // Optional: Adjust CORS if needed
+
+	// Create a channel for this specific client
+	clientChannel := make(sse.Client)
+
+	// Register the client with the hub
+	h.sseHub.Register(clientChannel)
+	log.Info("SSE client registered.")
+
+	// Ensure client is unregistered when the connection closes
+	defer func() {
+		h.sseHub.Unregister(clientChannel)
+		log.Info("SSE client unregistered.")
+	}()
+
+	// Use a flusher to send data immediately
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		log.Error("Streaming unsupported by the writer")
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("streaming unsupported"))
 		return
 	}
 
-	log.Info("SSE client connected")
-	h.sseHub.ServeHTTP(c.Writer, c.Request)
-	// Gin context will handle connection closing etc. when ServeHTTP returns
-	log.Info("SSE client disconnected")
+	// Listen for messages from the hub and send them to the client
+	// Also listen for the connection closing
+	for {
+		select {
+		case message, open := <-clientChannel:
+			if !open {
+				// Channel closed by the hub, connection should close
+				log.Info("SSE client channel closed by hub.")
+				return
+			}
+			// Format the message according to SSE spec (data: ...\n\n)
+			_, err := fmt.Fprintf(c.Writer, "data: %s\n\n", message)
+			if err != nil {
+				log.Errorf("Error writing to SSE client: %v", err)
+				// Error writing, likely connection closed, stop loop
+				return
+			}
+			flusher.Flush() // Flush the data to the client
+			log.Debugf("Sent SSE message: %s", string(message))
+
+		case <-c.Request.Context().Done():
+			// Client disconnected
+			log.Info("SSE client disconnected (context done).")
+			return
+		}
+	}
 }
 
 // RegisterRoutes sets up the routes for the web interface using Gin router group
@@ -190,7 +234,7 @@ func (h *WebHandler) RegisterRoutes(web *gin.RouterGroup) {
 	// --- Register handlers using Gin context ---
 	web.GET("/", h.handleIndex)
 	web.GET("/diagnostics", h.handleDiagnostics)
-	web.GET("/sse/updates", h.handleSSEUpdates)
+	web.GET("/events", h.handleSSE) // Add route for SSE
 
 	log.Debugf("Registering route: GET /ping within group %s", web.BasePath())
 	web.GET("/ping", func(c *gin.Context) {

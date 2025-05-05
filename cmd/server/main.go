@@ -15,6 +15,7 @@ import (
 	"double-take-go-reborn/internal/handlers"
 	"double-take-go-reborn/internal/mqtt"
 	"double-take-go-reborn/internal/services"
+	"double-take-go-reborn/internal/sse" // Add sse import
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -118,7 +119,8 @@ func main() {
 	notifier := services.NewNotifierService()
 
 	// Initialize SSE Hub
-	sseHub := services.NewSSEHub()
+	sseHub := sse.NewHub() // Use sse.NewHub()
+	go sseHub.Run() // Run hub in a separate goroutine
 
 	// Initialize Web Handler
 	templatePath := "/app/web/templates" // Absolute path inside container
