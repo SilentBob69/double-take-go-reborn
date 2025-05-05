@@ -39,6 +39,9 @@ COPY --from=builder /double-take-backend /double-take-backend
 # Copy the web templates and static assets
 COPY --from=builder /app/web ./web
 
+# Copy the new UI static files
+COPY --from=builder /app/ui/public ./ui/public
+
 # Expose the application port (read from config ideally, but hardcode for now)
 # EXPOSE 8080
 
