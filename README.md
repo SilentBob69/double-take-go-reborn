@@ -1,63 +1,64 @@
 # double-take-go-reborn
 
 [![Status](https://img.shields.io/badge/status-early_development-orange.svg)](https://shields.io/)
+[Lesen Sie dies auf Deutsch](README.de.md)
 
-**Wichtiger Hinweis:** Dieses Projekt befindet sich noch in einem sehr frühen Entwicklungsstadium. Funktionen können unvollständig sein, und es können Fehler auftreten.
+**Important Note:** This project is in a very early stage of development. Features might be incomplete, and errors may occur.
 
-## Beschreibung
+## Description
 
-`double-take-go-reborn` ist eine in Go geschriebene Anwendung zur Verarbeitung von Ereignissen (z. B. Bildern von Kameras), die über MQTT empfangen werden. Es integriert sich mit dem Gesichtserkennungsdienst [CompreFace](https://github.com/exadel-inc/CompreFace), um Personen in den Bildern zu erkennen und zu identifizieren. Die Anwendung bietet eine Web-API und potenziell eine Benutzeroberfläche zur Verwaltung und Anzeige der Ergebnisse.
+`double-take-go-reborn` is an application written in Go for processing events (e.g., images from cameras) received via MQTT. It integrates with the face recognition service [CompreFace](https://github.com/exadel-inc/CompreFace) to detect and identify people in the images. The application provides a web API and potentially a user interface for managing and displaying the results.
 
-Dieses Projekt ist eine Neuentwicklung ("Reborn") einer ähnlichen Konzeptanwendung, geschrieben in Go.
+This project is a redevelopment ("Reborn") of a similar concept application, written in Go.
 
-## Features (geplant/teilweise implementiert)
+## Features (planned/partially implemented)
 
-*   Empfang von Ereignissen über MQTT.
-*   Integration mit CompreFace zur Gesichts-/Personenerkennung.
-*   Speicherung von Ereignissen, Übereinstimmungen und Snapshots in einer SQLite-Datenbank.
-*   Konfiguration über eine YAML-Datei (`config.yaml`).
-*   Web-API (und potenziell UI) zum Abrufen von Daten und Verwalten von Identitäten.
-*   Periodische Synchronisation von Identitäten mit CompreFace.
-*   Automatisierte Bereinigung alter Daten und Snapshots.
-*   Docker-Unterstützung für einfache Bereitstellung.
+*   Receiving events via MQTT.
+*   Integration with CompreFace for face/person recognition.
+*   Storage of events, matches, and snapshots in an SQLite database.
+*   Configuration via a YAML file (`config/config.yaml`).
+*   Web API (and potentially UI) for retrieving data and managing identities.
+*   Periodic synchronization of identities with CompreFace.
+*   Automated cleanup of old data and snapshots.
+*   Docker support for easy deployment.
 
-## Technologie-Stack
+## Technology Stack
 
-*   **Sprache:** Go
+*   **Language:** Go
 *   **Web Framework:** Gin
-*   **Datenbank:** SQLite (über GORM)
+*   **Database:** SQLite (via GORM)
 *   **MQTT Client:** Paho MQTT Go Client
-*   **Konfiguration:** Koanf
-*   **Containerisierung:** Docker, Docker Compose
-*   **Gesichtserkennung (extern):** CompreFace
+*   **Configuration:** Koanf
+*   **Containerization:** Docker, Docker Compose
+*   **Face Recognition (External):** CompreFace
 
-## Erste Schritte
+## Getting Started
 
-### Voraussetzungen
+### Prerequisites
 
-*   Docker und Docker Compose müssen installiert sein.
-*   Eine laufende Instanz von CompreFace (entweder lokal oder remote).
-*   Ein MQTT-Broker.
+*   Docker and Docker Compose must be installed.
+*   A running instance of CompreFace (either local or remote).
+*   An MQTT broker.
 
-### Konfiguration
+### Configuration
 
-1.  Kopieren oder benennen Sie die Beispielkonfiguration `config/config.example.yaml` nach `/config/config.yaml` (oder mounten Sie Ihre eigene Konfigurationsdatei an diesen Pfad im Container).
-2.  Passen Sie die `config.yaml` an Ihre Umgebung an, insbesondere die Verbindungsdaten für MQTT und CompreFace sowie die Verzeichnispfade.
+1.  Copy or rename the example configuration `config/config.example.yaml` to `/config/config.yaml` (or mount your own configuration file to this path in the container).
+2.  Adjust `config/config.yaml` to your environment, especially the connection details for MQTT and CompreFace, as well as directory paths.
 
-### Ausführen mit Docker Compose
+### Running with Docker Compose
 
-Die einfachste Methode, die Anwendung zu starten, ist die Verwendung der mitgelieferten `docker-compose.yml`-Datei:
+The easiest way to start the application is using the provided `docker-compose.yml` file:
 
 ```bash
 docker-compose up -d
 ```
 
-Dies startet den `double-take-go-reborn`-Dienst. Stellen Sie sicher, dass Ihr MQTT-Broker und CompreFace ebenfalls laufen und erreichbar sind.
+This starts the `double-take-go-reborn` service. Ensure that your MQTT broker and CompreFace are also running and accessible.
 
 ## Status
 
-Wie bereits erwähnt, befindet sich das Projekt in der **frühen Entwicklung**. Änderungen an der API und der Funktionalität sind wahrscheinlich.
+As mentioned earlier, the project is in **early development**. Changes to the API and functionality are likely.
 
-## Lizenz
+## License
 
-Dieses Projekt steht unter der MIT-Lizenz. Siehe die [LICENSE](LICENSE)-Datei für Details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
