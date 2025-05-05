@@ -23,12 +23,8 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed ../../web/templates/index.html
-var indexHTML embed.FS // Embed only index.html for testing
-
-// --- Temporarily comment out webFS embed ---
-// //go:embed ../../web
-// var webFS embed.FS // Embed the whole web directory
+//go:embed web
+var webFS embed.FS // Embed the web directory relative to module root
 
 // WebHandler handles requests for the web interface
 type WebHandler struct {
@@ -65,36 +61,31 @@ func NewWebHandler(db *gorm.DB, cfg *config.Config, compreService *services.Comp
 }
 
 func (h *WebHandler) loadTemplates() error {
-	// --- Temporarily disable template loading ---
-	log.Warn("Template loading temporarily disabled for build diagnosis.")
-	// // Parse templates from the embedded webFS, using paths relative to 'web'
-	// t, err := template.ParseFS(webFS, "web/templates/*.html", "web/templates/layouts/*.html")
-	// if err != nil {
-	// 	return fmt.Errorf("error parsing templates: %w", err)
-	// }
-	// h.templates = t
-	// log.Infof("Loaded templates from embedded FS: %s", h.templatePath)
+	// Parse templates from the embedded webFS, using paths relative to 'web'
+	t, err := template.ParseFS(webFS, "web/templates/*.html", "web/templates/layouts/*.html")
+	if err != nil {
+		return fmt.Errorf("error parsing templates: %w", err)
+	}
+	h.templates = t
+	log.Infof("Loaded templates from embedded FS: %s", h.templatePath)
 	return nil
 }
 
 // executeTemplate renders a template with the given data
 func (h *WebHandler) executeTemplate(c *gin.Context, name string, data interface{}) {
-	// --- Temporarily disable template execution ---
-	log.Warnf("Template execution for %s temporarily disabled.", name)
-	c.String(http.StatusNotImplemented, "Template execution disabled for build test.")
-	// // Add global data if needed (e.g., version)
-	// // Create a map or struct to hold both global and specific data
-	// pageData := gin.H{
-	// 	"Data": data, // Pass specific data under 'Data'
-	// 	// Add other global fields like "Version", "AppName" here
-	// }
+	// Add global data if needed (e.g., version)
+	// Create a map or struct to hold both global and specific data
+	pageData := gin.H{
+		"Data": data, // Pass specific data under 'Data'
+		// Add other global fields like "Version", "AppName" here
+	}
 
-	// err := h.templates.ExecuteTemplate(c.Writer, name, pageData)
-	// if err != nil {
-	// 	log.Errorf("Error executing template %s: %v", name, err)
-	// 	// Use Gin's error handling
-	// 	c.AbortWithError(http.StatusInternalServerError, err)
-	// }
+	err := h.templates.ExecuteTemplate(c.Writer, name, pageData)
+	if err != nil {
+		log.Errorf("Error executing template %s: %v", name, err)
+		// Use Gin's error handling
+		c.AbortWithError(http.StatusInternalServerError, err)
+	}
 }
 
 // handleIndex handles requests for the main page
@@ -161,23 +152,21 @@ func (h *WebHandler) handleSSEUpdates(c *gin.Context) {
 
 // RegisterRoutes sets up the routes for the web interface using Gin router group
 func (h *WebHandler) RegisterRoutes(web *gin.RouterGroup) {
-	// --- Temporarily disable static file serving ---
-	log.Warn("Static file serving temporarily disabled for build diagnosis.")
-	// // Serve static files from the 'web/static' directory within the embedded webFS
-	// staticRoot, err := fs.Sub(webFS, "web/static")
-	// if err != nil {
-	// 	log.Fatalf("Failed to create sub FS for static assets: %v", err)
-	// }
-	// staticServer := http.FileServer(http.FS(staticRoot))
-	//
-	// // Serve static files under /static path relative to the group
-	// web.GET("/static/*filepath", func(c *gin.Context) {
-	// 	// Strip the group prefix and the static prefix
-	// 	relativePath := strings.TrimPrefix(c.Request.URL.Path, web.BasePath()+"/static")
-	// 	// Update the request URL path for the file server (now relative to the staticRoot)
-	// 	c.Request.URL.Path = relativePath
-	// 	staticServer.ServeHTTP(c.Writer, c.Request)
-	// })
+	// Serve static files from the 'web/static' directory within the embedded webFS
+	staticRoot, err := fs.Sub(webFS, "web/static")
+	if err != nil {
+		log.Fatalf("Failed to create sub FS for static assets: %v", err)
+	}
+	staticServer := http.FileServer(http.FS(staticRoot))
+
+	// Serve static files under /static path relative to the group
+	web.GET("/static/*filepath", func(c *gin.Context) {
+		// Strip the group prefix and the static prefix
+		relativePath := strings.TrimPrefix(c.Request.URL.Path, web.BasePath()+"/static")
+		// Update the request URL path for the file server (now relative to the staticRoot)
+		c.Request.URL.Path = relativePath
+		staticServer.ServeHTTP(c.Writer, c.Request)
+	})
 
 	// --- Register handlers using Gin context ---
 	web.GET("/", h.handleIndex)
