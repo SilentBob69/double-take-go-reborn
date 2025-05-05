@@ -14,18 +14,27 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"double-take-go-reborn/internal/mqtt"
 )
 
-// ProcessingHandler handles image processing requests.
+// ProcessingHandler handles endpoints related to image processing status and potentially triggering processing.
 type ProcessingHandler struct {
-	Cfg *config.Config
-	DB  *gorm.DB
-	// We could inject the service directly, or create it on the fly if config changes are frequent
+	Cfg        *config.Config
+	DB         *gorm.DB
+	CompreFace *services.CompreFaceService
+	Notifier   *services.NotifierService
+	MQTT       *mqtt.Client
 }
 
 // NewProcessingHandler creates a new handler for processing endpoints.
-func NewProcessingHandler(cfg *config.Config, db *gorm.DB) *ProcessingHandler {
-	return &ProcessingHandler{Cfg: cfg, DB: db}
+func NewProcessingHandler(cfg *config.Config, db *gorm.DB, comprefaceService *services.CompreFaceService, notifier *services.NotifierService, mqttClient *mqtt.Client) *ProcessingHandler {
+	return &ProcessingHandler{
+		Cfg:        cfg,
+		DB:         db,
+		CompreFace: comprefaceService,
+		Notifier:   notifier,
+		MQTT:       mqttClient,
+	}
 }
 
 // ProcessCompreFace handles image uploads, sends them to CompreFace, and stores results.
@@ -73,8 +82,7 @@ func (h *ProcessingHandler) ProcessCompreFace(c *gin.Context) {
 	}
 
 	// --- 2. Call CompreFace Service --- 
-	compreService := services.NewCompreFaceService(h.Cfg.CompreFace)
-	recognitionResult, err := compreService.Recognize(imageBytes, fileHeader.Filename)
+	recognitionResult, err := h.CompreFace.Recognize(imageBytes, fileHeader.Filename)
 	if err != nil {
 		log.Errorf("CompreFace recognition failed for '%s': %v", fileHeader.Filename, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("CompreFace processing failed: %v", err)})

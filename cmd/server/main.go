@@ -159,7 +159,17 @@ func main() {
 
 	// Register API routes under /api prefix
 	apiGroup := router.Group("/api")
-	apiHandler.RegisterRoutes(apiGroup)
+	{
+		// Register API routes
+		apiHandler.RegisterRoutes(apiGroup)
+
+		// Register Processing routes
+		processingGroup := apiGroup.Group("/process")
+		{
+			processingGroup.POST("/compreface", processingHandler.ProcessCompreFace)
+			// Add other processing routes here if needed
+		}
+	}
 
 	// Register Web routes
 	// Use an empty group to register at the root level
