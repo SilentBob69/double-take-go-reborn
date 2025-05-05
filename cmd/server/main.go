@@ -1,21 +1,23 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof" // Import for pprof
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"double-take-go-reborn/internal/cleanup"
 	"double-take-go-reborn/internal/config"
 	"double-take-go-reborn/internal/database"
 	"double-take-go-reborn/internal/handlers"
-	"double-take-go-reborn/internal/logger"
 	"double-take-go-reborn/internal/mqtt"
 	"double-take-go-reborn/internal/services"
-	"double-take-go-reborn/internal/sse"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -35,7 +37,7 @@ func main() {
 	// --- End Debug ---
 
 	// Initialize logger
-	if err := logger.Init(cfg.Log); err != nil {
+	if err := log.Init(cfg.Log); err != nil {
 		// Log the error but continue, the logger might have defaulted
 		log.Errorf("Failed to initialize logger completely: %v", err)
 	}
@@ -115,12 +117,25 @@ func main() {
 	// Initialize Notifier Service
 	notifier := services.NewNotifierService()
 
-	// --- Setup Web Handlers --- 
-	// Use global database.DB and provide all required arguments
-	webHandler, err := handlers.NewWebHandler(database.DB, cfg, compreService, mqttClient, "web/templates", "web/static", sse.NewHub())
-	if err != nil {
-		log.Fatalf("Failed to initialize web handlers: %v", err)
-	}
+	// Setup Gin router
+	router := gin.Default()
+
+	// CORS Middleware
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"}, // Allow all origins (adjust for production)
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+	// Serve static files for the UI
+	router.Static("/ui", "./ui/public")
+
+	// Setup pprof routes (optional, for debugging performance)
+	// go func() {
+	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
 
 	// --- Setup API Handlers & Router --- 
 	// Instantiate the API handler with necessary dependencies
@@ -128,45 +143,79 @@ func main() {
 	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier) // Removed sseHub argument
 
 	// Create a new router for API endpoints
-	apiRouter := chi.NewRouter()
-	apiRouter.Use(middleware.Recoverer) // Add basic middleware
-	apiRouter.Use(middleware.RequestID)
-	apiRouter.Use(middleware.Logger)    // Log API requests
+	apiRouter := gin.New()
+	apiRouter.Use(gin.Recovery())
+	apiRouter.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"}, // Allow all origins (adjust for production)
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// Register API routes
 	apiHandler.RegisterRoutes(apiRouter)
 
 	// --- Setup Web Router --- 
 	// Create a new router for web endpoints
-	webRouter := chi.NewRouter()
-	webRouter.Use(middleware.Recoverer)
+	webRouter := gin.New()
+	webRouter.Use(gin.Recovery())
 
 	// Register Web handlers
+	webHandler := handlers.NewWebHandler(database.DB, cfg, compreService, mqttClient, "web/templates", "web/static", sse.NewHub())
 	webHandler.RegisterRoutes(webRouter)
 
 	// --- Setup Main HTTP Router --- 
-	// Use chi as the main router to easily mount sub-routers
-	mainRouter := chi.NewRouter()
-	mainRouter.Use(middleware.Recoverer)
+	// Use gin as the main router to easily mount sub-routers
+	mainRouter := gin.New()
+	mainRouter.Use(gin.Recovery())
 
 	// Mount the web router (serving UI, static files, SSE)
-	mainRouter.Mount("/", webRouter)
+	mainRouter.Any("/", func(c *gin.Context) {
+		c.Redirect(http.StatusPermanentRedirect, "/ui/")
+	})
+	mainRouter.Any("/ui/*path", func(c *gin.Context) {
+		c.Request.URL.Path = "/ui" + c.Request.URL.Path
+		webRouter.HandleContext(c)
+	})
 
 	// Mount the API router under the /api prefix
-	mainRouter.Mount("/api", apiRouter)
+	mainRouter.Any("/api/*path", func(c *gin.Context) {
+		c.Request.URL.Path = "/api" + c.Request.URL.Path
+		apiRouter.HandleContext(c)
+	})
 
 	// Serve snapshot images from the /data/snapshots directory
 	snapshotDir := cfg.Server.SnapshotDir // Use path from config (/data/snapshots)
-	fs := http.FileServer(http.Dir(snapshotDir))
-	// Mount the file server under /snapshots/, stripping the prefix
-	mainRouter.Mount("/snapshots", http.StripPrefix("/snapshots", fs))
+	mainRouter.Static("/snapshots", snapshotDir)
 	log.Infof("Serving snapshots from %s under /snapshots/ route", snapshotDir)
 
 	// Start the server
 	serverAddr := fmt.Sprintf("0.0.0.0:%d", cfg.Server.Port)
 	log.Infof("Starting server on %s", serverAddr)
-	if err := http.ListenAndServe(serverAddr, mainRouter); err != nil { // Use mainRouter
-		log.Fatalf("Server failed to start: %v", err)
+	srv := &http.Server{
+		Addr:    serverAddr,
+		Handler: mainRouter,
+	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Info("Shutdown signal received")
+
+	// The context is used to inform the server it has 10 seconds to finish the request it is currently handling
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
 	// Stop Cleanup Service
