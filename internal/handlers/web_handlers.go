@@ -22,10 +22,10 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed web/templates/*
+//go:embed ../../web/templates/*
 var templateFS embed.FS
 
-//go:embed web/static/*
+//go:embed ../../web/static/*
 var staticFS embed.FS
 
 // WebHandler handles requests for the web interface
