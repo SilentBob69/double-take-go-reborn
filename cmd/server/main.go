@@ -21,97 +21,97 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const configPath = "/config/config.yaml"
+const configPath = "/config/config.yaml" // Define config path, assuming mount
 
 func main() {
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+	})
+	log.SetLevel(log.InfoLevel) // Default level
+
 	// Load configuration
-	cfg, err := config.Load(configPath)
+	cfg, err := config.Load(configPath) // Use config.Load and defined path
 	if err != nil {
-		// Use logrus fatal even before full initialization if config fails
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// --- Debug: Log the loaded CompreFace enabled status BEFORE logger init ---
-	// Use standard fmt.Printf here as logger might not be ready
-	fmt.Printf("DEBUG: Loaded config value: CompreFace.Enabled = %t\n", cfg.CompreFace.Enabled)
+	// --- Begin Debug ---
+	log.Debugf("Config loaded: %+v", cfg)
 	// --- End Debug ---
 
-	// Initialize logger
-	if err := log.Init(cfg.Log); err != nil {
-		// Log the error but continue, the logger might have defaulted
-		log.Errorf("Failed to initialize logger completely: %v", err)
+	// Initialize logger level from config
+	if level, err := log.ParseLevel(cfg.Log.Level); err == nil {
+		log.SetLevel(level)
+		log.Infof("Logger level set to: %s", cfg.Log.Level)
+	} else {
+		log.Warnf("Invalid log level in config '%s', using default 'info': %v", cfg.Log.Level, err)
 	}
 
-	// Initialize database connection
-	log.Info("Initializing database...")
-	// Call Init and check only the error, Init sets global database.DB
+	// Initialize Database
+	// Use global database.DB, Init sets it
 	if err := database.Init(cfg.DB); err != nil {
-		// Decide if the application can run without a database
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	log.Info("Database initialization complete.")
+	log.Info("Database initialized successfully.")
 
-	// Initialize Cleanup Service
-	// Use global database.DB
-	cleanupService := cleanup.NewService(database.DB, cfg.Cleanup.RetentionDays, cfg.Server.SnapshotDir, 24*time.Hour)
-	if cleanupService != nil {
-		cleanupService.StartBackgroundCleanup()
-	}
-
-	// Initialize CompreFace service
-	compreService := services.NewCompreFaceService(cfg.CompreFace)
-
-	// --- Initial Identity Sync ---
-	if cfg.CompreFace.Enabled {
-		log.Info("Performing initial CompreFace identity synchronization...")
-		if err := compreService.SyncIdentities(database.DB); err != nil {
-			log.WithError(err).Error("Initial CompreFace identity synchronization failed")
-			// Continue running even if sync fails initially?
-		} else {
-			log.Info("Initial CompreFace identity synchronization completed.")
-		}
-
-		// --- Start Periodic Identity Sync Goroutine ---
-		if cfg.CompreFace.SyncIntervalMinutes > 0 {
-			go func() {
-				ticker := time.NewTicker(time.Duration(cfg.CompreFace.SyncIntervalMinutes) * time.Minute)
-				defer ticker.Stop()
-				log.Infof("Starting periodic CompreFace identity sync every %d minutes", cfg.CompreFace.SyncIntervalMinutes)
-				for range ticker.C {
-					log.Info("Running periodic CompreFace identity synchronization...")
-					if err := compreService.SyncIdentities(database.DB); err != nil {
-						log.WithError(err).Error("Periodic CompreFace identity synchronization failed")
-					} else {
-						log.Info("Periodic CompreFace identity synchronization completed.")
-					}
-				}
-			}()
-		} else {
-			log.Info("Periodic CompreFace identity sync disabled (interval set to 0).")
-		}
-	}
-
-	// Initialize MQTT Client if enabled
+	// Initialize MQTT Client
 	var mqttClient *mqtt.Client
 	if cfg.MQTT.Enabled {
-		var err error
-		// Use global database.DB
-		mqttClient, err = mqtt.NewMQTTClient(cfg.MQTT, database.DB, cfg, sse.NewHub())
+		// Pass db, cfg, and nil for sseHub to NewMQTTClient
+		mqttClient, err = mqtt.NewMQTTClient(cfg.MQTT, database.DB, cfg, nil)
 		if err != nil {
-			log.Warnf("Failed to initialize MQTT client: %v. Continuing without MQTT.", err)
-			mqttClient = nil // Ensure client is nil if initialization failed but wasn't fatal
-		} else {
-			// Start MQTT client in a goroutine
+			log.Warnf("Failed to initialize MQTT client: %v. MQTT features will be disabled.", err)
+			mqttClient = nil // Ensure client is nil if init fails
+		} else if mqttClient != nil { // Check if client was actually created (could be nil if !cfg.Enabled even without error)
+			// Start MQTT client in a goroutine if initialization was successful
 			go func() {
 				if err := mqttClient.Start(); err != nil {
 					log.Errorf("MQTT client error: %v", err)
-					// Handle client stopping unexpectedly, maybe attempt reconnect or log critical error
 				}
 			}()
-			defer mqttClient.Stop()
+			defer mqttClient.Stop() // Ensure Stop is called on shutdown
+			log.Info("MQTT client initialized and started.")
+		} else {
+			// This case might happen if NewMQTTClient returns nil without error when disabled internally
+			log.Info("MQTT client initialization returned nil, likely disabled internally.")
 		}
 	} else {
-		log.Info("MQTT is disabled in config.")
+		log.Info("MQTT is disabled in the configuration.")
+	}
+
+	// Initialize CompreFace Service
+	compreService := services.NewCompreFaceService(cfg.CompreFace)
+	if cfg.CompreFace.Enabled { // Check cfg.CompreFace.Enabled directly
+		log.Info("CompreFace service initialized.")
+		// Start CompreFace identity sync
+		go func() {
+			// Initial sync immediately
+			log.Info("Running initial CompreFace identity synchronization...")
+			if err := compreService.SyncIdentities(database.DB); err != nil {
+				log.Errorf("Error during initial CompreFace identity sync: %v", err)
+			} else {
+				log.Info("Initial CompreFace identity synchronization finished successfully.")
+			}
+			// Periodic sync based on interval
+			if cfg.CompreFace.SyncIntervalMinutes > 0 {
+				ticker := time.NewTicker(time.Duration(cfg.CompreFace.SyncIntervalMinutes) * time.Minute)
+				defer ticker.Stop()
+				log.Infof("Starting periodic CompreFace sync every %d minutes...", cfg.CompreFace.SyncIntervalMinutes)
+				for {
+					<-ticker.C
+					log.Info("Running periodic CompreFace identity synchronization...")
+					if err := compreService.SyncIdentities(database.DB); err != nil {
+						log.Errorf("Error during periodic CompreFace identity sync: %v", err)
+					} else {
+						log.Info("Periodic CompreFace identity synchronization finished successfully.")
+					}
+				}
+			} else {
+				log.Info("Periodic CompreFace sync disabled (interval is 0).")
+			}
+		}()
+	} else {
+		log.Info("CompreFace service is disabled.")
 	}
 
 	// Initialize Notifier Service
@@ -130,73 +130,40 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Serve static files for the UI
-	router.Static("/ui", "./ui/public")
+	// Serve static files for the UI using absolute path inside container
+	router.Static("/ui", "/app/ui/public") // Use absolute path
 
-	// Setup pprof routes (optional, for debugging performance)
-	// go func() {
-	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
-
-	// --- Setup API Handlers & Router --- 
+	// --- Setup API Handlers & Router ---
 	// Instantiate the API handler with necessary dependencies
-	// Use global database.DB
-	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier) // Removed sseHub argument
+	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier)
 
-	// Create a new router for API endpoints
-	apiRouter := gin.New()
-	apiRouter.Use(gin.Recovery())
-	apiRouter.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Allow all origins (adjust for production)
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	// Create a new router group for API endpoints under /api
+	apiGroup := router.Group("/api")
+	{
+		// Register API routes using the group
+		apiHandler.RegisterRoutes(apiGroup) // Pass the *gin.RouterGroup
+	}
 
-	// Register API routes
-	apiHandler.RegisterRoutes(apiRouter)
+	// --- Setup Main HTTP Router & Mounts ---
 
-	// --- Setup Web Router --- 
-	// Create a new router for web endpoints
-	webRouter := gin.New()
-	webRouter.Use(gin.Recovery())
-
-	// Register Web handlers
-	webHandler := handlers.NewWebHandler(database.DB, cfg, compreService, mqttClient, "web/templates", "web/static", sse.NewHub())
-	webHandler.RegisterRoutes(webRouter)
-
-	// --- Setup Main HTTP Router --- 
-	// Use gin as the main router to easily mount sub-routers
-	mainRouter := gin.New()
-	mainRouter.Use(gin.Recovery())
-
-	// Mount the web router (serving UI, static files, SSE)
-	mainRouter.Any("/", func(c *gin.Context) {
-		c.Redirect(http.StatusPermanentRedirect, "/ui/")
-	})
-	mainRouter.Any("/ui/*path", func(c *gin.Context) {
-		c.Request.URL.Path = "/ui" + c.Request.URL.Path
-		webRouter.HandleContext(c)
+	// Redirect root to /ui
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/ui/")
 	})
 
-	// Mount the API router under the /api prefix
-	mainRouter.Any("/api/*path", func(c *gin.Context) {
-		c.Request.URL.Path = "/api" + c.Request.URL.Path
-		apiRouter.HandleContext(c)
-	})
+	// Mount the API router group under /api (already done via router.Group)
 
 	// Serve snapshot images from the /data/snapshots directory
 	snapshotDir := cfg.Server.SnapshotDir // Use path from config (/data/snapshots)
-	mainRouter.Static("/snapshots", snapshotDir)
+	router.Static("/snapshots", snapshotDir)
 	log.Infof("Serving snapshots from %s under /snapshots/ route", snapshotDir)
 
 	// Start the server
-	serverAddr := fmt.Sprintf("0.0.0.0:%d", cfg.Server.Port)
+	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	log.Infof("Starting server on %s", serverAddr)
 	srv := &http.Server{
 		Addr:    serverAddr,
-		Handler: mainRouter,
+		Handler: router, // Use the main gin router
 	}
 
 	go func() {
@@ -218,11 +185,5 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	// Stop Cleanup Service
-	if cleanupService != nil {
-		cleanupService.StopBackgroundCleanup()
-		log.Info("Cleanup service stopped.")
-	}
-
-	log.Info("Server stopped.")
+	log.Info("Server exiting")
 }
