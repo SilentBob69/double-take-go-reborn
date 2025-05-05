@@ -117,6 +117,20 @@ func main() {
 	// Initialize Notifier Service
 	notifier := services.NewNotifierService()
 
+	// Initialize SSE Hub
+	sseHub := services.NewSSEHub()
+
+	// Initialize Web Handler
+	templatePath := "web/templates" // Relative path within embedded FS or filesystem
+	staticPath := "web/static"     // Relative path for static files
+	webHandler, err := handlers.NewWebHandler(database.DB, cfg, compreService, mqttClient, templatePath, staticPath, sseHub) // Pass sseHub
+	if err != nil {
+		log.Fatalf("Failed to initialize WebHandler: %v", err)
+	}
+
+	// Initialize API Handler
+	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, mqttClient, sseHub, notifier)
+
 	// Setup Gin router
 	router := gin.Default()
 
@@ -135,23 +149,16 @@ func main() {
 
 	// --- Setup API Handlers & Router ---
 	// Instantiate the API handler with necessary dependencies
-	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier)
+	// (Already done above)
 
-	// Create a new router group for API endpoints under /api
+	// Register API routes under /api prefix
 	apiGroup := router.Group("/api")
-	{
-		// Register API routes using the group
-		apiHandler.RegisterRoutes(apiGroup) // Pass the *gin.RouterGroup
-	}
+	apiHandler.RegisterRoutes(apiGroup)
 
-	// --- Setup Main HTTP Router & Mounts ---
-
-	// Redirect root to /ui
-	router.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/ui/")
-	})
-
-	// Mount the API router group under /api (already done via router.Group)
+	// Register Web routes
+	// Use an empty group to register at the root level
+	webGroup := router.Group("")
+	webHandler.RegisterRoutes(webGroup)
 
 	// Serve snapshot images from the /data/snapshots directory
 	snapshotDir := cfg.Server.SnapshotDir // Use path from config (/data/snapshots)
