@@ -135,7 +135,8 @@ func main() {
 	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier)
 
 	// Initialize Processing Handler
-	processingHandler := handlers.NewProcessingHandler(database.DB, cfg, compreService, notifier, mqttClient) // Pass MQTT client here
+	// Corrected argument order: cfg, database.DB, ...
+	processingHandler := handlers.NewProcessingHandler(cfg, database.DB, compreService, notifier, mqttClient) // Pass MQTT client here
 
 	// Setup Gin router
 	router := gin.Default()
