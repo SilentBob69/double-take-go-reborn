@@ -103,15 +103,12 @@ func (h *WebHandler) executeTemplate(c *gin.Context, name string, data interface
 func (h *WebHandler) handleIndex(c *gin.Context) {
 	log.Debug("Handling request for /index")
 	var images []models.Image
-	// Retrieve latest images, recognitions, faces, matches, identities
-	// Use Preload for eager loading associations
-	if err := h.db.Order("created_at desc").Limit(50). // Limit results
-		Preload("Recognitions").
-		Preload("Recognitions.Faces").
-		Preload("Recognitions.Faces.Matches").
-		Preload("Recognitions.Faces.Matches.Identity"). // Eager load Identity
-		Find(&images).Error; err != nil {
-		log.Errorf("Error fetching images: %v", err)
+	// Limit to recent images, preload Faces and their Matches/Identities
+	// Corrected Preload:
+	err := h.db.Preload("Faces.Matches.Identity").Order("created_at desc").Limit(50).Find(&images).Error
+
+	if err != nil {
+		log.Error().Err(err).Msg("Error fetching images")
 		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("database error"))
 		return
 	}
