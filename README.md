@@ -9,7 +9,7 @@
 
 `double-take-go-reborn` is an application written in Go for processing events (e.g., images from cameras) received via MQTT. It integrates with the face recognition service [CompreFace](https://github.com/exadel-inc/CompreFace) to detect and identify people in the images. The application provides a web API and potentially a user interface for managing and displaying the results.
 
-This project is a redevelopment ("Reborn") of a similar concept application, written in Go.
+This project is a redevelopment ("Reborn") in Go, inspired by the original [double-take project by jakowenko](https://github.com/jakowenko/double-take).
 
 ## Features (planned/partially implemented)
 
