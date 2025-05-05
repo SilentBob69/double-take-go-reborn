@@ -131,7 +131,11 @@ func main() {
 	}
 
 	// Initialize API Handler
-	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, mqttClient, sseHub, notifier)
+	// Removed mqttClient and sseHub as they are not needed by APIHandler
+	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier)
+
+	// Initialize Processing Handler
+	processingHandler := handlers.NewProcessingHandler(database.DB, cfg, compreService, notifier, mqttClient) // Pass MQTT client here
 
 	// Setup Gin router
 	router := gin.Default()
