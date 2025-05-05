@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -22,11 +23,8 @@ import (
 	"gorm.io/gorm"
 )
 
-//go:embed ../../web/templates/*
-var templateFS embed.FS
-
-//go:embed ../../web/static/*
-var staticFS embed.FS
+//go:embed ../../web
+var webFS embed.FS
 
 // WebHandler handles requests for the web interface
 type WebHandler struct {
@@ -63,8 +61,8 @@ func NewWebHandler(db *gorm.DB, cfg *config.Config, compreService *services.Comp
 }
 
 func (h *WebHandler) loadTemplates() error {
-	// Parse templates from embedded FS
-	t, err := template.ParseFS(templateFS, filepath.Join(h.templatePath, "*.html"), filepath.Join(h.templatePath, "layouts", "*.html"))
+	// Parse templates from the embedded webFS, using paths relative to 'web'
+	t, err := template.ParseFS(webFS, "web/templates/*.html", "web/templates/layouts/*.html")
 	if err != nil {
 		return fmt.Errorf("error parsing templates: %w", err)
 	}
@@ -154,14 +152,19 @@ func (h *WebHandler) handleSSEUpdates(c *gin.Context) {
 
 // RegisterRoutes sets up the routes for the web interface using Gin router group
 func (h *WebHandler) RegisterRoutes(web *gin.RouterGroup) {
-	// Serve static files from embedded FS under /static path relative to the group
-	staticServer := http.FileServer(http.FS(staticFS))
-	// Need to strip the group prefix and the static prefix
+	// Serve static files from the 'web/static' directory within the embedded webFS
+	staticRoot, err := fs.Sub(webFS, "web/static")
+	if err != nil {
+		log.Fatalf("Failed to create sub FS for static assets: %v", err)
+	}
+	staticServer := http.FileServer(http.FS(staticRoot))
+
+	// Serve static files under /static path relative to the group
 	web.GET("/static/*filepath", func(c *gin.Context) {
-		// Calculate the path relative to the embedded static directory
+		// Strip the group prefix and the static prefix
 		relativePath := strings.TrimPrefix(c.Request.URL.Path, web.BasePath()+"/static")
-		// Update the request URL path for the file server
-		c.Request.URL.Path = filepath.Join("web/static", relativePath)
+		// Update the request URL path for the file server (now relative to the staticRoot)
+		c.Request.URL.Path = relativePath
 		staticServer.ServeHTTP(c.Writer, c.Request)
 	})
 
