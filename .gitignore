@@ -1,0 +1,10 @@
+# Configuration files
+config/config.yaml
+
+# Runtime data
+data/double-take.db
+data/server.log
+data/snapshots/
+
+# macOS
+.DS_Store
