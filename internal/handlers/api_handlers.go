@@ -51,6 +51,9 @@ func (h *APIHandler) RegisterRoutes(r chi.Router) {
 	r.Put("/matches/{matchID}/identity", h.handleUpdateMatchIdentity) // NEW: Update existing match identity
 	r.Post("/matches", h.handleCreateMatch)                         // NEW: Create a new match for a face
 
+	// New route for adding subjects
+	r.Post("/subjects", h.AddSubject)
+
 	// Add other API routes here
 }
 
@@ -696,6 +699,46 @@ func (h *APIHandler) handleCreateMatch(w http.ResponseWriter, r *http.Request) {
 	log.Infof("Successfully created match %d for face %d with identity %d", createdMatch.ID, req.FaceID, req.IdentityID)
 	// TODO: Consider SSE broadcast here
 	respondWithJSON(w, http.StatusCreated, createdMatch)
+}
+
+// AddSubject handles adding a new subject with an example image via multipart/form-data
+func (h *APIHandler) AddSubject(w http.ResponseWriter, r *http.Request) {
+	// Ensure CompreFace service is available and configured
+	if h.CompreFace == nil || !h.Cfg.CompreFace.Enabled {
+		log.Warn("AddSubject endpoint called but CompreFace service is not enabled or available.")
+		respondWithError(w, http.StatusServiceUnavailable, "CompreFace service not configured or enabled")
+		return
+	}
+
+	// Retrieve subject name from form data
+	subjectName := r.FormValue("subject")
+	if subjectName == "" {
+		respondWithError(w, http.StatusBadRequest, "Subject name is required")
+		return
+	}
+
+	// Retrieve file from form data
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		log.WithError(err).Error("Error retrieving file from form")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Error retrieving file: %v", err))
+		return
+	}
+	defer file.Close()
+
+	log.Infof("Attempting to add example for subject '%s' using file '%s'", subjectName, header.Filename)
+
+	// Call the CompreFace service to add the example
+	compresponse, err := h.CompreFace.AddSubjectExample(subjectName, file, header)
+	if err != nil {
+		log.WithError(err).Errorf("Error adding subject example '%s' to CompreFace", subjectName)
+		// Try to provide a more specific error based on the type of error from the service
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to add subject example to CompreFace: %v", err))
+		return
+	}
+
+	log.Infof("Successfully added example for subject '%s'. CompreFace response: %+v", subjectName, compresponse)
+	respondWithJSON(w, http.StatusOK, compresponse) // Return the response from CompreFace
 }
 
 // Helper function to send JSON errors

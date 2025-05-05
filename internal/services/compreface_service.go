@@ -64,6 +64,12 @@ type CompreFaceMask struct {
 	Value       string  `json:"value"` // e.g., "no_mask", "mask"
 }
 
+// CompreFaceAddResponse represents the response from adding a subject example
+type CompreFaceAddResponse struct {
+	ImageID string `json:"image_id"`
+	Subject string `json:"subject"`
+}
+
 // CompreFaceService handles communication with the CompreFace API.
 type CompreFaceService struct {
 	Cfg    config.CompreFaceConfig
@@ -287,4 +293,77 @@ func (s *CompreFaceService) SyncIdentities(db *gorm.DB) error {
 
 	log.Infof("CompreFace identity synchronization finished. Found %d subjects in CompreFace. Created %d new local identities.", len(compreSubjects), newIdentitiesCount)
 	return nil
+}
+
+// AddSubjectExample adds an example image for a specific subject to CompreFace.
+// If the subject does not exist, CompreFace creates it automatically.
+func (s *CompreFaceService) AddSubjectExample(subjectName string, file io.Reader, fileHeader *multipart.FileHeader) (*CompreFaceAddResponse, error) {
+	if !s.Cfg.Enabled {
+		return nil, fmt.Errorf("CompreFace service is not enabled in config")
+	}
+
+	// 1. Prepare the multipart request body
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add the file part
+	part, err := writer.CreateFormFile("file", fileHeader.Filename)
+	if err != nil {
+		return nil, fmt.Errorf("error creating form file part: %w", err)
+	}
+	_, err = io.Copy(part, file)
+	if err != nil {
+		return nil, fmt.Errorf("error copying file content to form part: %w", err)
+	}
+
+	// Close the writer to finalize the body
+	writer.Close() // Important!
+
+	// 2. Construct the URL with query parameters
+	reqURL := fmt.Sprintf("%s/api/v1/recognition/faces", s.Cfg.Url)
+	u, err := url.Parse(reqURL)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing base URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("subject", subjectName)
+	// Add det_prob_threshold if needed from config, e.g.:
+	// q.Set("det_prob_threshold", fmt.Sprintf("%.2f", s.detProbThreshold))
+	u.RawQuery = q.Encode()
+
+	// 3. Create the HTTP request
+	req, err := http.NewRequest("POST", u.String(), body)
+	if err != nil {
+		return nil, fmt.Errorf("error creating add subject example request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("x-api-key", s.Cfg.RecognitionApiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType()) // Use the writer's content type
+
+	// 4. Execute the request
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error executing add subject example request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// 5. Handle the response
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading add subject example response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated { // CompreFace might return 200 or 201
+		return nil, fmt.Errorf("error adding subject example, status code: %d, response: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var addResponse CompreFaceAddResponse
+	if err := json.Unmarshal(bodyBytes, &addResponse); err != nil {
+		// Log the raw response if JSON decoding fails
+		log.Warnf("Failed to decode CompreFace JSON response: %s", string(bodyBytes))
+		return nil, fmt.Errorf("error decoding add subject example response: %w", err)
+	}
+
+	return &addResponse, nil
 }
