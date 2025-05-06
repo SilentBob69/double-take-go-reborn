@@ -1,5 +1,10 @@
 # Double-Take Go
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Version](https://img.shields.io/badge/Go-1.24-blue.svg)](https://golang.org)
+[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-red.svg)]()
+[![Docker](https://img.shields.io/badge/Docker-Required-blue.svg)]()
+
 Eine Go-Implementierung inspiriert von [Double Take](https://github.com/jakowenko/double-take), einem System zur Gesichtserkennung und -verfolgung für Smart Homes und Überwachungskameras.
 
 > **Hinweis**: Dieses Projekt befindet sich noch in einem frühen Entwicklungsstadium. Es ist funktional, hat aber möglicherweise noch Fehler und unvollständige Funktionen. Beiträge und Feedback sind willkommen!
