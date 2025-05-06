@@ -5,6 +5,8 @@
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-red.svg)]()
 [![Docker](https://img.shields.io/badge/Docker-Required-blue.svg)]()
 
+*Read this in [English](README.en.md)*
+
 Eine Go-Implementierung inspiriert von [Double Take](https://github.com/jakowenko/double-take), einem System zur Gesichtserkennung und -verfolgung für Smart Homes und Überwachungskameras.
 
 > **Hinweis**: Dieses Projekt befindet sich noch in einem frühen Entwicklungsstadium. Es ist funktional, hat aber möglicherweise noch Fehler und unvollständige Funktionen. Beiträge und Feedback sind willkommen!
@@ -18,12 +20,16 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 ## Funktionen
 
 - Integration mit CompreFace für die Gesichtserkennung
+  - Periodische Synchronisation der CompreFace-Subjekte (alle 15 Minuten)
+  - Automatische Aktualisierung der lokalen Datenbank mit CompreFace-Daten
 - MQTT-Integration für den Empfang von Ereignissen von Frigate NVR
 - Home Assistant-Integration über MQTT für automatische Geräteerkennung und Statusaktualisierungen
 - Echtzeit-Benachrichtigungen über Server-Sent Events (SSE)
+- Moderne Toast-Benachrichtigungen für Systemereignisse und Benutzeraktionen
 - Webbasierte Benutzeroberfläche zur Verwaltung von Bildern und Gesichtern
 - Automatische Bereinigung älterer Daten
 - RESTful API für Integrationen mit anderen Systemen
+- Detaillierte Diagnoseseite mit System- und Datenbankstatistiken
 
 ## Anforderungen
 
@@ -95,66 +101,23 @@ Die Hauptkonfigurationsdatei ist `config.yaml`. Wichtige Einstellungen sind:
 
 - `server`: Hostnamen und Ports für den Server
 - `compreface`: Verbindungsdetails für die externe CompreFace-Instanz
+  - `sync_interval_minutes`: Intervall in Minuten für die periodische CompreFace-Synchronisation (Standard: 15)
 - `mqtt`: MQTT-Broker-Konfiguration für die Frigate-Integration
   - `homeassistant`: Einstellungen für die Home Assistant-Integration
 - `frigate`: Konfiguration für die Verbindung zu Frigate NVR
 - `cleanup`: Einstellungen zur automatischen Datenlöschung
 
-## Integration mit Frigate NVR
+## Neue Funktionen und Verbesserungen
 
-Um Double-Take mit Frigate zu verbinden:
+- **Periodische CompreFace-Synchronisation**: Die Anwendung synchronisiert jetzt automatisch die Daten zwischen CompreFace und der lokalen Datenbank.
+- **Toast-Benachrichtigungen**: Moderne, nicht-blockierende Benachrichtigungen für Systemereignisse und Benutzeraktionen.
+- **Verbesserte Diagnostics-Seite**: Zeigt detaillierte Informationen über das System, die Datenbank und die CompreFace-Integration.
+- **Bild-Neuverarbeitung**: Bilder können jetzt direkt aus der Benutzeroberfläche neu verarbeitet werden.
 
-1. MQTT-Integration in der Konfiguration aktivieren
-2. Frigate so konfigurieren, dass Ereignisse an den MQTT-Broker gesendet werden
-3. Double-Take abonniert automatisch `frigate/#`, um alle Frigate-Topics zu überwachen
-4. Verarbeitet werden sowohl Frigate-Events (JSON-Format) als auch direkte Bild-Snapshots (`frigate/camera_name/person/snapshot`)
+## Zukünftige Pläne
 
-Die Anwendung erkennt automatisch den Typ der MQTT-Nachricht und verarbeitet sie entsprechend:
-- Event-basierte Nachrichten (JSON-Format)
-- Personen-Snapshots (Binärdaten direkt im MQTT-Payload)
-
-Bildmaterial wird gespeichert und in Echtzeit in der Weboberfläche angezeigt, auch wenn keine Gesichter erkannt werden.
-
-## Integration mit Home Assistant
-
-Double-Take unterstützt die automatische Integration mit Home Assistant über MQTT Discovery:
-
-1. Home Assistant-Integration in der MQTT-Konfiguration aktivieren:
-   ```yaml
-   mqtt:
-     enabled: true
-     broker: "mqtt-broker-ip"
-     port: 1883
-     username: "user"
-     password: "pass"
-     client_id: "double-take-go"
-     topic: "frigate/#"
-     homeassistant:
-       enabled: true
-       discovery_prefix: "homeassistant"
-       publish_results: true
-   ```
-
-2. Nach dem Start werden automatisch folgende Sensoren in Home Assistant registriert:
-   - Ein Sensor für jede trainierte Person (zeigt die Kamera, in der die Person zuletzt gesehen wurde)
-   - Ein "Double Take Unknown"-Sensor für unbekannte Gesichter
-   - Personen-Zähler pro Kamera
-
-3. Die Sensoren zeigen den Namen der Kamera, die zuletzt ein Gesicht erkannt hat, und enthalten in ihren Attributen detaillierte Informationen über die Erkennung, wie:
-   - Erkennungssicherheit
-   - Zeitstempel
-   - Position des Gesichts im Bild
-   - Verarbeitungsdauer
-
-Die Integration verwendet das MQTT Discovery-Protokoll von Home Assistant, sodass keine manuelle Konfiguration in Home Assistant notwendig ist.
-
-## Technische Details
-
-- Go 1.24 (siehe go.mod)
-- Gin Web-Framework
-- GORM als ORM mit SQLite-Datenbank
-- Docker-basierte Deployment- und Entwicklungsumgebung
-
-## Lizenz
-
-[MIT](LICENSE)
+- Verbesserung der Gesichtserkennungsgenauigkeit
+- Erweiterung der Home Assistant-Integration
+- Integration mit weiteren NVR-Systemen
+- Mobile App-Integration
+- API-Dokumentation mit Swagger/OpenAPI
