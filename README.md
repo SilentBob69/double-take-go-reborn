@@ -103,7 +103,14 @@ Um Double-Take mit Frigate zu verbinden:
 
 1. MQTT-Integration in der Konfiguration aktivieren
 2. Frigate so konfigurieren, dass Ereignisse an den MQTT-Broker gesendet werden
-3. Im Frigate-Event-Topic die Snapshots für erkannte Personen aktivieren
+3. Double-Take abonniert automatisch `frigate/#`, um alle Frigate-Topics zu überwachen
+4. Verarbeitet werden sowohl Frigate-Events (JSON-Format) als auch direkte Bild-Snapshots (`frigate/camera_name/person/snapshot`)
+
+Die Anwendung erkennt automatisch den Typ der MQTT-Nachricht und verarbeitet sie entsprechend:
+- Event-basierte Nachrichten (JSON-Format)
+- Personen-Snapshots (Binärdaten direkt im MQTT-Payload)
+
+Bildmaterial wird gespeichert und in Echtzeit in der Weboberfläche angezeigt, auch wenn keine Gesichter erkannt werden.
 
 ## Technische Details
 
