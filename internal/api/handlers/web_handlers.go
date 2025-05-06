@@ -423,13 +423,14 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	
 	// Konfigurationsdaten aufbereiten
 	configData := gin.H{
-		"FrigateURL":     h.cfg.Frigate.Host,
+		"FrigateURL":     h.cfg.Frigate.URL,
 		"MQTTEnabled":    h.cfg.MQTT.Enabled,
 		"MQTTBroker":     h.cfg.MQTT.Broker,
 		"MQTTPort":       h.cfg.MQTT.Port,
+		"MQTTTopic":      h.cfg.MQTT.Topic,
 		"CompreFaceURL":  h.cfg.CompreFace.URL,
 		"CompreEnabled":  h.cfg.CompreFace.Enabled,
-		"DataDir":        h.cfg.Server.DataDir,
+		"DataDir":        "/data", // Hardcoded Standardwert, falls nicht in der Config
 		"Version":        "1.0.0", // Hier könnte eine Versionsnummer eingetragen werden
 	}
 	
