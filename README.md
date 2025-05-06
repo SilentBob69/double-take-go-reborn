@@ -19,6 +19,7 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 
 - Integration mit CompreFace für die Gesichtserkennung
 - MQTT-Integration für den Empfang von Ereignissen von Frigate NVR
+- Home Assistant-Integration über MQTT für automatische Geräteerkennung und Statusaktualisierungen
 - Echtzeit-Benachrichtigungen über Server-Sent Events (SSE)
 - Webbasierte Benutzeroberfläche zur Verwaltung von Bildern und Gesichtern
 - Automatische Bereinigung älterer Daten
@@ -28,8 +29,9 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 
 - Docker und Docker Compose für die einfache Installation
 - CompreFace-Instanz (als externer Dienst erreichbar unter der in der Konfiguration angegebenen URL)
-- Optional: MQTT-Broker (als externer Dienst für die Integration mit Frigate)
+- Optional: MQTT-Broker (als externer Dienst für die Integration mit Frigate und Home Assistant)
 - Optional: Frigate NVR (als externer Dienst zur Bereitstellung von Kamera-Events)
+- Optional: Home Assistant (für die automatische Integration der Erkennungsergebnisse)
 
 ## Installation
 
@@ -94,6 +96,7 @@ Die Hauptkonfigurationsdatei ist `config.yaml`. Wichtige Einstellungen sind:
 - `server`: Hostnamen und Ports für den Server
 - `compreface`: Verbindungsdetails für die externe CompreFace-Instanz
 - `mqtt`: MQTT-Broker-Konfiguration für die Frigate-Integration
+  - `homeassistant`: Einstellungen für die Home Assistant-Integration
 - `frigate`: Konfiguration für die Verbindung zu Frigate NVR
 - `cleanup`: Einstellungen zur automatischen Datenlöschung
 
@@ -111,6 +114,39 @@ Die Anwendung erkennt automatisch den Typ der MQTT-Nachricht und verarbeitet sie
 - Personen-Snapshots (Binärdaten direkt im MQTT-Payload)
 
 Bildmaterial wird gespeichert und in Echtzeit in der Weboberfläche angezeigt, auch wenn keine Gesichter erkannt werden.
+
+## Integration mit Home Assistant
+
+Double-Take unterstützt die automatische Integration mit Home Assistant über MQTT Discovery:
+
+1. Home Assistant-Integration in der MQTT-Konfiguration aktivieren:
+   ```yaml
+   mqtt:
+     enabled: true
+     broker: "mqtt-broker-ip"
+     port: 1883
+     username: "user"
+     password: "pass"
+     client_id: "double-take-go"
+     topic: "frigate/#"
+     homeassistant:
+       enabled: true
+       discovery_prefix: "homeassistant"
+       publish_results: true
+   ```
+
+2. Nach dem Start werden automatisch folgende Sensoren in Home Assistant registriert:
+   - Ein Sensor für jede trainierte Person (zeigt die Kamera, in der die Person zuletzt gesehen wurde)
+   - Ein "Double Take Unknown"-Sensor für unbekannte Gesichter
+   - Personen-Zähler pro Kamera
+
+3. Die Sensoren zeigen den Namen der Kamera, die zuletzt ein Gesicht erkannt hat, und enthalten in ihren Attributen detaillierte Informationen über die Erkennung, wie:
+   - Erkennungssicherheit
+   - Zeitstempel
+   - Position des Gesichts im Bild
+   - Verarbeitungsdauer
+
+Die Integration verwendet das MQTT Discovery-Protokoll von Home Assistant, sodass keine manuelle Konfiguration in Home Assistant notwendig ist.
 
 ## Technische Details
 
