@@ -18,6 +18,30 @@
             max-height: 400px; /* Limit image height */
             object-fit: contain; /* Scale image nicely */
         }
+        
+        /* Toast-Stile */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        .toast {
+            min-width: 250px;
+        }
+        .toast-success {
+            background-color: #28a745 !important;
+        }
+        .toast-error {
+            background-color: #dc3545 !important;
+        }
+        .toast-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+        }
+        .toast-info {
+            background-color: #17a2b8 !important;
+        }
     </style>
 </head>
 <body>
@@ -296,22 +320,20 @@
                 .then(response => {
                     if (response.ok) {
                         console.log(`Re-recognition triggered for image ${imageId}.`);
-                        // Optionally, provide user feedback, e.g., a temporary message
-                        // The SSE update should ideally refresh the card content later.
-                        alert(`Re-recognition started for image ${imageId}. The card will update if new results are found.`);
+                        showToast('Erfolg', `Neuverarbeitung für Bild ${imageId} gestartet. Die Ansicht wird aktualisiert, sobald neue Ergebnisse vorliegen.`, 'success');
                     } else {
                         response.json().then(data => {
                              console.error(`Failed to trigger re-recognition for image ${imageId}:`, response.status, data.error);
-                             alert(`Error triggering re-recognition for image ${imageId}: ${data.error || response.statusText}`);
+                             showToast('Fehler', `Neuverarbeitung für Bild ${imageId} fehlgeschlagen: ${data.error || response.statusText}`, 'error');
                          }).catch(() => {
                              console.error(`Failed to trigger re-recognition for image ${imageId}:`, response.statusText);
-                             alert(`Error triggering re-recognition for image ${imageId}: ${response.statusText}`);
+                             showToast('Fehler', `Neuverarbeitung für Bild ${imageId} fehlgeschlagen: ${response.statusText}`, 'error');
                          });
                     }
                 })
                 .catch(error => {
                     console.error('Error during recognize request:', error);
-                    alert(`Network error triggering re-recognition for image ${imageId}. See console.`);
+                    showToast('Netzwerkfehler', `Netzwerkfehler bei der Neuverarbeitung von Bild ${imageId}.`, 'error');
                 });
         }
 
@@ -517,6 +539,47 @@
             }
         }
 
+        function showToast(title, message, type) {
+            // Bestehenden Toast-Container finden oder erstellen
+            let toastContainer = document.querySelector('.toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.className = 'toast-container';
+                document.body.appendChild(toastContainer);
+            }
+            
+            // Toast-Element erstellen
+            const toastElement = document.createElement('div');
+            toastElement.className = `toast align-items-center text-white border-0 toast-${type}`;
+            toastElement.setAttribute('role', 'alert');
+            toastElement.setAttribute('aria-live', 'assertive');
+            toastElement.setAttribute('aria-atomic', 'true');
+            
+            // Toast-Inhalt erstellen
+            toastElement.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <strong>${title}</strong> ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+            
+            // Toast zum Container hinzufügen
+            toastContainer.appendChild(toastElement);
+            
+            // Toast initialisieren und anzeigen
+            const toast = new bootstrap.Toast(toastElement, {
+                delay: 3000,
+                autohide: true
+            });
+            toast.show();
+            
+            // Toast nach dem Ausblenden entfernen
+            toastElement.addEventListener('hidden.bs.toast', function () {
+                toastElement.remove();
+            });
+        }
     </script>
     <!-- Identity Assignment Modal -->
     <div class="modal fade" id="identityModal" tabindex="-1" aria-labelledby="identityModalLabel" aria-hidden="true">

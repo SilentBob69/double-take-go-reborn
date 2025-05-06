@@ -1,6 +1,11 @@
 package handlers
 
 import (
+	"double-take-go-reborn/config"
+	"double-take-go-reborn/internal/core/models"
+	"double-take-go-reborn/internal/core/processor"
+	"double-take-go-reborn/internal/integrations/compreface"
+
 	"fmt"
 	"io"
 	"net/http"
@@ -8,11 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
-
-	"double-take-go-reborn/config"
-	"double-take-go-reborn/internal/core/models"
-	"double-take-go-reborn/internal/core/processor"
-	"double-take-go-reborn/internal/integrations/compreface"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -47,6 +47,7 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/images", h.ListImages)
 	router.GET("/images/:id", h.GetImage)
 	router.DELETE("/images/:id", h.DeleteImage)
+	router.POST("/images/:id/recognize", h.RecognizeImage)
 
 	// Identitäts-Endpunkte
 	router.GET("/identities", h.ListIdentities)
@@ -431,4 +432,36 @@ func (h *APIHandler) SyncCompreFace(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "CompreFace synchronization completed successfully"})
+}
+
+// RecognizeImage verarbeitet ein Bild neu
+func (h *APIHandler) RecognizeImage(c *gin.Context) {
+	id := c.Param("id")
+	
+	var image models.Image
+	if err := h.db.First(&image, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+		return
+	}
+
+	// Vollständigen Pfad zum Bild erstellen
+	imagePath := filepath.Join(h.cfg.Server.SnapshotDir, image.FilePath)
+	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Image file not found at path: %s", image.FilePath)})
+		return
+	}
+
+	// Bild neu verarbeiten
+	ctx := c.Request.Context()
+	processingOptions := processor.ProcessingOptions{
+		DetectFaces:    true,
+		RecognizeFaces: true,
+	}
+	_, err := h.imageProcessor.ProcessImage(ctx, imagePath, image.Source, processingOptions)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Image processing failed: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Image reprocessed successfully"})
 }
