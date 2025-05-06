@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -389,8 +390,23 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	h.db.Model(&models.Face{}).Count(&dbStats.FaceCount)
 	h.db.Model(&models.Identity{}).Count(&dbStats.IdentityCount)
 	
-	// Größe der DB-Datei ermitteln (vereinfacht)
-	dbStats.DBSize = "Unbekannt"
+	// Größe der DB-Datei ermitteln
+	dbFilePath := h.cfg.DB.File
+	if fileInfo, err := os.Stat(dbFilePath); err == nil {
+		sizeInBytes := fileInfo.Size()
+		if sizeInBytes < 1024 {
+			dbStats.DBSize = fmt.Sprintf("%d Bytes", sizeInBytes)
+		} else if sizeInBytes < 1024*1024 {
+			dbStats.DBSize = fmt.Sprintf("%.1f KB", float64(sizeInBytes)/1024)
+		} else if sizeInBytes < 1024*1024*1024 {
+			dbStats.DBSize = fmt.Sprintf("%.1f MB", float64(sizeInBytes)/(1024*1024))
+		} else {
+			dbStats.DBSize = fmt.Sprintf("%.2f GB", float64(sizeInBytes)/(1024*1024*1024))
+		}
+	} else {
+		log.Warnf("Konnte DB-Dateigröße nicht ermitteln: %v", err)
+		dbStats.DBSize = "Unbekannt"
+	}
 	
 	// Letzte Erkennung und Identifizierung
 	var lastImage models.Image
@@ -403,13 +419,24 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		dbStats.LastRecognition = lastMatch.CreatedAt
 	}
 	
-	// CompreFace-Status
+	// CompreFace-Status und Subjects
 	compreFaceStatus := "Unbekannt"
 	if h.cfg.CompreFace.Enabled {
-		compreFaceStatus = "Verbunden"
-		// Hier könnte man einen Ping an CompreFace machen
+		compreFaceStatus = "Aktiviert"
 	} else {
 		compreFaceStatus = "Deaktiviert"
+	}
+	
+	// CompreFace-Subjects aus der Datenbank abrufen
+	var identities []models.Identity
+	var compreFaceSubjects []string
+	if h.cfg.CompreFace.Enabled {
+		if err := h.db.Where("external_id IS NOT NULL").Find(&identities).Error; err == nil {
+			for _, identity := range identities {
+				compreFaceSubjects = append(compreFaceSubjects, identity.Name)
+			}
+			log.Infof("Gefundene Identitäten mit External ID: %d", len(identities))
+		}
 	}
 	
 	// MQTT-Status
@@ -442,6 +469,7 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 			"MQTT": mqttStatus,
 		},
 		"Config": configData,
+		"CompreFaceSubjects": compreFaceSubjects,
 	}
 	
 	h.renderTemplate(c, "diagnostics.html", data)

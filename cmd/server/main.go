@@ -184,6 +184,36 @@ func main() {
 		go cleanupService.Start(context.Background())
 	}
 
+	// 9.1. CompreFace-Synchronisations-Timer starten, falls konfiguriert
+	if cfg.CompreFace.Enabled && cfg.CompreFace.SyncIntervalMinutes > 0 {
+		log.Infof("Starting CompreFace sync service with interval: %d minutes", cfg.CompreFace.SyncIntervalMinutes)
+		ticker := time.NewTicker(time.Duration(cfg.CompreFace.SyncIntervalMinutes) * time.Minute)
+		
+		// Erste Synchronisation direkt beim Start durchführen
+		if err := compreFaceClient.SyncIdentities(context.Background(), db.DB); err != nil {
+			log.Errorf("Initial CompreFace sync failed: %v", err)
+		} else {
+			log.Info("Initial CompreFace synchronization completed successfully")
+		}
+		
+		// Timer für regelmäßige Synchronisation starten
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					if err := compreFaceClient.SyncIdentities(context.Background(), db.DB); err != nil {
+						log.Errorf("Periodic CompreFace sync failed: %v", err)
+					} else {
+						log.Info("Periodic CompreFace synchronization completed successfully")
+					}
+				}
+			}
+		}()
+		
+		// Ticker beim Beenden anhalten
+		defer ticker.Stop()
+	}
+
 	// 10. Web-Server initialisieren
 	router := setupRouter(cfg)
 

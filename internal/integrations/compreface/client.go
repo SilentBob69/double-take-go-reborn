@@ -73,8 +73,8 @@ func (c *Client) Ping(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("CompreFace is not enabled in config")
 	}
 
-	// Zuerst API-URL erstellen
-	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects")
+	// URL genau nach der Dokumentation erstellen
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/")
 	if err != nil {
 		return false, fmt.Errorf("failed to create API URL: %w", err)
 	}
@@ -85,8 +85,11 @@ func (c *Client) Ping(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// API-Key hinzufügen
+	// Headers genau nach der Dokumentation setzen
 	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	log.Debugf("Testing CompreFace connection at: %s", apiURL)
 
 	// Request senden
 	resp, err := c.httpClient.Do(req)
@@ -95,7 +98,16 @@ func (c *Client) Ping(ctx context.Context) (bool, error) {
 	}
 	defer resp.Body.Close()
 
-	return resp.StatusCode == http.StatusOK, nil
+	// Wenn wir einen 200 OK Status zurückbekommen, ist die Verbindung erfolgreich
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+
+	// Bei anderen Status-Codes loggen wir den Fehler mit mehr Details
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	log.Warnf("CompreFace connection test failed (status %d): %s", resp.StatusCode, string(bodyBytes))
+	
+	return false, nil
 }
 
 // Recognize sendet ein Bild zur Gesichtserkennung an CompreFace
@@ -179,8 +191,8 @@ func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
 
-	// URL erstellen
-	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects")
+	// URL genau nach der Dokumentation erstellen
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
@@ -191,8 +203,12 @@ func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// API-Key hinzufügen
+	// Headers genau nach der Dokumentation setzen
 	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Ausführliche Logging für Debugging-Zwecke
+	log.Infof("Sending request to CompreFace: %s", apiURL)
 
 	// Request senden
 	resp, err := c.httpClient.Do(req)
@@ -201,9 +217,15 @@ func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
+	// Antwort auslesen (für Logging-Zwecke)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
 	// Status-Code prüfen
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Errorf("CompreFace API error (status %d): %s", resp.StatusCode, string(bodyBytes))
 		return nil, fmt.Errorf("CompreFace API returned error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -211,10 +233,11 @@ func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
 	var result struct {
 		Subjects []string `json:"subjects"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	log.Infof("Successfully retrieved %d subjects from CompreFace", len(result.Subjects))
 	return result.Subjects, nil
 }
 
