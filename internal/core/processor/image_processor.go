@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"double-take-go-reborn/config"
@@ -72,8 +73,22 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imagePath, source str
 
 	// 4. Bild in die Datenbank einfügen
 	filename := filepath.Base(imagePath)
+	
+	// Relativen Pfad zum Snapshot-Verzeichnis ermitteln
+	var relPath string
+	if strings.HasPrefix(imagePath, p.cfg.Server.SnapshotDir) {
+		// Den vollständigen relativen Pfad innerhalb des Snapshot-Verzeichnisses extrahieren
+		relPath = strings.TrimPrefix(imagePath, p.cfg.Server.SnapshotDir)
+		relPath = strings.TrimPrefix(relPath, "/") // Führenden Slash entfernen, falls vorhanden
+	} else {
+		// Fallback: Nur Dateiname, wenn kein relativer Pfad erkannt wurde
+		relPath = filename
+	}
+	
+	log.Debugf("Using relative path for image: %s", relPath)
+	
 	image := models.Image{
-		FilePath:    filename,
+		FilePath:    relPath,
 		Timestamp:   time.Now(),
 		ContentHash: hash,
 		Source:      source,
@@ -99,7 +114,8 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imagePath, source str
 	}
 
 	// 6. SSE-Broadcast für neue Bild-Erkennung, falls aktiviert
-	if p.sseHub != nil && len(image.Faces) > 0 {
+	if p.sseHub != nil {
+		// Broadcast für alle Bilder, auch ohne erkannte Gesichter
 		p.sseHub.BroadcastNewImage(image, p.cfg.Server.SnapshotURL+"/"+image.FilePath, allMatches)
 	}
 

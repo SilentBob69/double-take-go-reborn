@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"strings"
 	"time"
 
 	"double-take-go-reborn/config"
@@ -23,6 +24,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"io"
 )
 
 const defaultConfigPath = "/config/config.yaml"
@@ -41,7 +43,20 @@ func main() {
 	}
 
 	// 3. Logger-Level aus Konfiguration setzen
-	setLogLevel(cfg.Log.Level)
+	if err := configureLogger(cfg); err != nil {
+		log.Fatalf("Failed to configure logger: %v", err)
+	}
+
+	// Zeitzone setzen
+	if cfg.Server.Timezone != "" {
+		log.Infof("Setting timezone to %s", cfg.Server.Timezone)
+		loc, err := time.LoadLocation(cfg.Server.Timezone)
+		if err != nil {
+			log.Warnf("Failed to set timezone to %s: %v, using UTC", cfg.Server.Timezone, err)
+		} else {
+			time.Local = loc
+		}
+	}
 
 	// 4. Datenbankverbindung initialisieren
 	log.Info("Initializing database...")
@@ -183,8 +198,69 @@ func NewMQTTHandler(processor *processor.ImageProcessor) *MQTTHandler {
 // HandleMessage verarbeitet eine MQTT-Nachricht
 func (h *MQTTHandler) HandleMessage(topic string, payload []byte) {
 	ctx := context.Background()
-	if err := h.processor.ProcessFrigateEvent(ctx, payload); err != nil {
-		log.Errorf("Failed to process Frigate event: %v", err)
+	log.Debugf("Received MQTT message on topic: %s", topic)
+	
+	// Überprüfen, ob das Topic zu den relevanten Frigate-Topics gehört
+	if topic == "frigate/events" {
+		// Standard Event in JSON-Format
+		log.Infof("Processing JSON event from topic: %s", topic)
+		if err := h.processor.ProcessFrigateEvent(ctx, payload); err != nil {
+			log.Errorf("Failed to process Frigate event: %v", err)
+		}
+	} else if strings.Contains(topic, "/person/snapshot") {
+		// Person-Snapshot (Binärdaten)
+		log.Infof("Processing person snapshot from topic: %s", topic)
+		h.processPersonSnapshot(ctx, topic, payload)
+	} else {
+		log.Debugf("Ignoring MQTT message on topic: %s", topic)
+	}
+}
+
+// processPersonSnapshot verarbeitet ein Person-Snapshot aus dem MQTT-Topic
+func (h *MQTTHandler) processPersonSnapshot(ctx context.Context, topic string, payload []byte) {
+	// Extract camera name from topic: frigate/CAMERA_NAME/person/snapshot
+	parts := strings.Split(topic, "/")
+	if len(parts) < 4 {
+		log.Errorf("Invalid topic format for person snapshot: %s", topic)
+		return
+	}
+	
+	cameraName := parts[1]
+	
+	// Snapshot-Datei generieren
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("%s_%s_person.jpg", timestamp, cameraName)
+	
+	// Snapshot-Verzeichnis aus der Konfiguration auslesen
+	configPath := getConfigPath()
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		log.Errorf("Failed to load config for snapshot directory: %v", err)
+		return
+	}
+	
+	localPath := filepath.Join("frigate", filename)
+	fullPath := filepath.Join(cfg.Server.SnapshotDir, localPath)
+	
+	// Verzeichnis erstellen, falls es nicht existiert
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		log.Errorf("Failed to create snapshot directory: %v", err)
+		return
+	}
+	
+	// Snapshot als Datei speichern
+	if err := os.WriteFile(fullPath, payload, 0644); err != nil {
+		log.Errorf("Failed to save snapshot to file: %v", err)
+		return
+	}
+	
+	log.Infof("Saved person snapshot to: %s", fullPath)
+	
+	// Bild zur Verarbeitung weiterleiten
+	_, err = h.processor.ProcessImage(ctx, fullPath, "frigate", processor.ProcessingOptions{})
+	if err != nil {
+		log.Errorf("Failed to process snapshot image: %v", err)
+		return
 	}
 }
 
@@ -196,6 +272,39 @@ func setupLogger() {
 	})
 	log.SetOutput(os.Stdout)
 	log.SetLevel(log.InfoLevel) // Standardwert, wird später möglicherweise überschrieben
+}
+
+// configureLogger konfiguriert den Logger mit einer Datei und Stdout
+func configureLogger(cfg *config.Config) error {
+	// Log-Level setzen
+	if level, err := log.ParseLevel(cfg.Log.Level); err == nil {
+		log.SetLevel(level)
+		log.Infof("Log level set to: %s", cfg.Log.Level)
+	} else {
+		log.Warnf("Invalid log level '%s', using default 'info': %v", cfg.Log.Level, err)
+	}
+
+	// Wenn eine Log-Datei konfiguriert ist, Multi-Writer erstellen
+	if cfg.Log.File != "" {
+		// Verzeichnis erstellen, falls nicht vorhanden
+		logDir := filepath.Dir(cfg.Log.File)
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("failed to create log directory: %w", err)
+		}
+
+		// Log-Datei öffnen
+		logFile, err := os.OpenFile(cfg.Log.File, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open log file: %w", err)
+		}
+
+		// Multi-Writer für Stdout und Datei
+		mw := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(mw)
+		log.Infof("Logging to file: %s and stdout", cfg.Log.File)
+	}
+
+	return nil
 }
 
 // getConfigPath ermittelt den Pfad zur Konfigurationsdatei

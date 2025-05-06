@@ -6,9 +6,10 @@ server:
   snapshot_dir: "/data/snapshots"
   snapshot_url: "/snapshots"
   template_dir: "/app/web/templates"
+  timezone: "Europe/Berlin"
 
 log:
-  level: "info"
+  level: "debug"
   file: "/data/logs/double-take.log"
 
 db:
@@ -23,24 +24,25 @@ db:
 
 compreface:
   enabled: true
-  url: "http://compreface-api:8000"
-  recognition_api_key: "your_recognition_api_key"
+  url: "http://10.100.0.3:8000"
+  recognition_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
   detection_api_key: "your_detection_api_key"
   det_prob_threshold: 0.8
   sync_interval_minutes: 15
 
 mqtt:
-  enabled: false
-  broker: "mosquitto"
+  enabled: true
+  broker: "192.168.0.55"
   port: 1883
-  username: ""
-  password: ""
+  username: "hans"
+  password: "desert"
   client_id: "double-take-go"
-  topic: "frigate/events"
+  topic: "frigate/#"
 
 frigate:
-  api_url: "http://frigate:5000"
-  url: "http://frigate:5000"
+  enabled: true
+  api_url: "http://192.168.0.55:5000"
+  url: "http://192.168.0.55:5000"
 
 cleanup:
   retention_days: 30
