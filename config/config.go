@@ -60,6 +60,7 @@ type CompreFaceConfig struct {
 	EnableDetection    bool    `mapstructure:"enable_detection"`
 	EnableRecognition  bool    `mapstructure:"enable_recognition"`
 	SyncIntervalMinutes int     `mapstructure:"sync_interval_minutes"`
+	ServiceID          string  `mapstructure:"service_id"`
 }
 
 // MQTTConfig enthält die Konfiguration für den MQTT-Client
@@ -167,6 +168,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("compreface.enable_detection", true)
 	v.SetDefault("compreface.enable_recognition", true)
 	v.SetDefault("compreface.sync_interval_minutes", 15)
+	v.SetDefault("compreface.service_id", "")
 	
 	// MQTT-Standardwerte
 	v.SetDefault("mqtt.enabled", false)

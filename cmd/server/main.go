@@ -112,6 +112,15 @@ func main() {
 		nil, // Zunächst ohne Home Assistant Publisher
 	)
 
+	// 7.1 Worker-Pool für Bildverarbeitung erstellen
+	log.Info("Initializing image processing worker pool...")
+	workerPool := processor.NewWorkerPool(imageProcessor)
+	
+	// Worker-Pool im ImageProcessor registrieren
+	imageProcessor.SetWorkerPool(workerPool)
+	
+	log.Info("Image processor and worker pool initialized successfully")
+
 	// 8. MQTT-Client erstellen, falls aktiviert
 	var mqttClient *mqtt.Client
 	if cfg.MQTT.Enabled {
@@ -221,7 +230,8 @@ func main() {
 	log.Info("Setting up web and API handlers...")
 	
 	// Web-Handler
-	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub)
+	log.Info("Initializing web handler...")
+	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub, workerPool)
 	if err != nil {
 		log.Fatalf("Failed to create web handler: %v", err)
 	}
@@ -248,12 +258,19 @@ func main() {
 	}()
 
 	// 13. Auf Shutdown-Signal warten
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Info("Shutdown signal received")
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	
+	// Hauptlogik blockieren, bis Signal empfangen wird
+	sig := <-sigChan
+	log.Infof("Received signal %v, shutting down gracefully...", sig)
+	
+	// Signal zum Aufräumen und Schließen der Ressourcen
+	// Zuerst den Worker-Pool beenden
+	log.Info("Shutting down worker pool...")
+	workerPool.Shutdown()
 
-	// 14. Graceful Shutdown
+	// Dann Server und andere Dienste stoppen
 	log.Info("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

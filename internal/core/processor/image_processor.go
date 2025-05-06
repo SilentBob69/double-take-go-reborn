@@ -38,6 +38,7 @@ type ImageProcessor struct {
 	sseHub       *sse.Hub
 	frigateClient *frigate.FrigateClient
 	haPublisher  *homeassistant.Publisher
+	workerPool   *WorkerPool // Referenz zum Worker-Pool für parallele Verarbeitung
 }
 
 // NewImageProcessor erstellt einen neuen Bildverarbeitungsprozessor
@@ -52,8 +53,25 @@ func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.C
 	}
 }
 
+// SetWorkerPool setzt den Worker-Pool für den ImageProcessor
+func (p *ImageProcessor) SetWorkerPool(pool *WorkerPool) {
+	p.workerPool = pool
+}
+
 // ProcessImage verarbeitet ein Bild, sucht nach Gesichtern und speichert die Ergebnisse
 func (p *ImageProcessor) ProcessImage(ctx context.Context, imagePath, source string, options ProcessingOptions) (*models.Image, error) {
+	// Falls der Worker-Pool verfügbar ist, diesen verwenden
+	if p.workerPool != nil {
+		return p.workerPool.ProcessImage(ctx, imagePath, source, options)
+	}
+	
+	// Fallback auf die direkte Verarbeitung, wenn kein Worker-Pool verfügbar ist
+	return p.processImageInternal(ctx, imagePath, source, options)
+}
+
+// processImageInternal enthält die interne Verarbeitungslogik für die Bildverarbeitung
+// Diese Methode wird vom Worker-Pool aufgerufen
+func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, source string, options ProcessingOptions) (*models.Image, error) {
 	log.Infof("Processing image %s from source %s", imagePath, source)
 
 	// 1. Überprüfen, ob die Datei existiert

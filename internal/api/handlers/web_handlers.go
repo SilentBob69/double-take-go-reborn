@@ -12,7 +12,9 @@ import (
 
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/core/models"
+	"double-take-go-reborn/internal/core/processor"
 	"double-take-go-reborn/internal/server/sse"
+	"double-take-go-reborn/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -22,10 +24,11 @@ import (
 
 // WebHandler behandelt Anfragen für die Weboberfläche
 type WebHandler struct {
-	db        *gorm.DB
-	cfg       *config.Config
-	templates *template.Template
-	sseHub    *sse.Hub
+	db          *gorm.DB
+	cfg         *config.Config
+	templates   *template.Template
+	sseHub      *sse.Hub
+	workerPool  *processor.WorkerPool // Zugriff auf den Worker-Pool
 }
 
 // PageData ist eine Basisstruktur für Templatedaten
@@ -37,11 +40,12 @@ type PageData struct {
 }
 
 // NewWebHandler erstellt einen neuen Web-Handler
-func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub) (*WebHandler, error) {
+func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool *processor.WorkerPool) (*WebHandler, error) {
 	h := &WebHandler{
-		db:     db,
-		cfg:    cfg,
-		sseHub: sseHub,
+		db:          db,
+		cfg:         cfg,
+		sseHub:      sseHub,
+		workerPool:  workerPool,
 	}
 
 	// Templates laden
@@ -448,6 +452,9 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		mqttStatus = "Deaktiviert"
 	}
 	
+	// System-Statistiken abrufen
+	systemStats := utils.GetSystemStats(h.workerPool)
+	
 	// Konfigurationsdaten aufbereiten
 	configData := gin.H{
 		"FrigateURL":     h.cfg.Frigate.URL,
@@ -470,6 +477,17 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		},
 		"Config": configData,
 		"CompreFaceSubjects": compreFaceSubjects,
+		"SystemStats": gin.H{
+			"CPUs":             systemStats.NumCPU,
+			"GoRoutines":       systemStats.GoRoutines,
+			"CPUUsage":         systemStats.CPUUsage,
+			"MemoryAlloc":      utils.FormatBytes(systemStats.MemoryAlloc),
+			"MemorySys":        utils.FormatBytes(systemStats.MemorySys),
+			"WorkerCount":      systemStats.WorkerCount,
+			"ActiveJobs":       systemStats.ActiveJobs,
+			"QueueCapacity":    systemStats.QueueCapacity,
+			"Timestamp":        systemStats.Timestamp,
+		},
 	}
 	
 	h.renderTemplate(c, "diagnostics.html", data)
