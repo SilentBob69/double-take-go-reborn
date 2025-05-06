@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # Double-Take-Go Server
   double-take:
     build:
       context: .
@@ -14,9 +13,5 @@ services:
       - "3000:3000"
     environment:
       - TZ=Europe/Berlin
-    networks:
-      - double-take-network
-
-networks:
-  double-take-network:
-    driver: bridge
+      - CONFIG_PATH=/config/config.yaml
+    command: /bin/sh -c "echo 'Double-Take-Go wird aufgrund von Abhängigkeitsproblemen noch nicht automatisch gestartet.' && tail -f /dev/null"

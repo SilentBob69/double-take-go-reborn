@@ -1,0 +1,50 @@
+# Double-Take-Go Configuration
+
+server:
+  host: "0.0.0.0"  # Host to bind the server to (use 0.0.0.0 in Docker)
+  port: 3000       # Port to run the server on
+  data_dir: "/data"  # Base directory for all data
+  snapshot_dir: "/data/snapshots"  # Directory for image snapshots
+  snapshot_url: "/snapshots"        # URL path for accessing snapshots
+  template_dir: "/app/web/templates"  # Path to web templates
+
+log:
+  level: "info"   # Log level (e.g., debug, info, warn, error, fatal)
+  file: "/data/logs/double-take.log"  # Path to the log file inside the container
+
+db:
+  # SQLite configuration
+  file: "/data/double-take.db"  # Path to the SQLite database file inside the container
+
+compreface:
+  enabled: true  # Set to true to enable CompreFace integration
+  url: "http://10.49.0.3:8000"  # URL of your CompreFace instance
+  recognition_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"  # API key for the Recognition service
+  detection_api_key: ""  # Optional: API key for Detection service if used separately
+  det_prob_threshold: 0.8  # Minimum probability for a detected face to be considered (0.0 to 1.0)
+  similarity_threshold: 80.0  # Minimum similarity score for face recognition matches (0-100)
+  enable_detection: true  # Enable face detection
+  enable_recognition: true  # Enable face recognition
+  sync_interval_minutes: 15  # Interval for syncing identities with CompreFace
+
+mqtt:
+  enabled: true  # Set to true to enable MQTT connection
+  broker: "192.168.0.55"  # Address of your MQTT broker (without protocol prefix)
+  port: 1883  # MQTT broker port
+  username: "hans"  # Optional: MQTT username
+  password: "desert"  # Optional: MQTT password
+  client_id: "double-take-go"  # Client ID for this application
+  topic: "frigate/events"  # Topic to subscribe to for Frigate events
+
+frigate:
+  enabled: true  # Set to true to enable Frigate integration
+  host: "http://192.168.0.55:5000"  # Base URL of your Frigate instance's API
+  event_topic: "frigate/events"  # MQTT topic for Frigate events
+  process_person_only: true  # Only process person detections from Frigate
+
+notifications:
+  new_faces: true  # Send notifications for new faces
+  known_faces: true  # Send notifications for known faces
+
+cleanup:
+  retention_days: 30  # Number of days to keep data before automatic cleanup (0 = disabled)

@@ -1,0 +1,392 @@
+{{ define "head" }}
+<style>
+    .settings-section {
+        margin-bottom: 2rem;
+    }
+    .card-header {
+        background-color: #f8f9fa;
+    }
+    .form-switch .form-check-input {
+        width: 3em;
+        margin-left: -2.5em;
+    }
+</style>
+{{ end }}
+
+{{ define "content" }}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Einstellungen</h1>
+    <button type="button" class="btn btn-primary" id="saveAllSettings">
+        <i class="bi bi-save"></i> Alle Änderungen speichern
+    </button>
+</div>
+
+<form id="settingsForm" action="/settings/save" method="POST">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="list-group sticky-top" style="top: 20px">
+                <a class="list-group-item list-group-item-action active" href="#general" data-bs-toggle="list">Allgemein</a>
+                <a class="list-group-item list-group-item-action" href="#compreface" data-bs-toggle="list">CompreFace</a>
+                <a class="list-group-item list-group-item-action" href="#mqtt" data-bs-toggle="list">MQTT/Frigate</a>
+                <a class="list-group-item list-group-item-action" href="#notifications" data-bs-toggle="list">Benachrichtigungen</a>
+                <a class="list-group-item list-group-item-action" href="#cleanup" data-bs-toggle="list">Bereinigung</a>
+                <a class="list-group-item list-group-item-action" href="#system" data-bs-toggle="list">System</a>
+            </div>
+        </div>
+        
+        <div class="col-md-9">
+            <div class="tab-content">
+                <!-- Allgemeine Einstellungen -->
+                <div class="tab-pane fade show active" id="general">
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>Allgemeine Einstellungen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="serverHost" class="form-label">Server-Hostname</label>
+                                <input type="text" class="form-control" id="serverHost" name="server.host" value="{{ .Config.Server.Host }}">
+                                <div class="form-text">Hostname oder IP-Adresse des Servers.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="serverPort" class="form-label">Server-Port</label>
+                                <input type="number" class="form-control" id="serverPort" name="server.port" value="{{ .Config.Server.Port }}">
+                                <div class="form-text">Port, auf dem der Server lauscht.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="dataDir" class="form-label">Datenverzeichnis</label>
+                                <input type="text" class="form-control" id="dataDir" name="server.data_dir" value="{{ .Config.Server.DataDir }}">
+                                <div class="form-text">Verzeichnis, in dem Bilder und andere Daten gespeichert werden.</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="logLevel" class="form-label">Log-Level</label>
+                                <select class="form-select" id="logLevel" name="log.level">
+                                    <option value="debug" {{ if eq .Config.Log.Level "debug" }}selected{{ end }}>Debug</option>
+                                    <option value="info" {{ if eq .Config.Log.Level "info" }}selected{{ end }}>Info</option>
+                                    <option value="warn" {{ if eq .Config.Log.Level "warn" }}selected{{ end }}>Warning</option>
+                                    <option value="error" {{ if eq .Config.Log.Level "error" }}selected{{ end }}>Error</option>
+                                </select>
+                                <div class="form-text">Detailgrad der Protokollierung.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- CompreFace-Einstellungen -->
+                <div class="tab-pane fade" id="compreface">
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>CompreFace-Einstellungen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="comprefaceUrl" class="form-label">CompreFace-URL</label>
+                                <input type="text" class="form-control" id="comprefaceUrl" name="compreface.url" value="{{ .Config.CompreFace.URL }}">
+                                <div class="form-text">URL der CompreFace-Instanz.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="comprefaceApiKey" class="form-label">API-Schlüssel</label>
+                                <input type="text" class="form-control" id="comprefaceApiKey" name="compreface.api_key" value="{{ .Config.CompreFace.APIKey }}">
+                                <div class="form-text">API-Schlüssel für den Zugriff auf CompreFace.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="recognitionApiKey" class="form-label">Erkennungs-API-Schlüssel</label>
+                                <input type="text" class="form-control" id="recognitionApiKey" name="compreface.recognition_api_key" value="{{ .Config.CompreFace.RecognitionAPIKey }}">
+                                <div class="form-text">API-Schlüssel für den Erkennungsdienst.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="detectionApiKey" class="form-label">Detektions-API-Schlüssel</label>
+                                <input type="text" class="form-control" id="detectionApiKey" name="compreface.detection_api_key" value="{{ .Config.CompreFace.DetectionAPIKey }}">
+                                <div class="form-text">API-Schlüssel für den Gesichtsdetektionsdienst.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="similarityThreshold" class="form-label">Ähnlichkeitsschwelle</label>
+                                <input type="range" class="form-range" min="0" max="100" step="1" id="similarityThreshold" name="compreface.similarity_threshold" value="{{ .Config.CompreFace.SimilarityThreshold }}">
+                                <div class="d-flex justify-content-between">
+                                    <span>0% (alle)</span>
+                                    <span id="thresholdValue">{{ .Config.CompreFace.SimilarityThreshold }}%</span>
+                                    <span>100% (exakt)</span>
+                                </div>
+                                <div class="form-text">Mindestähnlichkeit für Übereinstimmungen.</div>
+                            </div>
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enableDetection" name="compreface.enable_detection" {{ if .Config.CompreFace.EnableDetection }}checked{{ end }}>
+                                <label class="form-check-label" for="enableDetection">Gesichtserkennung aktivieren</label>
+                                <div class="form-text">Gesichtserkennung in Bildern durchführen.</div>
+                            </div>
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enableRecognition" name="compreface.enable_recognition" {{ if .Config.CompreFace.EnableRecognition }}checked{{ end }}>
+                                <label class="form-check-label" for="enableRecognition">Gesichtsvergleich aktivieren</label>
+                                <div class="form-text">Erkannte Gesichter mit der Datenbank vergleichen.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- MQTT/Frigate-Einstellungen -->
+                <div class="tab-pane fade" id="mqtt">
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>MQTT-Einstellungen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="mqttEnabled" name="mqtt.enabled" {{ if .Config.MQTT.Enabled }}checked{{ end }}>
+                                <label class="form-check-label" for="mqttEnabled">MQTT aktivieren</label>
+                                <div class="form-text">MQTT-Integration aktivieren.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mqttBroker" class="form-label">MQTT-Broker</label>
+                                <input type="text" class="form-control" id="mqttBroker" name="mqtt.broker" value="{{ .Config.MQTT.Broker }}">
+                                <div class="form-text">Adresse des MQTT-Brokers, z.B. tcp://localhost:1883</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mqttUsername" class="form-label">Benutzername</label>
+                                <input type="text" class="form-control" id="mqttUsername" name="mqtt.username" value="{{ .Config.MQTT.Username }}">
+                                <div class="form-text">Benutzername für den MQTT-Broker (optional).</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mqttPassword" class="form-label">Passwort</label>
+                                <input type="password" class="form-control" id="mqttPassword" name="mqtt.password" value="{{ .Config.MQTT.Password }}">
+                                <div class="form-text">Passwort für den MQTT-Broker (optional).</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="mqttClientId" class="form-label">Client-ID</label>
+                                <input type="text" class="form-control" id="mqttClientId" name="mqtt.client_id" value="{{ .Config.MQTT.ClientID }}">
+                                <div class="form-text">MQTT-Client-ID (optional, Standard: double-take-go).</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>Frigate-Einstellungen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="frigateEnabled" name="frigate.enabled" {{ if .Config.Frigate.Enabled }}checked{{ end }}>
+                                <label class="form-check-label" for="frigateEnabled">Frigate-Integration aktivieren</label>
+                                <div class="form-text">Integration mit Frigate NVR aktivieren.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="frigateHost" class="form-label">Frigate-Host</label>
+                                <input type="text" class="form-control" id="frigateHost" name="frigate.host" value="{{ .Config.Frigate.Host }}">
+                                <div class="form-text">Host-URL der Frigate-Instanz, z.B. http://frigate:5000</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="frigateEventTopic" class="form-label">Event-Topic</label>
+                                <input type="text" class="form-control" id="frigateEventTopic" name="frigate.event_topic" value="{{ .Config.Frigate.EventTopic }}">
+                                <div class="form-text">MQTT-Topic für Frigate-Ereignisse, z.B. frigate/events</div>
+                            </div>
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="frigateProcessLabels" name="frigate.process_person_only" {{ if .Config.Frigate.ProcessPersonOnly }}checked{{ end }}>
+                                <label class="form-check-label" for="frigateProcessLabels">Nur Personen verarbeiten</label>
+                                <div class="form-text">Nur Bilder von Personen verarbeiten (ignoriert andere Objekte).</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Benachrichtigungen -->
+                <div class="tab-pane fade" id="notifications">
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>Benachrichtigungen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="notifyNewFaces" name="notifications.new_faces" {{ if .Config.Notifications.NewFaces }}checked{{ end }}>
+                                <label class="form-check-label" for="notifyNewFaces">Neue Gesichter</label>
+                                <div class="form-text">Benachrichtigung, wenn neue Gesichter erkannt werden.</div>
+                            </div>
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="notifyKnownFaces" name="notifications.known_faces" {{ if .Config.Notifications.KnownFaces }}checked{{ end }}>
+                                <label class="form-check-label" for="notifyKnownFaces">Bekannte Gesichter</label>
+                                <div class="form-text">Benachrichtigung, wenn bekannte Identitäten erkannt werden.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Bereinigung -->
+                <div class="tab-pane fade" id="cleanup">
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>Datenbereinigung</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="retentionDays" class="form-label">Aufbewahrungsdauer (Tage)</label>
+                                <input type="number" class="form-control" id="retentionDays" name="cleanup.retention_days" value="{{ .Config.Cleanup.RetentionDays }}">
+                                <div class="form-text">Anzahl der Tage, die Bilder und Daten aufbewahrt werden. 0 = unbegrenzt.</div>
+                            </div>
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="runCleanupNow" name="cleanup_action" value="run_now">
+                                <label class="form-check-label" for="runCleanupNow">Bereinigung jetzt ausführen</label>
+                                <div class="form-text">Sofortige Bereinigung aller Daten, die älter als die angegebene Aufbewahrungsdauer sind.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- System -->
+                <div class="tab-pane fade" id="system">
+                    <div class="card settings-section">
+                        <div class="card-header">
+                            <h5>Systemeinstellungen</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#syncModal">
+                                    <i class="bi bi-arrow-repeat"></i> Synchronisation mit CompreFace
+                                </button>
+                                <button type="button" class="btn btn-warning" id="rebuildDbBtn">
+                                    <i class="bi bi-database-gear"></i> Datenbank-Indizes neu aufbauen
+                                </button>
+                                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#resetModal">
+                                    <i class="bi bi-exclamation-triangle"></i> Alle Daten zurücksetzen
+                                </button>
+                            </div>
+                            
+                            <div class="mt-4">
+                                <h6>System-Informationen</h6>
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <th>Version</th>
+                                            <td>{{ .SystemInfo.Version }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Betriebszeit</th>
+                                            <td>{{ .SystemInfo.Uptime }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Datenbankgröße</th>
+                                            <td>{{ .SystemInfo.DatabaseSize }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Speicherverbrauch</th>
+                                            <td>{{ .SystemInfo.MemoryUsage }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Modal: CompreFace-Synchronisation -->
+<div class="modal fade" id="syncModal" tabindex="-1" aria-labelledby="syncModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="syncModalLabel">CompreFace-Synchronisation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Bei der Synchronisation werden folgende Aktionen durchgeführt:</p>
+                <ul>
+                    <li>Lokale Identitäten mit CompreFace abgleichen</li>
+                    <li>Fehlende Identitäten in CompreFace erstellen</li>
+                    <li>Unbenutztes in CompreFace bereinigen</li>
+                </ul>
+                <p>Möchten Sie die Synchronisation jetzt starten?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form action="/settings/sync" method="POST">
+                    <button type="submit" class="btn btn-primary">Synchronisieren</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Zurücksetzen -->
+<div class="modal fade" id="resetModal" tabindex="-1" aria-labelledby="resetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resetModalLabel">Alle Daten zurücksetzen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>Warnung:</strong> Diese Aktion löscht alle Daten, einschließlich Bilder, Gesichter, Identitäten und Matches. Die Aktion kann nicht rückgängig gemacht werden!
+                </div>
+                <p>Geben Sie zur Bestätigung <strong>ZURÜCKSETZEN</strong> ein:</p>
+                <input type="text" class="form-control" id="resetConfirmation" placeholder="ZURÜCKSETZEN">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form action="/settings/reset" method="POST">
+                    <button type="submit" class="btn btn-danger" id="resetConfirmBtn" disabled>Zurücksetzen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Anzeige des Schwellenwerts für Ähnlichkeit
+        const similarityThreshold = document.getElementById('similarityThreshold');
+        const thresholdValue = document.getElementById('thresholdValue');
+        
+        if (similarityThreshold && thresholdValue) {
+            similarityThreshold.addEventListener('input', function() {
+                thresholdValue.textContent = similarityThreshold.value + '%';
+            });
+        }
+        
+        // Bestätigung für Zurücksetzen
+        const resetConfirmation = document.getElementById('resetConfirmation');
+        const resetConfirmBtn = document.getElementById('resetConfirmBtn');
+        
+        if (resetConfirmation && resetConfirmBtn) {
+            resetConfirmation.addEventListener('input', function() {
+                resetConfirmBtn.disabled = resetConfirmation.value !== 'ZURÜCKSETZEN';
+            });
+        }
+        
+        // Einstellungen speichern-Button
+        const saveAllSettings = document.getElementById('saveAllSettings');
+        const settingsForm = document.getElementById('settingsForm');
+        
+        if (saveAllSettings && settingsForm) {
+            saveAllSettings.addEventListener('click', function() {
+                settingsForm.submit();
+            });
+        }
+        
+        // Datenbank neu aufbauen
+        const rebuildDbBtn = document.getElementById('rebuildDbBtn');
+        
+        if (rebuildDbBtn) {
+            rebuildDbBtn.addEventListener('click', function() {
+                if (confirm('Möchten Sie die Datenbank-Indizes wirklich neu aufbauen? Dies kann je nach Datenmenge einige Zeit dauern.')) {
+                    fetch('/settings/rebuild-db', {
+                        method: 'POST',
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        alert(data.message || 'Datenbank-Indizes wurden erfolgreich neu aufgebaut.');
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Fehler beim Neuaufbau der Datenbank-Indizes.');
+                    });
+                }
+            });
+        }
+    });
+</script>
+{{ end }}

@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 </head>
 <body>
-    {{template "_navbar.html" .BaseData}}
+    {{template "_navbar.html" .}}
 
     <div class="container mt-4">
         <h2>Diagnostics</h2>
@@ -53,78 +53,77 @@
                             <span><code>{{.Config.CompreFaceURL}}</code></span>
                         </li>
                         {{end}}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Data Directory
+                            <span><code>{{.Config.DataDir}}</code></span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Version
+                            <span><code>{{.Config.Version}}</code></span>
+                        </li>
                     </ul>
                 </div>
             </div>
 
-            {{/* Service Status Card */}}
+            {{/* Database Stats Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
-                    <div class="card-header">Service Status</div>
+                    <div class="card-header">Database</div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            MQTT Connection
-                            {{if eq .MQTTStatus "Connected"}}
-                                <span class="badge bg-success">{{.MQTTStatus}}</span>
-                            {{else if eq .MQTTStatus "Disconnected"}}
-                                 <span class="badge bg-warning text-dark">{{.MQTTStatus}}</span>
-                            {{else if eq .MQTTStatus "Disabled"}}
-                                 <span class="badge bg-secondary">{{.MQTTStatus}}</span>
-                            {{else}}
-                                 <span class="badge bg-danger">{{.MQTTStatus}}</span> {{/* Error case */}}
-                            {{end}}
+                            Images
+                            <span class="badge bg-primary">{{.DBStats.ImageCount}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            CompreFace Service
-                             {{if eq .CompreStatus "Reachable"}}
-                                <span class="badge bg-success">{{.CompreStatus}}</span>
-                            {{else if eq .CompreStatus "Unreachable"}}
-                                 <span class="badge bg-danger">{{.CompreStatus}}</span>
-                            {{else if eq .CompreStatus "Disabled"}}
-                                 <span class="badge bg-secondary">{{.CompreStatus}}</span>
-                            {{else}}
-                                 <span class="badge bg-warning text-dark">{{.CompreStatus}}</span> {{/* Unknown/Error case */}}
-                            {{end}}
+                            Faces
+                            <span class="badge bg-primary">{{.DBStats.FaceCount}}</span>
                         </li>
-                         {{/* Add Ping check for Frigate later? */}}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Identities
+                            <span class="badge bg-primary">{{.DBStats.IdentityCount}}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Database Size
+                            <span>{{.DBStats.DBSize}}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Last Detection
+                            <span>{{if not .DBStats.LastDetection.IsZero}}{{formatDateTime .DBStats.LastDetection}}{{else}}Never{{end}}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Last Recognition
+                            <span>{{if not .DBStats.LastRecognition.IsZero}}{{formatDateTime .DBStats.LastRecognition}}{{else}}Never{{end}}</span>
+                        </li>
                     </ul>
                 </div>
             </div>
         </div>
 
-        {{/* Database Statistics Card */}}
-        <div class="row">
+        <div class="row row-cols-1 row-cols-md-1 g-4">
+            {{/* Services Card */}}
             <div class="col">
-                <div class="card shadow-sm">
-                    <div class="card-header">Database Statistics</div>
-                    <div class="card-body">
-                         <ul class="list-group list-group-flush">
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Stored Images
-                                <span class="badge bg-primary rounded-pill">{{.DBStats.ImageCount}}</span>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Detected Faces
-                                <span class="badge bg-primary rounded-pill">{{.DBStats.FaceCount}}</span>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Recognized Matches
-                                <span class="badge bg-primary rounded-pill">{{.DBStats.MatchCount}}</span>
-                            </li>
-                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                Known Identities
-                                <span class="badge bg-primary rounded-pill">{{.DBStats.IdentityCount}}</span>
-                            </li>
-                        </ul>
-                    </div>
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header">External Services</div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            CompreFace
+                            <span class="badge {{if eq .Services.CompreFace "Verbunden"}}bg-success{{else if eq .Services.CompreFace "Deaktiviert"}}bg-secondary{{else}}bg-warning{{end}}">
+                                {{.Services.CompreFace}}
+                            </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            MQTT
+                            <span class="badge {{if eq .Services.MQTT "Verbunden"}}bg-success{{else if eq .Services.MQTT "Deaktiviert"}}bg-secondary{{else}}bg-warning{{end}}">
+                                {{.Services.MQTT}}
+                            </span>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </div>
-
     </div>
 
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Optional: Add specific JS for diagnostics later -->
 </body>
 </html>

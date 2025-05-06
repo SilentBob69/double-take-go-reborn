@@ -4,210 +4,292 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof" // Import for pprof
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
-	"double-take-go-reborn/internal/config"
-	"double-take-go-reborn/internal/database"
-	"double-take-go-reborn/internal/handlers"
-	"double-take-go-reborn/internal/mqtt"
-	"double-take-go-reborn/internal/services"
-	"double-take-go-reborn/internal/sse" // Add sse import
+	"double-take-go-reborn/config"
+	"double-take-go-reborn/internal/api/handlers"
+	"double-take-go-reborn/internal/core/processor"
+	"double-take-go-reborn/internal/db"
+	"double-take-go-reborn/internal/integrations/compreface"
+	"double-take-go-reborn/internal/integrations/frigate"
+	"double-take-go-reborn/internal/integrations/mqtt"
+	"double-take-go-reborn/internal/server/sse"
+	"double-take-go-reborn/internal/services/cleanup"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
-const configPath = "/config/config.yaml" // Define config path, assuming mount
+const defaultConfigPath = "/config/config.yaml"
 
 func main() {
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp: true,
-	})
-	log.SetLevel(log.InfoLevel) // Default level
+	// 1. Logger-Konfiguration
+	setupLogger()
 
-	// Load configuration
-	cfg, err := config.Load(configPath) // Use config.Load and defined path
+	// 2. Konfiguration laden
+	configPath := getConfigPath()
+	log.Infof("Loading configuration from %s", configPath)
+
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// --- Begin Debug ---
-	log.Debugf("Config loaded: %+v", cfg)
-	// --- End Debug ---
+	// 3. Logger-Level aus Konfiguration setzen
+	setLogLevel(cfg.Log.Level)
 
-	// Initialize logger level from config
-	if level, err := log.ParseLevel(cfg.Log.Level); err == nil {
-		log.SetLevel(level)
-		log.Infof("Logger level set to: %s", cfg.Log.Level)
-	} else {
-		log.Warnf("Invalid log level in config '%s', using default 'info': %v", cfg.Log.Level, err)
-	}
-
-	// Initialize Database
-	// Use global database.DB, Init sets it
-	if err := database.Init(cfg.DB); err != nil {
+	// 4. Datenbankverbindung initialisieren
+	log.Info("Initializing database...")
+	if err := db.Initialize(cfg); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	log.Info("Database initialized successfully.")
+	log.Info("Database initialized successfully")
 
-	// Initialize MQTT Client
-	var mqttClient *mqtt.Client
-	if cfg.MQTT.Enabled {
-		// Pass db, cfg, and nil for sseHub to NewMQTTClient
-		mqttClient, err = mqtt.NewMQTTClient(cfg.MQTT, database.DB, cfg, nil)
-		if err != nil {
-			log.Warnf("Failed to initialize MQTT client: %v. MQTT features will be disabled.", err)
-			mqttClient = nil // Ensure client is nil if init fails
-		} else if mqttClient != nil { // Check if client was actually created (could be nil if !cfg.Enabled even without error)
-			// Start MQTT client in a goroutine if initialization was successful
-			go func() {
-				if err := mqttClient.Start(); err != nil {
-					log.Errorf("MQTT client error: %v", err)
-				}
-			}()
-			defer mqttClient.Stop() // Ensure Stop is called on shutdown
-			log.Info("MQTT client initialized and started.")
+	// 5. CompreFace-Client erstellen
+	var compreFaceClient *compreface.Client
+	if cfg.CompreFace.Enabled {
+		log.Info("CompreFace integration enabled, initializing client...")
+		compreFaceClient = compreface.NewClient(cfg.CompreFace)
+		
+		// CompreFace-Verbindung testen
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		
+		reachable, err := compreFaceClient.Ping(ctx)
+		if err != nil || !reachable {
+			log.Warnf("CompreFace seems unreachable: %v", err)
 		} else {
-			// This case might happen if NewMQTTClient returns nil without error when disabled internally
-			log.Info("MQTT client initialization returned nil, likely disabled internally.")
+			log.Info("CompreFace connection successful")
 		}
 	} else {
-		log.Info("MQTT is disabled in the configuration.")
+		log.Info("CompreFace integration is disabled")
 	}
 
-	// Initialize CompreFace Service
-	compreService := services.NewCompreFaceService(cfg.CompreFace)
-	if cfg.CompreFace.Enabled { // Check cfg.CompreFace.Enabled directly
-		log.Info("CompreFace service initialized.")
-		// Start CompreFace identity sync
-		go func() {
-			// Initial sync immediately
-			log.Info("Running initial CompreFace identity synchronization...")
-			if err := compreService.SyncIdentities(database.DB); err != nil {
-				log.Errorf("Error during initial CompreFace identity sync: %v", err)
-			} else {
-				log.Info("Initial CompreFace identity synchronization finished successfully.")
-			}
-			// Periodic sync based on interval
-			if cfg.CompreFace.SyncIntervalMinutes > 0 {
-				ticker := time.NewTicker(time.Duration(cfg.CompreFace.SyncIntervalMinutes) * time.Minute)
-				defer ticker.Stop()
-				log.Infof("Starting periodic CompreFace sync every %d minutes...", cfg.CompreFace.SyncIntervalMinutes)
-				for {
-					<-ticker.C
-					log.Info("Running periodic CompreFace identity synchronization...")
-					if err := compreService.SyncIdentities(database.DB); err != nil {
-						log.Errorf("Error during periodic CompreFace identity sync: %v", err)
-					} else {
-						log.Info("Periodic CompreFace identity synchronization finished successfully.")
-					}
-				}
-			} else {
-				log.Info("Periodic CompreFace sync disabled (interval is 0).")
+	// 6. SSE-Hub für Echtzeit-Updates initialisieren
+	log.Info("Initializing SSE hub...")
+	sseHub := sse.NewHub()
+	go sseHub.Run()
+
+	// Frigate Client erstellen
+	var frigateClient *frigate.FrigateClient
+	if cfg.Frigate.Enabled {
+		log.Info("Frigate integration enabled, initializing client...")
+		frigateClient = frigate.NewFrigateClient(cfg.Frigate)
+	} else {
+		log.Info("Frigate integration is disabled")
+	}
+
+	// 7. Image-Processor erstellen
+	log.Info("Initializing image processor...")
+	imageProcessor := processor.NewImageProcessor(db.DB, cfg, compreFaceClient, sseHub, frigateClient)
+
+	// 8. MQTT-Client erstellen, falls aktiviert
+	var mqttClient *mqtt.Client
+	if cfg.MQTT.Enabled {
+		log.Info("MQTT integration enabled, initializing client...")
+		mqttClient = mqtt.NewClient(cfg.MQTT)
+		
+		// Einen Handler registrieren, der MQTT-Nachrichten an den Processor weiterleitet
+		mqttClient.RegisterHandler(NewMQTTHandler(imageProcessor))
+		
+		// MQTT-Client starten
+		if err := mqttClient.Start(); err != nil {
+			log.Warnf("Failed to start MQTT client: %v", err)
+		}
+		
+		// Sicherstellen, dass der MQTT-Client beim Beenden gestoppt wird
+		defer func() {
+			if mqttClient != nil {
+				mqttClient.Stop()
 			}
 		}()
 	} else {
-		log.Info("CompreFace service is disabled.")
+		log.Info("MQTT integration is disabled")
 	}
 
-	// Initialize Notifier Service
-	notifier := services.NewNotifierService()
+	// 9. Cleanup-Service starten, falls konfiguriert
+	if cfg.Cleanup.RetentionDays > 0 {
+		log.Infof("Starting cleanup service with retention days: %d", cfg.Cleanup.RetentionDays)
+		cleanupService := cleanup.NewCleanupService(db.DB, cfg.Cleanup, cfg.Server.SnapshotDir)
+		go cleanupService.Start(context.Background())
+	}
 
-	// Initialize SSE Hub
-	sseHub := sse.NewHub() // Use sse.NewHub()
-	go sseHub.Run() // Run hub in a separate goroutine
+	// 10. Web-Server initialisieren
+	router := setupRouter(cfg)
 
-	// Initialize Web Handler
-	templatePath := "/app/web/templates" // Absolute path inside container
-	staticPath := "/app/web/static"     // Absolute path inside container
-	webHandler, err := handlers.NewWebHandler(database.DB, cfg, compreService, mqttClient, templatePath, staticPath, sseHub) // Pass sseHub
+	// 11. Web- und API-Handler erstellen und Routen registrieren
+	log.Info("Setting up web and API handlers...")
+	
+	// Web-Handler
+	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub)
 	if err != nil {
-		log.Fatalf("Failed to initialize WebHandler: %v", err)
+		log.Fatalf("Failed to create web handler: %v", err)
+	}
+	webHandler.RegisterRoutes(router)
+	
+	// API-Handler
+	apiHandler := handlers.NewAPIHandler(db.DB, cfg, compreFaceClient, imageProcessor)
+	apiGroup := router.Group("/api")
+	apiHandler.RegisterRoutes(apiGroup)
+
+	// 12. Server starten
+	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	srv := &http.Server{
+		Addr:    serverAddr,
+		Handler: router,
 	}
 
-	// Initialize API Handler
-	// Removed mqttClient and sseHub as they are not needed by APIHandler
-	apiHandler := handlers.NewAPIHandler(database.DB, cfg, compreService, notifier)
+	// Server in einem separaten Goroutine starten
+	go func() {
+		log.Infof("Starting server on %s", serverAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
 
-	// Initialize Processing Handler
-	// Corrected argument order: cfg, database.DB, ...
-	processingHandler := handlers.NewProcessingHandler(cfg, database.DB, compreService, notifier, mqttClient) // Pass MQTT client here
+	// 13. Auf Shutdown-Signal warten
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Info("Shutdown signal received")
 
-	// Setup Gin router
-	router := gin.Default()
+	// 14. Graceful Shutdown
+	log.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
 
-	// CORS Middleware
+	log.Info("Server exited gracefully")
+}
+
+// MQTTHandler implementiert das mqtt.MessageHandler-Interface
+type MQTTHandler struct {
+	processor *processor.ImageProcessor
+}
+
+// NewMQTTHandler erstellt einen neuen MQTT-Handler
+func NewMQTTHandler(processor *processor.ImageProcessor) *MQTTHandler {
+	return &MQTTHandler{processor: processor}
+}
+
+// HandleMessage verarbeitet eine MQTT-Nachricht
+func (h *MQTTHandler) HandleMessage(topic string, payload []byte) {
+	ctx := context.Background()
+	if err := h.processor.ProcessFrigateEvent(ctx, payload); err != nil {
+		log.Errorf("Failed to process Frigate event: %v", err)
+	}
+}
+
+// setupLogger konfiguriert den Logger
+func setupLogger() {
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC3339,
+	})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.InfoLevel) // Standardwert, wird später möglicherweise überschrieben
+}
+
+// getConfigPath ermittelt den Pfad zur Konfigurationsdatei
+func getConfigPath() string {
+	// Umgebungsvariable prüfen
+	if envPath := os.Getenv("CONFIG_PATH"); envPath != "" {
+		return envPath
+	}
+
+	// Als Argument übergebenen Pfad prüfen
+	if len(os.Args) > 1 {
+		return os.Args[1]
+	}
+
+	// Standard-Konfigurationspfad
+	// Wenn wir im Entwicklungsmodus sind, versuchen wir eine lokale Konfigurationsdatei zu finden
+	if _, err := os.Stat("./config/config.yaml"); err == nil {
+		return "./config/config.yaml"
+	}
+
+	// Versuchen wir es mit einem relativen Pfad zum aktuellen Ausführungsverzeichnis
+	execDir, err := os.Executable()
+	if err == nil {
+		localPath := filepath.Join(filepath.Dir(execDir), "config/config.yaml")
+		if _, err := os.Stat(localPath); err == nil {
+			return localPath
+		}
+	}
+
+	// Standard-Container-Pfad
+	return defaultConfigPath
+}
+
+// setLogLevel setzt das Log-Level basierend auf der Konfiguration
+func setLogLevel(levelStr string) {
+	if level, err := log.ParseLevel(levelStr); err == nil {
+		log.SetLevel(level)
+		log.Infof("Log level set to: %s", levelStr)
+	} else {
+		log.Warnf("Invalid log level '%s', using default 'info': %v", levelStr, err)
+	}
+}
+
+// setupRouter erstellt und konfiguriert den Gin-Router
+func setupRouter(cfg *config.Config) *gin.Engine {
+	// Produktions- oder Debug-Modus
+	if cfg.Log.Level != "debug" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+
+	// Middleware
+	router.Use(gin.Recovery())
+	router.Use(loggerMiddleware())
+	
+	// CORS konfigurieren
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"}, // Allow all origins (adjust for production)
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Serve static files for the UI using absolute path inside container
-	router.Static("/ui", "/app/ui/public") // Use absolute path
+	return router
+}
 
-	// --- Setup API Handlers & Router ---
-	// Instantiate the API handler with necessary dependencies
-	// (Already done above)
-
-	// Register API routes under /api prefix
-	apiGroup := router.Group("/api")
-	{
-		// Register API routes
-		apiHandler.RegisterRoutes(apiGroup)
-
-		// Register Processing routes
-		processingGroup := apiGroup.Group("/process")
-		{
-			processingGroup.POST("/compreface", processingHandler.ProcessCompreFace)
-			// Add other processing routes here if needed
+// loggerMiddleware erstellt eine Gin-Middleware für das Logging
+func loggerMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		query := c.Request.URL.RawQuery
+		
+		// Request bearbeiten
+		c.Next()
+		
+		// Log nach der Bearbeitung
+		end := time.Now()
+		latency := end.Sub(start)
+		
+		if query != "" {
+			path = path + "?" + query
 		}
+		
+		log.WithFields(log.Fields{
+			"status":     c.Writer.Status(),
+			"method":     c.Request.Method,
+			"path":       path,
+			"ip":         c.ClientIP(),
+			"latency":    latency,
+			"user-agent": c.Request.UserAgent(),
+		}).Info("HTTP request")
 	}
-
-	// Register Web routes
-	// Use an empty group to register at the root level
-	webGroup := router.Group("")
-	webHandler.RegisterRoutes(webGroup)
-
-	// Serve snapshot images from the /data/snapshots directory
-	snapshotDir := cfg.Server.SnapshotDir // Use path from config (/data/snapshots)
-	router.Static("/snapshots", snapshotDir)
-	log.Infof("Serving snapshots from %s under /snapshots/ route", snapshotDir)
-
-	// Start the server
-	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-	log.Infof("Starting server on %s", serverAddr)
-	srv := &http.Server{
-		Addr:    serverAddr,
-		Handler: router, // Use the main gin router
-	}
-
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
-		}
-	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 10 seconds.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Info("Shutdown signal received")
-
-	// The context is used to inform the server it has 10 seconds to finish the request it is currently handling
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
-	}
-
-	log.Info("Server exiting")
 }

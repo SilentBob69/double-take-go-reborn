@@ -1,10 +1,31 @@
-# Configuration files
-config/config.yaml
+# Build
+/bin
+/dist
 
-# Runtime data
-data/double-take.db
-data/server.log
-data/snapshots/
+# Generated data
+/data/*
+!/data/.gitkeep
+/logs
+*.log
 
-# macOS
+# Config
+/config/config.local.yaml
+/config/config.production.yaml
+
+# Dependencies
+/vendor
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# System files
 .DS_Store
+Thumbs.db
+
+# Sensitive or environment-specific files
+*.env
+*.pem
+*.key

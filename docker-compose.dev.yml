@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  # Go-Entwicklungsumgebung
+  go-dev:
+    image: golang:1.24-alpine
+    working_dir: /app
+    volumes:
+      - .:/app
+      - go-cache:/go/pkg/mod
+    command: tail -f /dev/null  # Container läuft im Hintergrund
+    environment:
+      - CGO_ENABLED=0
+      - GOOS=linux
+      - TZ=Europe/Berlin
+    ports:
+      - "3000:3000"
+    networks:
+      - double-take-network
+
+networks:
+  double-take-network:
+    driver: bridge
+
+volumes:
+  go-cache:

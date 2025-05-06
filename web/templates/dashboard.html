@@ -1,0 +1,197 @@
+{{ define "head" }}
+<style>
+    .stats-card {
+        transition: all 0.3s ease;
+    }
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .recent-images img {
+        object-fit: cover;
+        height: 200px;
+        border-radius: 8px;
+    }
+    .chart-container {
+        height: 300px;
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ end }}
+
+{{ define "content" }}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">Dashboard</h1>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stats-card bg-primary text-white">
+            <div class="card-body text-center">
+                <h2>{{ .Stats.ImageCount }}</h2>
+                <p class="card-text">Bilder</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card bg-success text-white">
+            <div class="card-body text-center">
+                <h2>{{ .Stats.FaceCount }}</h2>
+                <p class="card-text">Gesichter</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card bg-info text-white">
+            <div class="card-body text-center">
+                <h2>{{ .Stats.IdentityCount }}</h2>
+                <p class="card-text">Identitäten</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stats-card bg-warning text-white">
+            <div class="card-body text-center">
+                <h2>{{ .Stats.MatchCount }}</h2>
+                <p class="card-text">Matches</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Letzte Aktivität</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="activityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Top Kameras</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="cameraChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Neueste Bilder</h5>
+                <a href="/images" class="btn btn-sm btn-primary">Alle anzeigen</a>
+            </div>
+            <div class="card-body">
+                <div class="row recent-images" data-image-container data-sse-updates>
+                    {{ if .RecentImages }}
+                        {{ range .RecentImages }}
+                        <div class="col-md-3 mb-4">
+                            <div class="card">
+                                <a href="/images/{{ .ID }}">
+                                    <img src="/snapshots/{{ .FilePath }}" class="card-img-top img-fluid" alt="Bild">
+                                </a>
+                                <div class="card-body">
+                                    <p class="card-text">
+                                        <small class="text-muted">{{ .Source }} - {{ formatTime .DetectedAt }}</small>
+                                    </p>
+                                    <p class="card-text">
+                                        <span class="badge bg-info">{{ .FaceCount }} Gesichter</span>
+                                        {{ if .HasMatches }}
+                                        <span class="badge bg-success">Erkannt</span>
+                                        {{ else }}
+                                        <span class="badge bg-secondary">Unbekannt</span>
+                                        {{ end }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        {{ end }}
+                    {{ else }}
+                        <div class="col-12 text-center py-5">
+                            <p>Noch keine Bilder vorhanden.</p>
+                        </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Aktivitätsdiagramm
+        const activityCtx = document.getElementById('activityChart').getContext('2d');
+        new Chart(activityCtx, {
+            type: 'line',
+            data: {
+                labels: {{ .ActivityChartLabels }},
+                datasets: [{
+                    label: 'Erkannte Bilder',
+                    data: {{ .ActivityChartData }},
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+
+        // Kamera-Diagramm
+        const cameraCtx = document.getElementById('cameraChart').getContext('2d');
+        new Chart(cameraCtx, {
+            type: 'doughnut',
+            data: {
+                labels: {{ .CameraChartLabels }},
+                datasets: [{
+                    data: {{ .CameraChartData }},
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+    });
+</script>
+{{ end }}

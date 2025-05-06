@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Double-Take Go</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+    {{ block "head" . }}{{ end }}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-camera"></i> Double-Take Go
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link {{ if eq .Active "dashboard" }}active{{ end }}" href="/">
+                            <i class="bi bi-house"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ if eq .Active "images" }}active{{ end }}" href="/images">
+                            <i class="bi bi-images"></i> Bilder
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ if eq .Active "identities" }}active{{ end }}" href="/identities">
+                            <i class="bi bi-people"></i> Identitäten
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {{ if eq .Active "settings" }}active{{ end }}" href="/settings">
+                            <i class="bi bi-gear"></i> Einstellungen
+                        </a>
+                    </li>
+                </ul>
+                <div class="navbar-text">
+                    <a href="https://github.com/username/double-take-go-reborn" target="_blank" class="text-light me-3">
+                        <i class="bi bi-github"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        {{ if .Flash }}
+        <div class="alert alert-{{ .Flash.Type }} alert-dismissible fade show" role="alert">
+            {{ .Flash.Message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {{ end }}
+
+        {{ block "content" . }}{{ end }}
+    </div>
+
+    <footer class="bg-light mt-5 py-3">
+        <div class="container text-center">
+            <p class="mb-0 text-muted">Double-Take Go &copy; {{ .CurrentYear }}</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/main.js"></script>
+    
+    <!-- Server-Sent Events für Echtzeit-Updates -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // SSE-Verbindung nur auf relevanten Seiten herstellen
+            if (document.querySelector('[data-sse-updates]')) {
+                setupSSE();
+            }
+        });
+
+        function setupSSE() {
+            const evtSource = new EventSource("/events");
+            
+            evtSource.onopen = function() {
+                console.log("SSE-Verbindung hergestellt");
+            };
+            
+            evtSource.onerror = function(e) {
+                console.error("SSE-Fehler:", e);
+                setTimeout(() => {
+                    console.log("Versuche SSE-Verbindung wiederherzustellen...");
+                    setupSSE();
+                }, 5000);
+            };
+            
+            // Neues Bild-Event
+            evtSource.addEventListener("new_image", function(e) {
+                const data = JSON.parse(e.data);
+                console.log("Neues Bild erkannt:", data);
+                // Aktualisierung der UI, wenn auf der Dashboard- oder Bilder-Seite
+                if (document.querySelector('[data-image-container]')) {
+                    updateImageGallery(data);
+                }
+            });
+            
+            // Neue Gesichtserkennung
+            evtSource.addEventListener("face_detected", function(e) {
+                const data = JSON.parse(e.data);
+                console.log("Neues Gesicht erkannt:", data);
+                // Benachrichtigung anzeigen
+                showNotification("Neues Gesicht erkannt", `Auf einem Bild von ${data.source} wurde ein Gesicht erkannt.`);
+            });
+            
+            // Neue Match-Erkennung
+            evtSource.addEventListener("match_detected", function(e) {
+                const data = JSON.parse(e.data);
+                console.log("Identität erkannt:", data);
+                // Benachrichtigung anzeigen
+                showNotification(`${data.identity_name} erkannt`, `${data.identity_name} wurde auf einem Bild von ${data.source} erkannt.`);
+            });
+        }
+        
+        function showNotification(title, message) {
+            if (!("Notification" in window)) {
+                return;
+            }
+            
+            if (Notification.permission === "granted") {
+                new Notification(title, { body: message });
+            } else if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        new Notification(title, { body: message });
+                    }
+                });
+            }
+        }
+        
+        function updateImageGallery(data) {
+            // Diese Funktion wird mit JavaScript implementiert, 
+            // um die Bildergalerie dynamisch zu aktualisieren
+            const container = document.querySelector('[data-image-container]');
+            if (!container) return;
+            
+            // Implementierung hängt vom spezifischen Layout ab
+            // Fügt das neue Bild oben in die Galerie ein
+        }
+    </script>
+    
+    {{ block "scripts" . }}{{ end }}
+</body>
+</html>

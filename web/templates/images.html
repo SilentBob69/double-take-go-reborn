@@ -1,0 +1,143 @@
+{{ define "head" }}
+<style>
+    .image-card {
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    .image-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .image-thumbnail {
+        height: 200px;
+        object-fit: cover;
+        width: 100%;
+    }
+    .filter-bar {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+</style>
+{{ end }}
+
+{{ define "content" }}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Bilder</h1>
+    <span class="badge bg-primary fs-5">{{ .TotalImages }} Ergebnisse</span>
+</div>
+
+<div class="filter-bar">
+    <form method="GET" action="/images" class="row g-3">
+        <div class="col-md-3">
+            <label for="source" class="form-label">Quelle</label>
+            <select name="source" id="source" class="form-select">
+                <option value="">Alle</option>
+                <option value="frigate" {{ if eq .Filters.Source "frigate" }}selected{{ end }}>Frigate</option>
+                <option value="upload" {{ if eq .Filters.Source "upload" }}selected{{ end }}>Upload</option>
+                <option value="webhook" {{ if eq .Filters.Source "webhook" }}selected{{ end }}>Webhook</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="hasfaces" class="form-label">Gesichter</label>
+            <select name="hasfaces" id="hasfaces" class="form-select">
+                <option value="">Alle</option>
+                <option value="yes" {{ if eq .Filters.HasFaces "yes" }}selected{{ end }}>Mit Gesichtern</option>
+                <option value="no" {{ if eq .Filters.HasFaces "no" }}selected{{ end }}>Ohne Gesichter</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="hasmatches" class="form-label">Matches</label>
+            <select name="hasmatches" id="hasmatches" class="form-select">
+                <option value="">Alle</option>
+                <option value="yes" {{ if eq .Filters.HasMatches "yes" }}selected{{ end }}>Mit erkannten Identitäten</option>
+                <option value="no" {{ if eq .Filters.HasMatches "no" }}selected{{ end }}>Ohne Identitäten</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="daterange" class="form-label">Zeitraum</label>
+            <select name="daterange" id="daterange" class="form-select">
+                <option value="">Alle</option>
+                <option value="today" {{ if eq .Filters.DateRange "today" }}selected{{ end }}>Heute</option>
+                <option value="yesterday" {{ if eq .Filters.DateRange "yesterday" }}selected{{ end }}>Gestern</option>
+                <option value="week" {{ if eq .Filters.DateRange "week" }}selected{{ end }}>Letzte Woche</option>
+                <option value="month" {{ if eq .Filters.DateRange "month" }}selected{{ end }}>Letzter Monat</option>
+            </select>
+        </div>
+        <div class="col-12 text-end">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-filter"></i> Filtern
+            </button>
+            <a href="/images" class="btn btn-outline-secondary">
+                <i class="bi bi-x-circle"></i> Zurücksetzen
+            </a>
+        </div>
+    </form>
+</div>
+
+<div class="row mb-4" data-image-container data-sse-updates>
+    {{ if .Images }}
+        {{ range .Images }}
+        <div class="col-md-3 mb-4">
+            <div class="card image-card">
+                <a href="/images/{{ .ID }}">
+                    <img src="/snapshots/{{ .FilePath }}" class="image-thumbnail" alt="Bild">
+                </a>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <h6 class="card-title">{{ .Source }}</h6>
+                        <small class="text-muted">{{ formatTime .DetectedAt }}</small>
+                    </div>
+                    <div class="mt-2">
+                        {{ if gt .FaceCount 0 }}
+                            <span class="badge bg-info">{{ .FaceCount }} Gesichter</span>
+                        {{ else }}
+                            <span class="badge bg-secondary">Keine Gesichter</span>
+                        {{ end }}
+                        
+                        {{ if .HasMatches }}
+                            <span class="badge bg-success">Identitäten erkannt</span>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{ end }}
+    {{ else }}
+        <div class="col-12 text-center py-5">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Keine Bilder gefunden</h5>
+                    <p class="card-text">Mit den aktuellen Filtereinstellungen wurden keine Bilder gefunden.</p>
+                </div>
+            </div>
+        </div>
+    {{ end }}
+</div>
+
+<!-- Pagination -->
+{{ if gt .TotalPages 1 }}
+<nav aria-label="Page navigation">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {{ if eq .CurrentPage 1 }}disabled{{ end }}">
+            <a class="page-link" href="/images?page={{ subtract .CurrentPage 1 }}{{ .QueryParams }}" aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+            </a>
+        </li>
+        
+        {{ range $i := paginationRange .CurrentPage .TotalPages }}
+        <li class="page-item {{ if eq $i $.CurrentPage }}active{{ end }}">
+            <a class="page-link" href="/images?page={{ $i }}{{ $.QueryParams }}">{{ $i }}</a>
+        </li>
+        {{ end }}
+        
+        <li class="page-item {{ if eq .CurrentPage .TotalPages }}disabled{{ end }}">
+            <a class="page-link" href="/images?page={{ add .CurrentPage 1 }}{{ .QueryParams }}" aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+            </a>
+        </li>
+    </ul>
+</nav>
+{{ end }}
+{{ end }}

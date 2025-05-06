@@ -1,0 +1,344 @@
+{{ define "head" }}
+<style>
+    .identity-avatar {
+        width: 200px;
+        height: 200px;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+    .match-card {
+        transition: all 0.3s ease;
+    }
+    .match-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .match-thumbnail {
+        height: 150px;
+        object-fit: cover;
+    }
+    .confidence-pill {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+    }
+    .stats-card {
+        transition: all 0.3s ease;
+    }
+    .stats-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+    }
+</style>
+{{ end }}
+
+{{ define "content" }}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ .Identity.Name }}</h1>
+    <div>
+        <a href="/identities" class="btn btn-outline-secondary me-2">
+            <i class="bi bi-arrow-left"></i> Zurück
+        </a>
+        <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#editIdentityModal">
+            <i class="bi bi-pencil"></i> Bearbeiten
+        </button>
+        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteIdentityModal">
+            <i class="bi bi-trash"></i> Löschen
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <img src="{{ if .BestMatchURL }}{{ .BestMatchURL }}{{ else }}/static/img/placeholder.png{{ end }}" 
+                     class="identity-avatar mb-4" alt="{{ .Identity.Name }}">
+                
+                <h3>{{ .Identity.Name }}</h3>
+                {{ if .Identity.Description }}
+                <p class="text-muted">{{ .Identity.Description }}</p>
+                {{ end }}
+                
+                <div class="row mt-4">
+                    <div class="col-6">
+                        <div class="card stats-card">
+                            <div class="card-body">
+                                <h5 class="mb-0">{{ .Stats.MatchCount }}</h5>
+                                <small class="text-muted">Erkennungen</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card stats-card">
+                            <div class="card-body">
+                                <h5 class="mb-0">{{ formatConfidence .Stats.AvgConfidence }}%</h5>
+                                <small class="text-muted">Ø Vertrauen</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addTrainingImageModal">
+                        <i class="bi bi-cloud-upload"></i> Trainingsbild hinzufügen
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5>Metadaten</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <th>Erstellt am</th>
+                            <td>{{ formatDateTime .Identity.CreatedAt }}</td>
+                        </tr>
+                        <tr>
+                            <th>Letzte Aktualisierung</th>
+                            <td>{{ formatDateTime .Identity.UpdatedAt }}</td>
+                        </tr>
+                        <tr>
+                            <th>CompreFace ID</th>
+                            <td>{{ .Identity.ExternalID }}</td>
+                        </tr>
+                        <tr>
+                            <th>Letzte Erkennung</th>
+                            <td>{{ if .Stats.LastMatch }}{{ formatDateTime .Stats.LastMatch }}{{ else }}Keine{{ end }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Letzten Erkennungen</h5>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-outline-secondary active" data-bs-toggle="button" id="toggleGalleryView">
+                        <i class="bi bi-grid"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="button" id="toggleListView">
+                        <i class="bi bi-list"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                {{ if .Matches }}
+                <!-- Galerie-Ansicht (Standard) -->
+                <div id="galleryView" class="row">
+                    {{ range .Matches }}
+                    <div class="col-md-4 mb-4">
+                        <div class="card match-card position-relative">
+                            <a href="/images/{{ .ImageID }}">
+                                <img src="/snapshots/{{ .ImagePath }}" class="card-img-top match-thumbnail" alt="Match">
+                            </a>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <small>{{ .Source }}</small>
+                                    <small class="text-muted">{{ formatTime .DetectedAt }}</small>
+                                </div>
+                            </div>
+                            <div class="confidence-pill">
+                                <span class="badge {{ if ge .Confidence 90.0 }}bg-success{{ else if ge .Confidence 75.0 }}bg-info{{ else }}bg-warning{{ end }}">
+                                    {{ formatConfidence .Confidence }}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
+                
+                <!-- Listen-Ansicht (ausgeblendet) -->
+                <div id="listView" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Bild</th>
+                                    <th>Datum</th>
+                                    <th>Quelle</th>
+                                    <th>Vertrauen</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{ range .Matches }}
+                                <tr>
+                                    <td>
+                                        <img src="/snapshots/{{ .ImagePath }}" height="50" class="rounded" alt="Match">
+                                    </td>
+                                    <td>{{ formatDateTime .DetectedAt }}</td>
+                                    <td>{{ .Source }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1" style="height: 5px;">
+                                                <div class="progress-bar {{ if ge .Confidence 90.0 }}bg-success{{ else if ge .Confidence 75.0 }}bg-info{{ else }}bg-warning{{ end }}" 
+                                                    role="progressbar" 
+                                                    style="width: {{ formatConfidence .Confidence }}%" 
+                                                    aria-valuenow="{{ .Confidence }}" 
+                                                    aria-valuemin="0" 
+                                                    aria-valuemax="100"></div>
+                                            </div>
+                                            <span class="ms-2">{{ formatConfidence .Confidence }}%</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a href="/images/{{ .ImageID }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {{ end }}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                {{ if gt .TotalPages 1 }}
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item {{ if eq .CurrentPage 1 }}disabled{{ end }}">
+                            <a class="page-link" href="/identities/{{ .Identity.ID }}?page={{ subtract .CurrentPage 1 }}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        
+                        {{ range $i := paginationRange .CurrentPage .TotalPages }}
+                        <li class="page-item {{ if eq $i $.CurrentPage }}active{{ end }}">
+                            <a class="page-link" href="/identities/{{ $.Identity.ID }}?page={{ $i }}">{{ $i }}</a>
+                        </li>
+                        {{ end }}
+                        
+                        <li class="page-item {{ if eq .CurrentPage .TotalPages }}disabled{{ end }}">
+                            <a class="page-link" href="/identities/{{ .Identity.ID }}?page={{ add .CurrentPage 1 }}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+                {{ end }}
+                
+                {{ else }}
+                <div class="text-center py-5">
+                    <i class="bi bi-camera fs-1 text-muted mb-3"></i>
+                    <h4>Keine Erkennungen</h4>
+                    <p class="text-muted">Diese Identität wurde noch in keinem Bild erkannt.</p>
+                    <p>Fügen Sie Trainingsbilder hinzu, um die Erkennung zu verbessern.</p>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Identität bearbeiten -->
+<div class="modal fade" id="editIdentityModal" tabindex="-1" aria-labelledby="editIdentityModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editIdentityModalLabel">Identität bearbeiten</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/identities/{{ .Identity.ID }}/update" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" value="{{ .Identity.Name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Beschreibung (optional)</label>
+                        <textarea class="form-control" id="description" name="description" rows="3">{{ .Identity.Description }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Identität löschen -->
+<div class="modal fade" id="deleteIdentityModal" tabindex="-1" aria-labelledby="deleteIdentityModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteIdentityModalLabel">Identität löschen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sind Sie sicher, dass Sie die Identität <strong>{{ .Identity.Name }}</strong> löschen möchten?</p>
+                <p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden. Alle Zuordnungen zu Bildern gehen verloren.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form action="/identities/{{ .Identity.ID }}/delete" method="POST">
+                    <button type="submit" class="btn btn-danger">Löschen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Trainingsbild hinzufügen -->
+<div class="modal fade" id="addTrainingImageModal" tabindex="-1" aria-labelledby="addTrainingImageModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTrainingImageModalLabel">Trainingsbild hinzufügen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/identities/{{ .Identity.ID }}/addTrainingImage" method="POST" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="imageFile" class="form-label">Bild auswählen</label>
+                        <input class="form-control" type="file" id="imageFile" name="imageFile" accept="image/*" required>
+                        <div class="form-text">
+                            Wählen Sie ein Bild mit einem deutlich erkennbaren Gesicht. 
+                            Idealerweise enthält das Bild nur eine Person.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Hochladen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Ansichtsumschaltung: Galerie vs. Liste
+        const galleryView = document.getElementById('galleryView');
+        const listView = document.getElementById('listView');
+        const toggleGalleryBtn = document.getElementById('toggleGalleryView');
+        const toggleListBtn = document.getElementById('toggleListView');
+        
+        toggleGalleryBtn.addEventListener('click', function() {
+            galleryView.classList.remove('d-none');
+            listView.classList.add('d-none');
+            toggleGalleryBtn.classList.add('active');
+            toggleListBtn.classList.remove('active');
+        });
+        
+        toggleListBtn.addEventListener('click', function() {
+            galleryView.classList.add('d-none');
+            listView.classList.remove('d-none');
+            toggleGalleryBtn.classList.remove('active');
+            toggleListBtn.classList.add('active');
+        });
+    });
+</script>
+{{ end }}

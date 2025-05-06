@@ -1,0 +1,46 @@
+# Double-Take-Go Configuration Example
+
+server:
+  host: "0.0.0.0"
+  port: 3000
+  snapshot_dir: "/data/snapshots"
+  snapshot_url: "/snapshots"
+  template_dir: "/app/web/templates"
+
+log:
+  level: "info"
+  file: "/data/logs/double-take.log"
+
+db:
+  # SQLite configuration
+  file: "/data/double-take.db"
+  # PostgreSQL configuration (uncomment if needed)
+  # username: "postgres"
+  # password: "password"
+  # host: "localhost"
+  # port: 5432
+  # name: "double_take"
+
+compreface:
+  enabled: true
+  url: "http://compreface-api:8000"
+  recognition_api_key: "your_recognition_api_key"
+  detection_api_key: "your_detection_api_key"
+  det_prob_threshold: 0.8
+  sync_interval_minutes: 15
+
+mqtt:
+  enabled: false
+  broker: "mosquitto"
+  port: 1883
+  username: ""
+  password: ""
+  client_id: "double-take-go"
+  topic: "frigate/events"
+
+frigate:
+  api_url: "http://frigate:5000"
+  url: "http://frigate:5000"
+
+cleanup:
+  retention_days: 30

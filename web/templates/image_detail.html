@@ -1,0 +1,214 @@
+{{ define "head" }}
+<style>
+    .main-image {
+        max-height: 600px;
+        object-fit: contain;
+    }
+    .face-card {
+        transition: all 0.3s ease;
+    }
+    .face-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .face-thumbnail {
+        height: 150px;
+        width: 150px;
+        object-fit: cover;
+    }
+    .metadata-table th {
+        width: 35%;
+    }
+    .match-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .confidence-bar {
+        height: 5px;
+        margin-top: 8px;
+    }
+</style>
+{{ end }}
+
+{{ define "content" }}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Bilddetails</h1>
+    <div>
+        <a href="/images" class="btn btn-outline-secondary me-2">
+            <i class="bi bi-arrow-left"></i> Zurück
+        </a>
+        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteImageModal">
+            <i class="bi bi-trash"></i> Löschen
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-body p-0 text-center">
+                <img src="/snapshots/{{ .Image.FilePath }}" class="img-fluid main-image" alt="Bild">
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Bilddetails</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm metadata-table">
+                    <tbody>
+                        <tr>
+                            <th>ID</th>
+                            <td>{{ .Image.ID }}</td>
+                        </tr>
+                        <tr>
+                            <th>Quelle</th>
+                            <td>{{ .Image.Source }}</td>
+                        </tr>
+                        <tr>
+                            <th>Erkannt am</th>
+                            <td>{{ formatDateTime .Image.DetectedAt }}</td>
+                        </tr>
+                        <tr>
+                            <th>Dateiname</th>
+                            <td>{{ .Image.FileName }}</td>
+                        </tr>
+                        <tr>
+                            <th>Gesichter</th>
+                            <td>{{ len .Faces }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                {{ if .Image.SourceData }}
+                <div class="mt-3">
+                    <h6>Quelldaten</h6>
+                    <div class="bg-light p-2 rounded">
+                        <pre class="mb-0"><code>{{ formatJSON .Image.SourceData }}</code></pre>
+                    </div>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ if .Faces }}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>Erkannte Gesichter</h2>
+    </div>
+    
+    {{ range .Faces }}
+    <div class="col-md-3 mb-4">
+        <div class="card face-card">
+            {{ if .BestMatch }}
+            <span class="badge bg-success fs-6 match-badge">{{ .BestMatch.Identity.Name }}</span>
+            {{ end }}
+            
+            <div class="card-body text-center">
+                <img src="/faces/{{ .FilePath }}" class="rounded-circle face-thumbnail mb-3" alt="Gesicht">
+                
+                <div class="text-center">
+                    {{ if .BestMatch }}
+                        <h5>{{ .BestMatch.Identity.Name }}</h5>
+                        <div class="progress confidence-bar">
+                            <div class="progress-bar bg-success" 
+                                role="progressbar" 
+                                style="width: {{ formatConfidence .BestMatch.Confidence }}%"
+                                aria-valuenow="{{ .BestMatch.Confidence }}" 
+                                aria-valuemin="0" 
+                                aria-valuemax="100"></div>
+                        </div>
+                        <small class="text-muted">Übereinstimmung: {{ formatConfidence .BestMatch.Confidence }}%</small>
+                    {{ else }}
+                        <h5>Unbekannt</h5>
+                        <p class="text-muted mb-0">Keine Übereinstimmung gefunden</p>
+                    {{ end }}
+                </div>
+                
+                {{ if not .BestMatch }}
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addIdentityModal" data-face-id="{{ .ID }}">
+                        <i class="bi bi-person-plus"></i> Neue Identität
+                    </button>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+    {{ end }}
+</div>
+{{ else }}
+<div class="alert alert-info mt-4">
+    <i class="bi bi-info-circle me-2"></i> Keine Gesichter in diesem Bild erkannt.
+</div>
+{{ end }}
+
+<!-- Modal: Bild löschen -->
+<div class="modal fade" id="deleteImageModal" tabindex="-1" aria-labelledby="deleteImageModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteImageModalLabel">Bild löschen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sind Sie sicher, dass Sie dieses Bild löschen möchten? Dieser Vorgang kann nicht rückgängig gemacht werden.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form action="/images/{{ .Image.ID }}/delete" method="POST">
+                    <button type="submit" class="btn btn-danger">Löschen</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Neue Identität hinzufügen -->
+<div class="modal fade" id="addIdentityModal" tabindex="-1" aria-labelledby="addIdentityModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addIdentityModalLabel">Neue Identität hinzufügen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/identities/create" method="POST" id="addIdentityForm">
+                <div class="modal-body">
+                    <input type="hidden" name="face_id" id="modalFaceId">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-primary">Speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+{{ define "scripts" }}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Übertragen der Face-ID an das Modal beim Öffnen
+        const addIdentityModal = document.getElementById('addIdentityModal')
+        if (addIdentityModal) {
+            addIdentityModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget
+                const faceId = button.getAttribute('data-face-id')
+                const modalFaceIdInput = document.getElementById('modalFaceId')
+                modalFaceIdInput.value = faceId
+            })
+        }
+    });
+</script>
+{{ end }}
