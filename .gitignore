@@ -8,6 +8,15 @@
 /logs
 *.log
 
+# Explizit alle Bilder und Snapshots ausschließen
+/data/snapshots/
+data/snapshots/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+
 # Config
 /config/config.local.yaml
 /config/config.production.yaml
