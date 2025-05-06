@@ -15,8 +15,10 @@ import (
 	"double-take-go-reborn/internal/api/handlers"
 	"double-take-go-reborn/internal/core/processor"
 	"double-take-go-reborn/internal/db"
+	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/integrations/compreface"
 	"double-take-go-reborn/internal/integrations/frigate"
+	"double-take-go-reborn/internal/integrations/homeassistant"
 	"double-take-go-reborn/internal/integrations/mqtt"
 	"double-take-go-reborn/internal/server/sse"
 	"double-take-go-reborn/internal/services/cleanup"
@@ -101,7 +103,14 @@ func main() {
 
 	// 7. Image-Processor erstellen
 	log.Info("Initializing image processor...")
-	imageProcessor := processor.NewImageProcessor(db.DB, cfg, compreFaceClient, sseHub, frigateClient)
+	imageProcessor := processor.NewImageProcessor(
+		db.DB,
+		cfg,
+		compreFaceClient,
+		sseHub,
+		frigateClient,
+		nil, // Zunächst ohne Home Assistant Publisher
+	)
 
 	// 8. MQTT-Client erstellen, falls aktiviert
 	var mqttClient *mqtt.Client
@@ -110,11 +119,52 @@ func main() {
 		mqttClient = mqtt.NewClient(cfg.MQTT)
 		
 		// Einen Handler registrieren, der MQTT-Nachrichten an den Processor weiterleitet
-		mqttClient.RegisterHandler(NewMQTTHandler(imageProcessor))
+		mqttHandler := NewMQTTHandler(imageProcessor)
+		mqttClient.RegisterHandler(mqttHandler)
 		
 		// MQTT-Client starten
 		if err := mqttClient.Start(); err != nil {
-			log.Warnf("Failed to start MQTT client: %v", err)
+			log.Fatalf("Failed to start MQTT client: %v", err)
+		}
+		
+		// Home Assistant Integration (falls aktiviert)
+		if cfg.MQTT.HomeAssistant.Enabled {
+			// Discovery-Manager initialisieren
+			discoveryManager := homeassistant.NewDiscoveryManager(mqttClient, cfg)
+			
+			// Publisher initialisieren
+			haPublisher := homeassistant.NewPublisher(mqttClient, cfg)
+			
+			// Timer für das Zurücksetzen von Personenzählern starten
+			haPublisher.StartResetTimers()
+			
+			// Status als "online" veröffentlichen
+			if err := discoveryManager.PublishAvailability(true); err != nil {
+				log.Errorf("Failed to publish Home Assistant availability: %v", err)
+			}
+			
+			// Alle bekannten Identitäten aus der Datenbank laden
+			var identities []models.Identity
+			if err := db.DB.Find(&identities).Error; err != nil {
+				log.Errorf("Failed to load identities for Home Assistant discovery: %v", err)
+			} else {
+				// Discovery-Konfigurationen für alle Identitäten veröffentlichen
+				if err := discoveryManager.RegisterIdentities(identities); err != nil {
+					log.Errorf("Failed to register Home Assistant sensors: %v", err)
+				} else {
+					log.Infof("Successfully registered %d identities with Home Assistant", len(identities))
+				}
+			}
+			
+			// ImageProcessor mit dem Publisher verbinden
+			imageProcessor.SetHomeAssistantPublisher(haPublisher)
+			
+			// Shutdown-Handler für "offline"-Status
+			defer func() {
+				if err := discoveryManager.PublishAvailability(false); err != nil {
+					log.Errorf("Failed to publish offline status to Home Assistant: %v", err)
+				}
+			}()
 		}
 		
 		// Sicherstellen, dass der MQTT-Client beim Beenden gestoppt wird

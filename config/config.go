@@ -30,6 +30,7 @@ type ServerConfig struct {
 	SnapshotDir string `mapstructure:"snapshot_dir"`
 	SnapshotURL string `mapstructure:"snapshot_url"`
 	TemplateDir string `mapstructure:"template_dir"`
+	Timezone    string `mapstructure:"timezone"`
 }
 
 // LogConfig enthält Log-Einstellungen
@@ -61,15 +62,23 @@ type CompreFaceConfig struct {
 	SyncIntervalMinutes int     `mapstructure:"sync_interval_minutes"`
 }
 
-// MQTTConfig enthält MQTT-Einstellungen
+// MQTTConfig enthält die Konfiguration für den MQTT-Client
 type MQTTConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	Broker   string `mapstructure:"broker"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	ClientID string `mapstructure:"client_id"`
-	Topic    string `mapstructure:"topic"`
+	Enabled   bool   `mapstructure:"enabled"`
+	Broker    string `mapstructure:"broker"`
+	Port      int    `mapstructure:"port"`
+	Username  string `mapstructure:"username"`
+	Password  string `mapstructure:"password"`
+	ClientID  string `mapstructure:"client_id"`
+	Topic     string `mapstructure:"topic"`
+	HomeAssistant HomeAssistantConfig `mapstructure:"homeassistant"`
+}
+
+// HomeAssistantConfig enthält die Konfiguration für die Home Assistant Integration
+type HomeAssistantConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	DiscoveryPrefix string `mapstructure:"discovery_prefix"`
+	PublishResults bool   `mapstructure:"publish_results"`
 }
 
 // FrigateConfig enthält Frigate-Einstellungen
@@ -142,6 +151,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.snapshot_dir", "/data/snapshots")
 	v.SetDefault("server.snapshot_url", "/snapshots")
 	v.SetDefault("server.template_dir", "/app/web/templates")
+	v.SetDefault("server.timezone", "UTC")
 	
 	// Log-Standardwerte
 	v.SetDefault("log.level", "info")
@@ -163,6 +173,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("mqtt.port", 1883)
 	v.SetDefault("mqtt.client_id", "double-take-go")
 	v.SetDefault("mqtt.topic", "frigate/events")
+	v.SetDefault("mqtt.homeassistant.enabled", false)
+	v.SetDefault("mqtt.homeassistant.discovery_prefix", "homeassistant")
+	v.SetDefault("mqtt.homeassistant.publish_results", true)
 	
 	// Frigate-Standardwerte
 	v.SetDefault("frigate.enabled", false)

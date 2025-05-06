@@ -15,6 +15,7 @@ import (
 	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/integrations/compreface"
 	"double-take-go-reborn/internal/integrations/frigate"
+	"double-take-go-reborn/internal/integrations/homeassistant"
 	"double-take-go-reborn/internal/server/sse"
 
 	log "github.com/sirupsen/logrus"
@@ -36,16 +37,18 @@ type ImageProcessor struct {
 	compreface   *compreface.Client
 	sseHub       *sse.Hub
 	frigateClient *frigate.FrigateClient
+	haPublisher  *homeassistant.Publisher
 }
 
 // NewImageProcessor erstellt einen neuen Bildverarbeitungsprozessor
-func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.Client, sseHub *sse.Hub, frigateClient *frigate.FrigateClient) *ImageProcessor {
+func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.Client, sseHub *sse.Hub, frigateClient *frigate.FrigateClient, haPublisher *homeassistant.Publisher) *ImageProcessor {
 	return &ImageProcessor{
 		db:           db,
 		cfg:          cfg,
 		compreface:   compreface,
 		sseHub:       sseHub,
 		frigateClient: frigateClient,
+		haPublisher:  haPublisher,
 	}
 }
 
@@ -117,6 +120,13 @@ func (p *ImageProcessor) ProcessImage(ctx context.Context, imagePath, source str
 	if p.sseHub != nil {
 		// Broadcast für alle Bilder, auch ohne erkannte Gesichter
 		p.sseHub.BroadcastNewImage(image, p.cfg.Server.SnapshotURL+"/"+image.FilePath, allMatches)
+	}
+
+	// Home Assistant Ergebnis veröffentlichen (wenn aktiviert)
+	if p.haPublisher != nil && p.cfg.MQTT.HomeAssistant.Enabled && p.cfg.MQTT.HomeAssistant.PublishResults {
+		if err := p.haPublisher.PublishCameraResult(&image, allMatches, time.Since(time.Now()).Seconds(), 1); err != nil {
+			log.Errorf("Failed to publish camera result to Home Assistant: %v", err)
+		}
 	}
 
 	return &image, nil
@@ -309,6 +319,11 @@ func (p *ImageProcessor) ProcessFrigateEvent(ctx context.Context, payload []byte
 	}
 
 	return nil
+}
+
+// SetHomeAssistantPublisher setzt den Home Assistant Publisher für den ImageProcessor
+func (p *ImageProcessor) SetHomeAssistantPublisher(publisher *homeassistant.Publisher) {
+	p.haPublisher = publisher
 }
 
 // calculateFileHash berechnet einen SHA-256-Hash für eine Datei

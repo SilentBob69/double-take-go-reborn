@@ -38,6 +38,11 @@ mqtt:
   password: "desert"
   client_id: "double-take-go"
   topic: "frigate/#"
+  # Home Assistant Integration
+  homeassistant:
+    enabled: true
+    discovery_prefix: "homeassistant"
+    publish_results: true
 
 frigate:
   enabled: true

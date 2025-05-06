@@ -176,3 +176,47 @@ func (c *Client) messageHandler(client mqtt.Client, msg mqtt.Message) {
 		go handler.HandleMessage(topic, payload)
 	}
 }
+
+// PublishMessage veröffentlicht eine Nachricht an ein MQTT-Topic
+func (c *Client) PublishMessage(topic string, payload interface{}, retain bool) error {
+	if !c.IsConnected() {
+		return fmt.Errorf("MQTT client is not connected")
+	}
+
+	var payloadBytes []byte
+	var err error
+
+	// Konvertiere die Payload in JSON, wenn es sich um ein Objekt handelt
+	switch p := payload.(type) {
+	case string:
+		payloadBytes = []byte(p)
+	case []byte:
+		payloadBytes = p
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool:
+		payloadBytes = []byte(fmt.Sprintf("%v", p))
+	default:
+		// Versuche, das Objekt in JSON zu konvertieren
+		payloadBytes, err = json.Marshal(p)
+		if err != nil {
+			return fmt.Errorf("failed to marshal payload to JSON: %w", err)
+		}
+	}
+
+	token := c.client.Publish(topic, 1, retain, payloadBytes)
+	if token.Wait() && token.Error() != nil {
+		return fmt.Errorf("failed to publish message to topic %s: %w", topic, token.Error())
+	}
+
+	log.Debugf("Published message to topic: %s", topic)
+	return nil
+}
+
+// PublishRetain veröffentlicht eine Nachricht mit dem Retain-Flag
+func (c *Client) PublishRetain(topic string, payload interface{}) error {
+	return c.PublishMessage(topic, payload, true)
+}
+
+// Publish veröffentlicht eine Nachricht ohne Retain-Flag
+func (c *Client) Publish(topic string, payload interface{}) error {
+	return c.PublishMessage(topic, payload, false)
+}

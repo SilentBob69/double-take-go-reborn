@@ -23,8 +23,11 @@ type FrigateClient struct {
 
 // FrigateEvent repräsentiert ein Ereignis von Frigate, das über MQTT empfangen wurde
 type FrigateEvent struct {
-	Before *FrigateEventData `json:"before,omitempty"`
-	After  *FrigateEventData `json:"after,omitempty"`
+	Before  *FrigateEventData `json:"before,omitempty"`
+	After   *FrigateEventData `json:"after,omitempty"`
+	Type    string            `json:"type"`
+	Camera  string            `json:"camera"`
+	ID      string            `json:"id"`
 }
 
 // FrigateEventData enthält die Details eines Frigate-Ereignisses
