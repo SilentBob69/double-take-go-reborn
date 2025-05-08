@@ -13,6 +13,7 @@ import (
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/core/processor"
+	"double-take-go-reborn/internal/integrations/compreface"
 	"double-take-go-reborn/internal/server/sse"
 	"double-take-go-reborn/internal/utils"
 
@@ -29,6 +30,7 @@ type WebHandler struct {
 	templates   *template.Template
 	sseHub      *sse.Hub
 	workerPool  *processor.WorkerPool // Zugriff auf den Worker-Pool
+	compreface  *compreface.Client    // Zugriff auf den CompreFace-Client
 }
 
 // PageData ist eine Basisstruktur für Templatedaten
@@ -40,12 +42,13 @@ type PageData struct {
 }
 
 // NewWebHandler erstellt einen neuen Web-Handler
-func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool *processor.WorkerPool) (*WebHandler, error) {
+func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool *processor.WorkerPool, compreFaceClient *compreface.Client) (*WebHandler, error) {
 	h := &WebHandler{
 		db:          db,
 		cfg:         cfg,
 		sseHub:      sseHub,
 		workerPool:  workerPool,
+		compreface:  compreFaceClient,
 	}
 
 	// Templates laden
@@ -172,21 +175,23 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data interface{
 
 // RegisterRoutes registriert alle Web-Routen
 func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
-	// Statische Dateien
-	router.Static("/static", filepath.Join(h.cfg.Server.TemplateDir, "../static"))
-	
-	// Snapshots
-	router.Static(h.cfg.Server.SnapshotURL, h.cfg.Server.SnapshotDir)
+	// Statische Dateien bereitstellen
+	router.Static("/static", "./web/static")
+	router.Static("/snapshots", h.cfg.Server.SnapshotDir)
 
-	// Hauptseiten
+	// Routen registrieren
 	router.GET("/", h.handleIndex)
-	router.GET("/gallery", h.handleGallery)
+	router.GET("/images", h.handleGallery)
 	router.GET("/identities", h.handleIdentities)
+	router.GET("/identities/:id", h.handleIdentityDetails)
+	router.POST("/identities/:id/addTrainingImage", h.handleAddTrainingImage)
+	router.POST("/identities/:id/delete", h.handleDeleteIdentity)
 	router.GET("/settings", h.handleSettings)
+	router.GET("/sse", h.handleSSE)
 	router.GET("/diagnostics", h.handleDiagnostics)
 
-	// SSE-Endpunkt für Echtzeitaktualisierungen
-	router.GET("/events", h.handleSSE)
+	// Aktualisierungen der Debug-Seite
+	router.GET("/debug/system-stats", h.handleSystemStats)
 }
 
 // handleIndex zeigt die Hauptseite an
@@ -293,7 +298,7 @@ func (h *WebHandler) handleGallery(c *gin.Context) {
 		},
 	}
 
-	h.renderTemplate(c, "gallery.html", data)
+	h.renderTemplate(c, "images.html", data)
 }
 
 // handleIdentities zeigt die Identitäten-Seite an
@@ -304,16 +309,54 @@ func (h *WebHandler) handleIdentities(c *gin.Context) {
 		log.Errorf("Failed to fetch identities: %v", err)
 	}
 
-	// Für jede Identität die Anzahl der Matches abrufen
-	for i := range identities {
+	// Daten für das Template vorbereiten
+	type IdentityData struct {
+		ID         uint
+		Name       string
+		ExternalID string
+		MatchCount int64
+		BestMatchURL string
+	}
+
+	// Identitätsdaten mit zusätzlichen Informationen erstellen
+	var identityDataList []IdentityData
+	for _, identity := range identities {
 		var count int64
-		h.db.Model(&models.Match{}).Where("identity_id = ?", identities[i].ID).Count(&count)
-		identities[i].Matches = []models.Match{{}} // Platzhalter um die Anzahl hinzuzufügen
+		h.db.Model(&models.Match{}).Where("identity_id = ?", identity.ID).Count(&count)
+
+		// Bestes Match-Bild finden
+		bestMatchURL := "/static/img/placeholder.png" // Standard-Platzhalter
+		
+		// Versuchen, ein Matchbild zu finden, wenn Matches vorhanden sind
+		if count > 0 {
+			var match models.Match
+			var face models.Face
+			var image models.Image
+			
+			// Den letzten Match mit einem Bild finden
+			if err := h.db.Model(&models.Match{}).Where("identity_id = ?", identity.ID).Order("created_at DESC").First(&match).Error; err == nil {
+				if err := h.db.Model(&models.Face{}).Where("id = ?", match.FaceID).First(&face).Error; err == nil {
+					if err := h.db.Model(&models.Image{}).Where("id = ?", face.ImageID).First(&image).Error; err == nil {
+						bestMatchURL = "/snapshots/" + image.FilePath
+					}
+				}
+			}
+		}
+
+		identityDataList = append(identityDataList, IdentityData{
+			ID:         identity.ID,
+			Name:       identity.Name,
+			ExternalID: identity.ExternalID,
+			MatchCount: count,
+			BestMatchURL: bestMatchURL,
+		})
 	}
 
 	// Daten für das Template
 	data := gin.H{
-		"Identities": identities,
+		"Title": "Identitäten", 
+		"CurrentPage": "identities", 
+		"Identities": identityDataList,
 		"CanAddExample": h.cfg.CompreFace.Enabled,
 	}
 
@@ -375,6 +418,170 @@ func (h *WebHandler) handleSSE(c *gin.Context) {
 		c.SSEvent("message", string(msg))
 		return true
 	})
+}
+
+// handleIdentityDetails zeigt die Detailseite einer Identität an
+func (h *WebHandler) handleIdentityDetails(c *gin.Context) {
+	id := c.Param("id")
+
+	// Identität aus Datenbank abrufen
+	var identity models.Identity
+	if err := h.db.First(&identity, id).Error; err != nil {
+		log.WithError(err).Warnf("Identität mit ID %s nicht gefunden", id)
+		c.Redirect(http.StatusFound, "/identities")
+		return
+	}
+
+	// Letzten Matches für diese Identität finden
+	type matchData struct {
+		ID          uint
+		ImageID     uint
+		ImagePath   string
+		Source      string
+		Confidence  float64
+		Timestamp   time.Time
+	}
+
+	var matches []matchData
+
+	// SQL-Query für die Verbindung mehrerer Tabellen
+	query := h.db.Table("matches").Select(
+		"matches.id, faces.image_id, images.file_path as image_path, " +
+		"images.source, matches.confidence, images.created_at as timestamp",
+	).Joins(
+		"LEFT JOIN faces ON matches.face_id = faces.id",
+	).Joins(
+		"LEFT JOIN images ON faces.image_id = images.id",
+	).Where(
+		"matches.identity_id = ?", identity.ID,
+	).Order("images.created_at DESC").Limit(12)
+
+	if err := query.Find(&matches).Error; err != nil {
+		log.WithError(err).Error("Fehler beim Abrufen der Matches")
+	}
+
+	// Statistiken berechnen
+	type statsData struct {
+		MatchCount     int64
+		AvgConfidence  float64
+		FirstMatch     time.Time
+		LastMatch      time.Time
+	}
+
+	var stats statsData
+
+	// Anzahl der Matches
+	h.db.Model(&models.Match{}).Where("identity_id = ?", identity.ID).Count(&stats.MatchCount)
+
+	// Durchschnittliches Vertrauen
+	h.db.Model(&models.Match{}).Where("identity_id = ?", identity.ID).Select("AVG(confidence)").Row().Scan(&stats.AvgConfidence)
+
+	// Erster und letzter Match
+	var firstMatch models.Match
+	var lastMatch models.Match
+	h.db.Model(&models.Match{}).Where("identity_id = ?", identity.ID).Order("created_at ASC").First(&firstMatch)
+	h.db.Model(&models.Match{}).Where("identity_id = ?", identity.ID).Order("created_at DESC").First(&lastMatch)
+	stats.FirstMatch = firstMatch.CreatedAt
+	stats.LastMatch = lastMatch.CreatedAt
+
+	// Bestes Bild für Avatar finden
+	bestMatchURL := ""
+	if len(matches) > 0 {
+		bestMatchURL = "/snapshots/" + matches[0].ImagePath
+	}
+
+	data := gin.H{
+		"Title":        identity.Name,
+		"CurrentPage":  "identities",
+		"Identity":     identity,
+		"Matches":      matches,
+		"Stats":        stats,
+		"BestMatchURL": bestMatchURL,
+		"CompreFaceURL": h.cfg.CompreFace.URL,
+	}
+
+	h.renderTemplate(c, "identity_detail.html", data)
+}
+
+// handleAddTrainingImage verarbeitet die Formularübermittlung zum Hinzufügen eines Trainingsbilds
+func (h *WebHandler) handleAddTrainingImage(c *gin.Context) {
+	id := c.Param("id")
+
+	// Identität aus Datenbank abrufen
+	var identity models.Identity
+	if err := h.db.First(&identity, id).Error; err != nil {
+		log.WithError(err).Warnf("Identität mit ID %s nicht gefunden", id)
+		c.Redirect(http.StatusFound, "/identities")
+		return
+	}
+
+	// Datei aus Formular erhalten
+	file, header, err := c.Request.FormFile("imageFile")
+	if err != nil {
+		log.WithError(err).Error("Fehler beim Abrufen der Datei aus dem Formular")
+		c.Redirect(http.StatusFound, fmt.Sprintf("/identities/%d", identity.ID))
+		return
+	}
+	defer file.Close()
+
+	// Bilddaten lesen
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		log.WithError(err).Error("Fehler beim Lesen der Bilddaten")
+		c.Redirect(http.StatusFound, fmt.Sprintf("/identities/%d", identity.ID))
+		return
+	}
+
+	// An CompreFace senden
+	ctx := c.Request.Context()
+	_, err = h.compreface.AddSubjectExample(ctx, identity.Name, imageData, header.Filename)
+	if err != nil {
+		log.WithError(err).Error("Fehler beim Hinzufügen des Beispiels zu CompreFace")
+		c.Redirect(http.StatusFound, fmt.Sprintf("/identities/%d", identity.ID))
+		return
+	}
+
+	// Zurück zur Identitätsseite
+	c.Redirect(http.StatusFound, fmt.Sprintf("/identities/%d", identity.ID))
+}
+
+// handleDeleteIdentity verarbeitet die Formularübermittlung zum Löschen einer Identität
+func (h *WebHandler) handleDeleteIdentity(c *gin.Context) {
+	id := c.Param("id")
+
+	// Identität aus Datenbank abrufen
+	var identity models.Identity
+	if err := h.db.First(&identity, id).Error; err != nil {
+		log.WithError(err).Warnf("Identität mit ID %s nicht gefunden", id)
+		c.Redirect(http.StatusFound, "/identities")
+		return
+	}
+
+	// Identität in CompreFace löschen, falls aktiviert
+	if h.cfg.CompreFace.Enabled {
+		ctx := c.Request.Context()
+		_, err := h.compreface.DeleteSubject(ctx, identity.Name)
+		if err != nil {
+			log.WithError(err).Warn("Fehler beim Löschen des Subjekts in CompreFace")
+			// Fortfahren trotz Fehler
+		}
+	}
+
+	// Identität in der Datenbank löschen
+	if err := h.db.Delete(&identity).Error; err != nil {
+		log.WithError(err).Error("Fehler beim Löschen der Identität aus der Datenbank")
+		c.Redirect(http.StatusFound, fmt.Sprintf("/identities/%d", identity.ID))
+		return
+	}
+
+	// Zurück zur Identitätsübersicht
+	c.Redirect(http.StatusFound, "/identities")
+}
+
+// handleSystemStats gibt aktuelle Systemstatistiken als JSON zurück
+func (h *WebHandler) handleSystemStats(c *gin.Context) {
+	systemStats := utils.GetSystemStats(h.workerPool)
+	c.JSON(http.StatusOK, systemStats)
 }
 
 // handleDiagnostics zeigt Diagnose-Informationen an

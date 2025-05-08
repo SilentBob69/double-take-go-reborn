@@ -21,22 +21,22 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {{ if eq .Active "dashboard" }}active{{ end }}" href="/">
+                        <a class="nav-link {{ if eq .CurrentPage "index" }}active{{ end }}" href="/">
                             <i class="bi bi-house"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ if eq .Active "images" }}active{{ end }}" href="/images">
+                        <a class="nav-link {{ if eq .CurrentPage "images" }}active{{ end }}" href="/images">
                             <i class="bi bi-images"></i> Bilder
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ if eq .Active "identities" }}active{{ end }}" href="/identities">
+                        <a class="nav-link {{ if eq .CurrentPage "identities" }}active{{ end }}" href="/identities">
                             <i class="bi bi-people"></i> Identitäten
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {{ if eq .Active "settings" }}active{{ end }}" href="/settings">
+                        <a class="nav-link {{ if eq .CurrentPage "settings" }}active{{ end }}" href="/settings">
                             <i class="bi bi-gear"></i> Einstellungen
                         </a>
                     </li>

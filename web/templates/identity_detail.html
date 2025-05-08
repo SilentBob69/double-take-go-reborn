@@ -42,6 +42,9 @@
         <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#editIdentityModal">
             <i class="bi bi-pencil"></i> Bearbeiten
         </button>
+        <button type="button" class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#renameIdentityModal">
+            <i class="bi bi-pencil-square"></i> Umbenennen
+        </button>
         <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteIdentityModal">
             <i class="bi bi-trash"></i> Löschen
         </button>
@@ -87,6 +90,25 @@
             </div>
         </div>
         
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Trainingsbilder</h5>
+                <button class="btn btn-sm btn-outline-primary" id="loadTrainingExamples">
+                    <i class="bi bi-arrow-clockwise"></i> Laden
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="trainingExamples" class="row">
+                    <div class="col-12 text-center py-3">
+                        <div class="spinner-border text-primary d-none" id="trainingLoadSpinner" role="status">
+                            <span class="visually-hidden">Wird geladen...</span>
+                        </div>
+                        <p id="trainingEmpty" class="text-muted">Klicken Sie auf "Laden", um Trainingsbilder anzuzeigen.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="card mt-4">
             <div class="card-header">
                 <h5>Metadaten</h5>
@@ -181,7 +203,7 @@
                                             <div class="progress flex-grow-1" style="height: 5px;">
                                                 <div class="progress-bar {{ if ge .Confidence 90.0 }}bg-success{{ else if ge .Confidence 75.0 }}bg-info{{ else }}bg-warning{{ end }}" 
                                                     role="progressbar" 
-                                                    style="width: {{ formatConfidence .Confidence }}%" 
+                                                    style="width: {{ formatConfidence .Confidence }}%;" 
                                                     aria-valuenow="{{ .Confidence }}" 
                                                     aria-valuemin="0" 
                                                     aria-valuemax="100"></div>
@@ -288,6 +310,55 @@
     </div>
 </div>
 
+<!-- Modal: Identität umbenennen -->
+<div class="modal fade" id="renameIdentityModal" tabindex="-1" aria-labelledby="renameIdentityModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="renameIdentityModalLabel">Identität umbenennen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="newName" class="form-label">Neuer Name</label>
+                    <input type="text" class="form-control" id="newName" value="{{ .Identity.Name }}" required>
+                    <div class="form-text">Der neue Name wird sowohl in der lokalen Datenbank als auch in CompreFace aktualisiert.</div>
+                </div>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Falls der neue Name bereits existiert, werden die Identitäten zusammengeführt.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-primary" id="saveRenameBtn">Umbenennen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Beispiel löschen -->
+<div class="modal fade" id="deleteExampleModal" tabindex="-1" aria-labelledby="deleteExampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteExampleModalLabel">Beispielbild löschen</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Sind Sie sicher, dass Sie dieses Beispielbild löschen möchten?</p>
+                <div class="text-center">
+                    <img id="deleteExampleImage" src="" class="img-fluid mb-3" style="max-height: 200px;" alt="Beispielbild">
+                </div>
+                <p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteExampleBtn">Löschen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal: Trainingsbild hinzufügen -->
 <div class="modal fade" id="addTrainingImageModal" tabindex="-1" aria-labelledby="addTrainingImageModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -338,6 +409,150 @@
             listView.classList.remove('d-none');
             toggleGalleryBtn.classList.remove('active');
             toggleListBtn.classList.add('active');
+        });
+
+        // Trainingsbeispiele laden
+        const loadTrainingExamplesBtn = document.getElementById('loadTrainingExamples');
+        const trainingExamplesContainer = document.getElementById('trainingExamples');
+        const trainingLoadSpinner = document.getElementById('trainingLoadSpinner');
+        const trainingEmpty = document.getElementById('trainingEmpty');
+        
+        loadTrainingExamplesBtn.addEventListener('click', function() {
+            trainingLoadSpinner.classList.remove('d-none');
+            trainingEmpty.classList.add('d-none');
+            
+            fetch(`/api/identities/{{ .Identity.ID }}/examples`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Fehler beim Laden der Trainingsbeispiele');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    trainingExamplesContainer.innerHTML = '';
+                    
+                    if (data.examples && data.examples.length > 0) {
+                        data.examples.forEach(example => {
+                            const exampleHtml = `
+                                <div class="col-md-4 mb-3">
+                                    <div class="card">
+                                        <img src="{{ .CompreFaceURL }}/api/v1/recognition/faces/${example.image_id}" 
+                                             class="card-img-top" alt="Trainingsbild" style="height: 150px; object-fit: cover;">
+                                        <div class="card-body">
+                                            <h6 class="card-title">ID: ${example.image_id.substring(0, 8)}...</h6>
+                                            <button class="btn btn-sm btn-outline-danger delete-example-btn" 
+                                                    data-example-id="${example.image_id}" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#deleteExampleModal">
+                                                <i class="bi bi-trash"></i> Löschen
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            trainingExamplesContainer.innerHTML += exampleHtml;
+                        });
+                        
+                        // Event-Listener für Löschen-Buttons
+                        document.querySelectorAll('.delete-example-btn').forEach(btn => {
+                            btn.addEventListener('click', function() {
+                                const exampleId = this.dataset.exampleId;
+                                const imgSrc = this.closest('.card').querySelector('img').src;
+                                document.getElementById('deleteExampleImage').src = imgSrc;
+                                document.getElementById('confirmDeleteExampleBtn').dataset.exampleId = exampleId;
+                            });
+                        });
+                    } else {
+                        trainingExamplesContainer.innerHTML = `
+                            <div class="col-12 text-center py-3">
+                                <p class="text-muted">Keine Trainingsbeispiele gefunden.</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error('Fehler:', error);
+                    showToast('error', 'Fehler beim Laden der Trainingsbeispiele', error.message);
+                    trainingExamplesContainer.innerHTML = `
+                        <div class="col-12 text-center py-3">
+                            <p class="text-danger">Fehler beim Laden: ${error.message}</p>
+                        </div>
+                    `;
+                })
+                .finally(() => {
+                    trainingLoadSpinner.classList.add('d-none');
+                });
+        });
+        
+        // Beispiel löschen
+        const confirmDeleteExampleBtn = document.getElementById('confirmDeleteExampleBtn');
+        confirmDeleteExampleBtn.addEventListener('click', function() {
+            const exampleId = this.dataset.exampleId;
+            
+            fetch(`/api/identities/{{ .Identity.ID }}/examples/${exampleId}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Fehler beim Löschen des Beispiels');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Modal schließen
+                bootstrap.Modal.getInstance(document.getElementById('deleteExampleModal')).hide();
+                
+                // Erfolgsmeldung anzeigen
+                showToast('success', 'Beispiel gelöscht', 'Das Trainingsbeispiel wurde erfolgreich gelöscht.');
+                
+                // Liste neu laden
+                loadTrainingExamplesBtn.click();
+            })
+            .catch(error => {
+                console.error('Fehler:', error);
+                showToast('error', 'Fehler beim Löschen', error.message);
+            });
+        });
+        
+        // Identität umbenennen
+        const saveRenameBtn = document.getElementById('saveRenameBtn');
+        saveRenameBtn.addEventListener('click', function() {
+            const newName = document.getElementById('newName').value.trim();
+            
+            if (!newName) {
+                showToast('error', 'Fehler', 'Bitte geben Sie einen Namen ein.');
+                return;
+            }
+            
+            fetch(`/api/identities/{{ .Identity.ID }}/rename`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    new_name: newName
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Fehler beim Umbenennen der Identität');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Modal schließen
+                bootstrap.Modal.getInstance(document.getElementById('renameIdentityModal')).hide();
+                
+                // Erfolgsmeldung anzeigen
+                showToast('success', 'Identität umbenannt', `Die Identität wurde erfolgreich in "${newName}" umbenannt.`);
+                
+                // Seite neu laden
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Fehler:', error);
+                showToast('error', 'Fehler beim Umbenennen', error.message);
+            });
         });
     });
 </script>

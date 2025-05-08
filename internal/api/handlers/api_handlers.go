@@ -56,10 +56,19 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.PUT("/identities/:id", h.UpdateIdentity)
 	router.DELETE("/identities/:id", h.DeleteIdentity)
 	router.POST("/identities/:id/examples", h.AddIdentityExample)
+	router.GET("/identities/:id/examples", h.GetIdentityExamples)
+	router.DELETE("/identities/:id/examples/:exampleId", h.DeleteIdentityExample)
+	router.POST("/identities/:id/rename", h.RenameIdentity)
 
 	// System-Endpunkte
 	router.GET("/status", h.GetStatus)
 	router.POST("/sync/compreface", h.SyncCompreFace)
+	router.DELETE("/training/all", h.DeleteAllTraining)
+	
+	// Test-Endpunkt, um zu überprüfen, ob Änderungen wirksam werden
+	router.GET("/test-update", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "Die Änderungen wurden erfolgreich übernommen! Zeitstempel: May 7, 2025 09:31"})
+	})
 }
 
 // ProcessImage verarbeitet ein hochgeladenes Bild
@@ -464,4 +473,144 @@ func (h *APIHandler) RecognizeImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Image reprocessed successfully"})
+}
+
+// GetIdentityExamples gibt alle Trainingsbeispiele für eine Identität zurück
+func (h *APIHandler) GetIdentityExamples(c *gin.Context) {
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace integration is not enabled"})
+		return
+	}
+
+	id := c.Param("id")
+	
+	var identity models.Identity
+	if err := h.db.First(&identity, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Identity not found"})
+		return
+	}
+
+	// Beispiele von CompreFace abrufen
+	ctx := c.Request.Context()
+	examples, err := h.compreface.GetSubjectExamples(ctx, identity.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to retrieve examples from CompreFace: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"identity": identity,
+		"examples": examples,
+	})
+}
+
+// DeleteIdentityExample löscht ein Trainingsbeispiel einer Identität
+func (h *APIHandler) DeleteIdentityExample(c *gin.Context) {
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace integration is not enabled"})
+		return
+	}
+
+	id := c.Param("id")
+	exampleId := c.Param("exampleId")
+	
+	var identity models.Identity
+	if err := h.db.First(&identity, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Identity not found"})
+		return
+	}
+
+	// Beispiel in CompreFace löschen
+	ctx := c.Request.Context()
+	if err := h.compreface.DeleteSubjectExample(ctx, exampleId); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete example from CompreFace: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Example deleted successfully"})
+}
+
+// RenameIdentity benennt eine Identität um (inkl. CompreFace-Synchronisierung)
+func (h *APIHandler) RenameIdentity(c *gin.Context) {
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace integration is not enabled"})
+		return
+	}
+
+	id := c.Param("id")
+	
+	// Request-Daten abrufen
+	var req struct {
+		NewName string `json:"new_name" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	var identity models.Identity
+	if err := h.db.First(&identity, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Identity not found"})
+		return
+	}
+
+	// Prüfen, ob eine Identität mit dem neuen Namen bereits existiert
+	var existingIdentity models.Identity
+	result := h.db.Where("name = ?", req.NewName).First(&existingIdentity)
+	if result.Error == nil && existingIdentity.ID != identity.ID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "An identity with this name already exists"})
+		return
+	}
+
+	// Umbenennung in CompreFace durchführen
+	ctx := c.Request.Context()
+	_, err := h.compreface.RenameSubject(ctx, identity.Name, req.NewName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to rename subject in CompreFace: %v", err)})
+		return
+	}
+
+	// Lokale Identität umbenennen
+	oldName := identity.Name
+	identity.Name = req.NewName
+	identity.ExternalID = req.NewName // Auch die ExternalID anpassen
+
+	if err := h.db.Save(&identity).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update identity: %v", err)})
+		return
+	}
+
+	log.Infof("Renamed identity from '%s' to '%s'", oldName, req.NewName)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Identity renamed successfully",
+		"identity": identity,
+	})
+}
+
+// DeleteAllTraining löscht alle Trainingsdaten in CompreFace
+func (h *APIHandler) DeleteAllTraining(c *gin.Context) {
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace integration is not enabled"})
+		return
+	}
+
+	// Alle Subjekte in CompreFace löschen
+	ctx := c.Request.Context()
+	result, err := h.compreface.DeleteAllSubjects(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete all subjects from CompreFace: %v", err)})
+		return
+	}
+
+	// Synchronisierung mit der lokalen Datenbank durchführen
+	if err := h.compreface.SyncIdentities(ctx, h.db); err != nil {
+		log.WithError(err).Warn("Failed to sync identities after deleting all subjects")
+		// Kein Fehler zurückgeben, da der Hauptvorgang erfolgreich war
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "All training data deleted successfully",
+		"count": result.Deleted,
+	})
 }

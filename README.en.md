@@ -114,10 +114,19 @@ The main configuration file is `config.yaml`. Important settings include:
 - **Improved Diagnostics Page**: Displays detailed information about the system, database, and CompreFace integration.
 - **Image Reprocessing**: Images can now be reprocessed directly from the user interface.
 
+## API Documentation
+
+Double-Take Go provides a comprehensive REST API that allows other applications to interact with the system. A complete documentation of the API endpoints can be found here:
+
+- [API Documentation (English)](docs/API.en.md)
+- [API-Dokumentation (Deutsch)](docs/API.md)
+
+The API enables control of all key functions of the system, including image processing, identity management, and system functions.
+
 ## Future Plans
 
 - Improving facial recognition accuracy
 - Expanding Home Assistant integration
 - Integration with additional NVR systems
 - Mobile app integration
-- API documentation with Swagger/OpenAPI
+- Extending API functionality

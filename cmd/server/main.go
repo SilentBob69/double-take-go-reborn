@@ -231,7 +231,7 @@ func main() {
 	
 	// Web-Handler
 	log.Info("Initializing web handler...")
-	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub, workerPool)
+	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub, workerPool, compreFaceClient)
 	if err != nil {
 		log.Fatalf("Failed to create web handler: %v", err)
 	}

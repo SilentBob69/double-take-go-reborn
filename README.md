@@ -114,10 +114,19 @@ Die Hauptkonfigurationsdatei ist `config.yaml`. Wichtige Einstellungen sind:
 - **Verbesserte Diagnostics-Seite**: Zeigt detaillierte Informationen über das System, die Datenbank und die CompreFace-Integration.
 - **Bild-Neuverarbeitung**: Bilder können jetzt direkt aus der Benutzeroberfläche neu verarbeitet werden.
 
+## API-Dokumentation
+
+Double-Take Go stellt eine umfangreiche REST-API bereit, mit der andere Anwendungen mit dem System interagieren können. Eine vollständige Dokumentation der API-Endpunkte finden Sie hier:
+
+- [API-Dokumentation (Deutsch)](docs/API.md)
+- [API Documentation (English)](docs/API.en.md)
+
+Die API ermöglicht die Steuerung aller wichtigen Funktionen des Systems, einschließlich der Bildverarbeitung, Identitätsverwaltung und Systemfunktionen.
+
 ## Zukünftige Pläne
 
 - Verbesserung der Gesichtserkennungsgenauigkeit
 - Erweiterung der Home Assistant-Integration
 - Integration mit weiteren NVR-Systemen
 - Mobile App-Integration
-- API-Dokumentation mit Swagger/OpenAPI
+- Erweiterung der API-Funktionalität

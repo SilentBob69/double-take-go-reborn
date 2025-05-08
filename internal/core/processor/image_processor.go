@@ -264,6 +264,7 @@ func (p *ImageProcessor) processWithCompreFace(ctx context.Context, imagePath st
 }
 
 // ProcessFrigateEvent verarbeitet ein Ereignis aus Frigate via MQTT
+// und erfasst mehrere Snapshots während des Ereignisses, nicht nur den letzten
 func (p *ImageProcessor) ProcessFrigateEvent(ctx context.Context, payload []byte) error {
 	// Wenn Frigate-Integration deaktiviert ist, nichts tun
 	if !p.cfg.Frigate.Enabled {
@@ -295,6 +296,23 @@ func (p *ImageProcessor) ProcessFrigateEvent(ctx context.Context, payload []byte
 		return fmt.Errorf("failed to parse Frigate event: %w", err)
 	}
 
+	// Ereignistyp prüfen und dementsprechend verarbeiten
+	switch event.Type {
+	case "new": 
+		// Neues Ereignis - mehrere Snapshots verarbeiten, wenn verfügbar
+		return p.processNewFrigateEvent(ctx, event)
+	case "update": 
+		// Update-Ereignis - Wir verarbeiten auch Updates, um mehr Bilder zu erfassen
+		return p.processUpdateFrigateEvent(ctx, event)
+	default:
+		log.Debugf("Skipping Frigate event type: %s", event.Type)
+		return nil
+	}
+}
+
+// processNewFrigateEvent verarbeitet ein neues Frigate-Ereignis und versucht,
+// möglichst frühe Snapshots zu erfassen, wenn die Person zur Kamera hinläuft
+func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frigate.FrigateEvent) error {
 	// Prüfen, ob es ein Personen-Event ist (falls process_person_only aktiviert ist)
 	if p.cfg.Frigate.ProcessPersonOnly && !p.frigateClient.IsPersonEvent(event) {
 		log.Debug("Skipping non-person Frigate event")
@@ -312,8 +330,97 @@ func (p *ImageProcessor) ProcessFrigateEvent(ctx context.Context, payload []byte
 		return nil
 	}
 
+	// Ein neues Ereignis verarbeiten - hier nutzen wir sowohl den Thumbnail als auch den Snapshot
+	// Der Thumbnail enthält oft ein früheres Bild der Person, wenn sie auf die Kamera zuläuft
+	snapshotPaths := []string{eventData.Snapshot}
+	
+	// Wenn ein Thumbnail verfügbar ist, diesen auch verarbeiten
+	if eventData.Thumbnail != "" && eventData.Thumbnail != eventData.Snapshot {
+		snapshotPaths = append(snapshotPaths, eventData.Thumbnail)
+		log.Debugf("Added thumbnail to processing queue for event %s: %s", eventData.ID, eventData.Thumbnail)
+	}
+
+	// Für jeden Snapshot-Pfad ein Bild verarbeiten
+	for i, snapshotPath := range snapshotPaths {
+		// Dateiname für den Snapshot generieren mit Sequenznummer
+		baseFilename := p.frigateClient.GenerateFilename(eventData)
+		filenameParts := strings.Split(baseFilename, ".")
+		baseName := filenameParts[0]
+		extension := ".jpg"
+		if len(filenameParts) > 1 {
+			extension = "." + filenameParts[1]
+		}
+		filename := fmt.Sprintf("%s_seq%d%s", baseName, i, extension)
+		
+		localPath := filepath.Join("frigate", filename)
+		fullPath := filepath.Join(p.cfg.Server.SnapshotDir, localPath)
+
+		// Snapshot herunterladen
+		if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
+			log.Warnf("Failed to download snapshot %d for event %s: %v", i, eventData.ID, err)
+			continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
+		}
+
+		// Bild in der Datenbank speichern
+		image := p.frigateClient.ToImage(eventData, localPath)
+		if err := p.db.Create(image).Error; err != nil {
+			log.Errorf("Failed to save image to database: %v", err)
+			continue
+		}
+
+		log.Infof("Saved Frigate event image %d of %d: %s", i+1, len(snapshotPaths), localPath)
+
+		// Bild verarbeiten (Gesichtserkennung)
+		_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{})
+		if err != nil {
+			log.Warnf("Failed to process image %s: %v", fullPath, err)
+		}
+	}
+
+	return nil
+}
+
+// processUpdateFrigateEvent verarbeitet ein Update eines Frigate-Ereignisses
+// Updates können wichtig sein, weil sie oft bessere Bilder der Person enthalten
+func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *frigate.FrigateEvent) error {
+	// Prüfen, ob es ein Personen-Event ist (falls process_person_only aktiviert ist)
+	if p.cfg.Frigate.ProcessPersonOnly && !p.frigateClient.IsPersonEvent(event) {
+		return nil
+	}
+
+	// Bei Updates interessieren uns insbesondere die After-Daten
+	if event.After == nil {
+		return nil
+	}
+
+	eventData := event.After
+	if eventData.Snapshot == "" {
+		return nil
+	}
+
+	// Überprüfen, ob wir für dieses Ereignis bereits Updates verarbeitet haben
+	// Wir wollen nicht jedes Update verarbeiten, sondern in regelmäßigen Abständen
+	var existingImages []models.Image
+	if err := p.db.Where("event_id = ?", eventData.ID).Find(&existingImages).Error; err != nil {
+		log.Warnf("Failed to query existing images for event %s: %v", eventData.ID, err)
+	}
+
+	// Wenn wir schon viele Bilder für dieses Ereignis haben, überspringen wir dieses Update
+	if len(existingImages) >= 3 {
+		return nil
+	}
+
 	// Dateiname für den Snapshot generieren
-	filename := p.frigateClient.GenerateFilename(eventData)
+	baseFilename := p.frigateClient.GenerateFilename(eventData)
+	filenameParts := strings.Split(baseFilename, ".")
+	baseName := filenameParts[0]
+	extension := ".jpg"
+	if len(filenameParts) > 1 {
+		extension = "." + filenameParts[1]
+	}
+	// Sequenznummer basierend auf vorhandenen Bildern
+	filename := fmt.Sprintf("%s_update%d%s", baseName, len(existingImages), extension)
+	
 	localPath := filepath.Join("frigate", filename)
 	fullPath := filepath.Join(p.cfg.Server.SnapshotDir, localPath)
 
@@ -328,10 +435,10 @@ func (p *ImageProcessor) ProcessFrigateEvent(ctx context.Context, payload []byte
 		return fmt.Errorf("failed to save image to database: %w", err)
 	}
 
-	log.Infof("Saved Frigate event image: %s", localPath)
+	log.Infof("Saved Frigate update event image: %s", localPath)
 
 	// Bild verarbeiten (Gesichtserkennung)
-	_, err = p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{})
+	_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to process image: %w", err)
 	}
