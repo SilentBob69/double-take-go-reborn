@@ -1,27 +1,35 @@
 {{/* Define the navigation bar partial */}}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 border-bottom border-secondary">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/">Double Take</a>
+        <a class="navbar-brand" href="/">{{ t "app.name" }}</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav">
+            <ul class="navbar-nav me-auto">
                 <li class="nav-item">
                     {{/* Check if 'index' page is active */}}
-                    <a class="nav-link {{if eq .CurrentPage "index"}}active{{end}}" {{if eq .CurrentPage "index"}}aria-current="page"{{end}} href="/">Recent Activity</a>
+                    <a class="nav-link {{if eq .CurrentPage "index"}}active{{end}}" {{if eq .CurrentPage "index"}}aria-current="page"{{end}} href="/">{{ t "nav.recent_activity" }}</a>
                 </li>
                 <li class="nav-item">
                     {{/* Check if 'diagnostics' page is active */}}
-                    <a class="nav-link {{if eq .CurrentPage "diagnostics"}}active{{end}}" {{if eq .CurrentPage "diagnostics"}}aria-current="page"{{end}} href="/diagnostics">Diagnostics</a>
+                    <a class="nav-link {{if eq .CurrentPage "diagnostics"}}active{{end}}" {{if eq .CurrentPage "diagnostics"}}aria-current="page"{{end}} href="/diagnostics">{{ t "nav.diagnostics" }}</a>
                 </li>
                 <li class="nav-item">
                     {{/* Check if 'identities' page is active */}}
-                    <a class="nav-link {{if eq .CurrentPage "identities"}}active{{end}}" {{if eq .CurrentPage "identities"}}aria-current="page"{{end}} href="/identities">Identitäten</a>
+                    <a class="nav-link {{if eq .CurrentPage "identities"}}active{{end}}" {{if eq .CurrentPage "identities"}}aria-current="page"{{end}} href="/identities">{{ t "nav.identities" }}</a>
                 </li>
                 <!-- Bilder-Link entfernt und in Recent Activity integriert -->
                 <!-- Add other nav items here later -->
             </ul>
+            
+            <!-- Sprachumschalter -->
+            <div class="d-flex">
+                <div class="btn-group" role="group" aria-label="Language Selector">
+                    <a href="?lang=de" class="btn btn-sm {{if eq .language "de"}}btn-primary{{else}}btn-outline-light{{end}}" title="Deutsch">DE</a>
+                    <a href="?lang=en" class="btn btn-sm {{if eq .language "en"}}btn-primary{{else}}btn-outline-light{{end}}" title="English">EN</a>
+                </div>
+            </div>
         </div>
     </div>
 </nav>

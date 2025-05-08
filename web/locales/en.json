@@ -1,0 +1,97 @@
+{
+  "app": {
+    "name": "Double Take Go",
+    "title": "Double Take Go - Facial Recognition"
+  },
+  "nav": {
+    "recent_activity": "Recent Activity",
+    "diagnostics": "Diagnostics",
+    "identities": "Identities",
+    "settings": "Settings"
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "details": "Details",
+    "filter": "Filter",
+    "reset": "Reset",
+    "actions": "Actions",
+    "confirm": "Confirm",
+    "results": "Results",
+    "loading": "Loading...",
+    "no_data": "No data found",
+    "error": "Error",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Information",
+    "all": "All"
+  },
+  "filters": {
+    "title": "Filters",
+    "source": "Source",
+    "faces": "Faces",
+    "matches": "Matches",
+    "date_range": "Date Range",
+    "with_faces": "With Faces",
+    "without_faces": "Without Faces",
+    "with_identities": "With Recognized Identities",
+    "without_identities": "Without Identities",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "last_week": "Last Week",
+    "last_month": "Last Month"
+  },
+  "images": {
+    "title": "Images",
+    "delete_all": "Delete All Images",
+    "delete_confirm": "Are you sure you want to delete all images?",
+    "delete_success": "Images successfully deleted",
+    "delete_error": "Error deleting images",
+    "no_face": "No face detected",
+    "detected_faces": "Detected Faces",
+    "timestamp": "Timestamp",
+    "image_id": "Image ID",
+    "reprocess": "Reprocess",
+    "source": "Source",
+    "delete_image": "Delete Image",
+    "reprocess_image": "Reprocess Faces"
+  },
+  "identities": {
+    "title": "Identities",
+    "add_new": "New Identity",
+    "edit_identity": "Edit Identity",
+    "delete_identity": "Delete Identity",
+    "name": "Name",
+    "match_count": "Match Count",
+    "first_seen": "First Seen",
+    "last_seen": "Last Seen",
+    "confidence": "Confidence",
+    "assign_identity": "Assign Identity",
+    "correct_identity": "Correct Identity",
+    "unknown_face": "Unknown Face"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page"
+  },
+  "diagnostics": {
+    "title": "Diagnostics",
+    "system_info": "System Information",
+    "database": "Database",
+    "memory_usage": "Memory Usage",
+    "cpu_usage": "CPU Usage",
+    "uptime": "Uptime",
+    "connection_status": "Connection Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "compreface": "CompreFace",
+    "mqtt": "MQTT",
+    "frigate": "Frigate",
+    "homeassistant": "Home Assistant"
+  }
+}

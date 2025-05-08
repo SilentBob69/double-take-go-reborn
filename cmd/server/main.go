@@ -13,6 +13,7 @@ import (
 
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/api/handlers"
+	"double-take-go-reborn/internal/api/middleware"
 	"double-take-go-reborn/internal/core/processor"
 	"double-take-go-reborn/internal/db"
 	"double-take-go-reborn/internal/core/models"
@@ -24,6 +25,8 @@ import (
 	"double-take-go-reborn/internal/services/cleanup"
 
 	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -467,6 +470,45 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+	
+	// Session-Middleware einrichten für Sprachauswahl
+	store := cookie.NewStore([]byte("double-take-session-secret"))
+	router.Use(sessions.Sessions("double-take-session", store))
+	
+	// i18n-Middleware einrichten
+	i18nConfig := middleware.I18nConfig{
+		DefaultLanguage: "de",
+		LocalesDir:      "./web/locales",
+	}
+	router.Use(middleware.I18n(i18nConfig))
+	
+	// Template-Funktionen registrieren
+	router.SetFuncMap(gin.H{
+		"t":            func(key string) string { return key }, // Standardimplementierung, wird von Middleware überschrieben
+		"add":          func(a, b int) int { return a + b },
+		"subtract":     func(a, b int) int { return a - b },
+		"paginationRange": func(current int, total int64) []int {
+			start := current - 2
+			if start < 1 {
+				start = 1
+			}
+			end := start + 4
+			if int64(end) > total {
+				end = int(total)
+			}
+			if end-start < 4 && start > 1 {
+				start = end - 4
+				if start < 1 {
+					start = 1
+				}
+			}
+			result := make([]int, 0, end-start+1)
+			for i := start; i <= end; i++ {
+				result = append(result, i)
+			}
+			return result
+		},
+	})
 
 	return router
 }

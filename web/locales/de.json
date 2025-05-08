@@ -1,0 +1,97 @@
+{
+  "app": {
+    "name": "Double Take Go",
+    "title": "Double Take Go - Gesichtserkennung"
+  },
+  "nav": {
+    "recent_activity": "Aktuelle Aktivität",
+    "diagnostics": "Diagnose",
+    "identities": "Identitäten",
+    "settings": "Einstellungen"
+  },
+  "common": {
+    "yes": "Ja",
+    "no": "Nein",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "details": "Details",
+    "filter": "Filtern",
+    "reset": "Zurücksetzen",
+    "actions": "Aktionen",
+    "confirm": "Bestätigen",
+    "results": "Ergebnisse",
+    "loading": "Wird geladen...",
+    "no_data": "Keine Daten gefunden",
+    "error": "Fehler",
+    "success": "Erfolg",
+    "warning": "Warnung",
+    "info": "Information",
+    "all": "Alle"
+  },
+  "filters": {
+    "title": "Filter",
+    "source": "Quelle",
+    "faces": "Gesichter",
+    "matches": "Matches",
+    "date_range": "Zeitraum",
+    "with_faces": "Mit Gesichtern",
+    "without_faces": "Ohne Gesichter",
+    "with_identities": "Mit erkannten Identitäten",
+    "without_identities": "Ohne Identitäten",
+    "today": "Heute",
+    "yesterday": "Gestern",
+    "last_week": "Letzte Woche",
+    "last_month": "Letzter Monat"
+  },
+  "images": {
+    "title": "Bilder",
+    "delete_all": "Alle Bilder löschen",
+    "delete_confirm": "Sind Sie sicher, dass Sie alle Bilder löschen möchten?",
+    "delete_success": "Bilder erfolgreich gelöscht",
+    "delete_error": "Fehler beim Löschen der Bilder",
+    "no_face": "Kein Gesicht erkannt",
+    "detected_faces": "Erkannte Gesichter",
+    "timestamp": "Zeitstempel",
+    "image_id": "Bild ID",
+    "reprocess": "Neu erkennen",
+    "source": "Quelle",
+    "delete_image": "Bild löschen",
+    "reprocess_image": "Gesichter neu erkennen"
+  },
+  "identities": {
+    "title": "Identitäten",
+    "add_new": "Neue Identität",
+    "edit_identity": "Identität bearbeiten",
+    "delete_identity": "Identität löschen",
+    "name": "Name",
+    "match_count": "Anzahl Matches",
+    "first_seen": "Zuerst gesehen",
+    "last_seen": "Zuletzt gesehen",
+    "confidence": "Konfidenz",
+    "assign_identity": "Identität zuweisen",
+    "correct_identity": "Identität korrigieren",
+    "unknown_face": "Unbekanntes Gesicht"
+  },
+  "pagination": {
+    "previous": "Zurück",
+    "next": "Weiter",
+    "page": "Seite"
+  },
+  "diagnostics": {
+    "title": "Diagnose",
+    "system_info": "Systeminformationen",
+    "database": "Datenbank",
+    "memory_usage": "Speichernutzung",
+    "cpu_usage": "CPU-Auslastung",
+    "uptime": "Laufzeit",
+    "connection_status": "Verbindungsstatus",
+    "connected": "Verbunden",
+    "disconnected": "Nicht verbunden",
+    "compreface": "CompreFace",
+    "mqtt": "MQTT",
+    "frigate": "Frigate",
+    "homeassistant": "Home Assistant"
+  }
+}
