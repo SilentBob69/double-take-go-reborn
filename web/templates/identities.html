@@ -8,6 +8,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- Globale Styles -->
+    <link rel="stylesheet" href="/static/css/global.css">
     <style>
         .identity-card {
             transition: all 0.3s ease;
@@ -38,9 +40,9 @@
 
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Identitäten</h1>
+            <h1>{{ t "identities.title" }}</h1>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createIdentityModal">
-                <i class="bi bi-person-plus"></i> Neue Identität
+                <i class="bi bi-person-plus"></i> {{ t "identities.new_identity" }}
             </button>
         </div>
 
@@ -55,12 +57,12 @@
                         
                         <h5 class="card-title">{{ .Name }}</h5>
                         <div class="match-count text-muted">
-                            <i class="bi bi-camera"></i> {{ .MatchCount }} Erkennungen
+                            <i class="bi bi-camera"></i> {{ .MatchCount }} {{ t "identities.recognitions" }}
                         </div>
                         
                         <div class="mt-3">
                             <a href="/identities/{{ .ID }}" class="btn btn-sm btn-primary">
-                                <i class="bi bi-eye"></i> Details
+                                <i class="bi bi-eye"></i> {{ t "common.details" }}
                             </a>
                             <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" 
                                     data-bs-target="#deleteIdentityModal" data-identity-id="{{ .ID }}" data-identity-name="{{ .Name }}">
@@ -76,10 +78,10 @@
         <div class="card">
             <div class="card-body text-center empty-state">
                 <i class="bi bi-people fs-1 mb-3 text-muted"></i>
-                <h3>Keine Identitäten gefunden</h3>
-                <p class="text-muted">Fügen Sie neue Identitäten hinzu, um Gesichter zu kategorisieren.</p>
+                <h3>{{ t "identities.none_found" }}</h3>
+                <p class="text-muted">{{ t "identities.add_new_hint" }}</p>
                 <button class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#createIdentityModal">
-                    <i class="bi bi-person-plus"></i> Erste Identität erstellen
+                    <i class="bi bi-person-plus"></i> {{ t "identities.create_first" }}
                 </button>
             </div>
         </div>
@@ -90,13 +92,13 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="createIdentityModalLabel">Neue Identität erstellen</h5>
+                        <h5 class="modal-title" id="createIdentityModalLabel">{{ t "identities.create_new" }}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <form id="createIdentityForm" action="/api/identities" method="POST">
                         <div class="modal-body">
                             <div class="mb-3">
-                                <label for="identityName" class="form-label">Name</label>
+                                <label for="identityName" class="form-label">{{ t "common.name" }}</label>
                                 <input type="text" class="form-control" id="identityName" name="name" required>
                             </div>
                             <div class="mb-3">
@@ -105,8 +107,8 @@
                             </div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                            <button type="button" class="btn btn-primary" id="submitIdentityBtn">Erstellen</button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t "common.cancel" }}</button>
+                            <button type="button" class="btn btn-primary" id="submitIdentityBtn">{{ t "common.create" }}</button>
                         </div>
                     </form>
                 </div>
@@ -118,16 +120,16 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="deleteIdentityModalLabel">Identität löschen</h5>
+                        <h5 class="modal-title" id="deleteIdentityModalLabel">{{ t "identities.delete_identity" }}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p>Sind Sie sicher, dass Sie die Identität <strong id="deleteIdentityName"></strong> löschen möchten?</p>
-                        <p class="text-danger">Diese Aktion kann nicht rückgängig gemacht werden. Alle Zuordnungen zu dieser Identität werden entfernt.</p>
+                        <p>{{ t "identities.delete_confirm" }} <strong id="deleteIdentityName"></strong>? {{ t "common.action_irreversible" }}</p>
+                        <p class="text-danger">{{ t "identities.delete_warning" }}</p>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                        <button type="button" id="confirmDeleteIdentityBtn" class="btn btn-danger">Löschen</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t "common.abort" }}</button>
+                        <button type="button" id="confirmDeleteIdentityBtn" class="btn btn-danger">{{ t "common.delete" }}</button>
                     </div>
                 </div>
             </div>
@@ -139,12 +141,14 @@
 
     <footer class="bg-light mt-5 py-3">
         <div class="container text-center">
-            <p class="mb-0 text-muted">Double-Take Go &copy; 2025</p>
+            <p class="mb-0 text-muted">{{ t "footer.copyright" }} &copy; 2025</p>
         </div>
     </footer>
 
     <!-- JavaScript Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Globale Funktionen -->
+    <script src="/static/js/global.js"></script>
     <script>
         // Toast-Benachrichtigungen anstelle von alert()
         function showToast(type, title, message) {

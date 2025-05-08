@@ -5,11 +5,14 @@ go 1.24 // Aktualisiert für das neue Docker-Image
 require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // Added MQTT client library
 	github.com/gin-contrib/cors v1.4.0
+	// github.com/gin-contrib/sessions v0.0.3 // temporär auskommentiert wegen Build-Problemen
 	github.com/gin-gonic/gin v1.10.0
 	github.com/glebarez/sqlite v1.11.0
+	// github.com/nicksnyder/go-i18n/v2 v2.4.0 // temporär auskommentiert wegen Build-Problemen
 	github.com/shirou/gopsutil/v3 v3.24.4 // Added für CPU-Statistiken
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.20.1
+	golang.org/x/text v0.23.0 // Added für Sprachunterstützung
 	gorm.io/datatypes v1.2.5
 	gorm.io/gorm v1.26.0
 )

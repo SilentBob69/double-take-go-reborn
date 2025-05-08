@@ -3,32 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Double Take - Diagnostics</title>
+    <title>{{ t "app.name" }} - {{ t "diagnostics.title" }}</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- Globale Styles -->
+    <link rel="stylesheet" href="/static/css/global.css">
+
 </head>
 <body>
     {{template "_navbar.html" .}}
 
     <div class="container mt-4">
-        <h2>Diagnostics</h2>
+        <h2>{{ t "diagnostics.title" }}</h2>
 
         <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
             {{/* Configuration Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
-                    <div class="card-header">Configuration</div>
+                    <div class="card-header">{{ t "diagnostics.system_info" }}</div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Frigate URL
+                            {{ t "diagnostics.frigate" }} URL
                             <span><code>{{.Config.FrigateURL}}</code></span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             MQTT
                             <span class="badge {{if .Config.MQTTEnabled}}bg-success{{else}}bg-secondary{{end}}">
-                                {{if .Config.MQTTEnabled}}Enabled{{else}}Disabled{{end}}
+                                {{if .Config.MQTTEnabled}}{{ t "diagnostics.enabled" }}{{else}}{{ t "diagnostics.disabled" }}{{end}}
                             </span>
                         </li>
                         {{if .Config.MQTTEnabled}}
@@ -44,7 +47,7 @@
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             CompreFace
                             <span class="badge {{if .Config.CompreEnabled}}bg-success{{else}}bg-secondary{{end}}">
-                                {{if .Config.CompreEnabled}}Enabled{{else}}Disabled{{end}}
+                                {{if .Config.CompreEnabled}}{{ t "diagnostics.enabled" }}{{else}}{{ t "diagnostics.disabled" }}{{end}}
                             </span>
                         </li>
                          {{if .Config.CompreEnabled}}
@@ -68,31 +71,31 @@
             {{/* Database Stats Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
-                    <div class="card-header">Database</div>
+                    <div class="card-header">{{ t "diagnostics.database" }}</div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Images
+                            {{ t "common.images" }}
                             <span class="badge bg-primary">{{.DBStats.ImageCount}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Faces
+                            {{ t "common.faces" }}
                             <span class="badge bg-primary">{{.DBStats.FaceCount}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Identities
+                            {{ t "common.identities" }}
                             <span class="badge bg-primary">{{.DBStats.IdentityCount}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Database Size
+                            {{ t "diagnostics.database_size" }}
                             <span>{{.DBStats.DBSize}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Last Detection
-                            <span>{{if not .DBStats.LastDetection.IsZero}}{{formatDateTime .DBStats.LastDetection}}{{else}}Never{{end}}</span>
+                            {{ t "diagnostics.last_detection" }}
+                            <span>{{if not .DBStats.LastDetection.IsZero}}{{formatDateTime .DBStats.LastDetection}}{{else}}{{ t "common.never" }}{{end}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Last Recognition
-                            <span>{{if not .DBStats.LastRecognition.IsZero}}{{formatDateTime .DBStats.LastRecognition}}{{else}}Never{{end}}</span>
+                            {{ t "diagnostics.last_recognition" }}
+                            <span>{{if not .DBStats.LastRecognition.IsZero}}{{formatDateTime .DBStats.LastRecognition}}{{else}}{{ t "common.never" }}{{end}}</span>
                         </li>
                     </ul>
                 </div>
@@ -104,14 +107,14 @@
             <div class="col">
                 <div class="card h-100 shadow-sm">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>System-Statistiken</span>
+                        <span>{{ t "diagnostics.system_stats" }}</span>
                         <button class="btn btn-sm btn-outline-primary" id="refreshSystemStats">
-                            <i class="bi bi-arrow-clockwise"></i> Aktualisieren
+                            <i class="bi bi-arrow-clockwise"></i> {{ t "common.refresh" }}
                         </button>
                     </div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            CPU-Kerne
+                            {{ t "diagnostics.cpu_cores" }}
                             <span class="badge bg-primary rounded-pill">{{.SystemStats.CPUs}}</span>
                         </li>
                         <li class="list-group-item">
@@ -121,31 +124,20 @@
                             </div>
                             <div class="progress" style="height: 10px;">
                                 <div 
-                                    {{if lt .SystemStats.CPUUsage 50.0}}
-                                        class="progress-bar bg-success"
-                                    {{else if lt .SystemStats.CPUUsage 80.0}}
-                                        class="progress-bar bg-warning"
-                                    {{else}}
-                                        class="progress-bar bg-danger"
-                                    {{end}}
-                                    role="progressbar" 
-                                    style="width: {{.SystemStats.CPUUsage}}%" 
-                                    aria-valuenow="{{.SystemStats.CPUUsage}}" 
-                                    aria-valuemin="0" 
-                                    aria-valuemax="100">
+                                    {{if lt .SystemStats.CPUUsage 50.0}} class="progress-bar bg-success" {{else if lt .SystemStats.CPUUsage 80.0}} class="progress-bar bg-warning" {{else}} class="progress-bar bg-danger" {{end}} role="progressbar" style="width: {{.SystemStats.CPUUsage}}%" aria-valuenow="{{.SystemStats.CPUUsage}}" aria-valuemin="0" aria-valuemax="100">
                                 </div>
                             </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Goroutines
+                            {{ t "diagnostics.goroutines" }}
                             <span class="badge bg-primary rounded-pill">{{.SystemStats.GoRoutines}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Speicher (Allokiert)
+                            {{ t "diagnostics.memory_alloc" }}
                             <span>{{.SystemStats.MemoryAlloc}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Speicher (System)
+                            {{ t "diagnostics.memory_sys" }}
                             <span>{{.SystemStats.MemorySys}}</span>
                         </li>
                     </ul>
@@ -155,22 +147,22 @@
             {{/* Worker Pool Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
-                    <div class="card-header">Worker-Pool</div>
+                    <div class="card-header">{{ t "diagnostics.worker_pool" }}</div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Anzahl Worker
-                            <span class="badge bg-primary rounded-pill">{{.SystemStats.WorkerCount}}</span>
+                            {{ t "diagnostics.workers" }}
+                            <span class="badge bg-info rounded-pill">{{.SystemStats.WorkerCount}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Aktive Jobs
-                            <span class="badge bg-success rounded-pill">{{.SystemStats.ActiveJobs}}</span>
+                            {{ t "diagnostics.memory_usage" }}
+                            <span class="badge bg-primary rounded-pill">{{.SystemStats.MemoryUsageStr}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Queue-Kapazität
+                            {{ t "diagnostics.queue" }}
                             <span class="badge bg-info rounded-pill">{{.SystemStats.QueueCapacity}}</span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
-                            Letzte Aktualisierung
+                            {{ t "diagnostics.last_update" }}
                             <span>{{formatDateTime .SystemStats.Timestamp}}</span>
                         </li>
                     </ul>
@@ -182,18 +174,18 @@
             {{/* Services Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
-                    <div class="card-header">External Services</div>
+                    <div class="card-header">{{ t "diagnostics.external_services" }}</div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             CompreFace
                             <span class="badge {{if eq .Services.CompreFace "Verbunden"}}bg-success{{else if eq .Services.CompreFace "Aktiviert"}}bg-success{{else if eq .Services.CompreFace "Deaktiviert"}}bg-secondary{{else}}bg-warning{{end}}">
-                                {{.Services.CompreFace}}
+                                {{ t (printf "diagnostics.%s" .Services.CompreFace) }}
                             </span>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             MQTT
                             <span class="badge {{if eq .Services.MQTT "Verbunden"}}bg-success{{else if eq .Services.MQTT "Aktiviert"}}bg-success{{else if eq .Services.MQTT "Deaktiviert"}}bg-secondary{{else}}bg-warning{{end}}">
-                                {{.Services.MQTT}}
+                                {{ t (printf "diagnostics.%s" .Services.MQTT) }}
                             </span>
                         </li>
                     </ul>
@@ -206,12 +198,12 @@
             <div class="col">
                 <div class="card shadow-sm">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>CompreFace Subjects ({{len .CompreFaceSubjects}})</span>
-                        <span class="badge bg-info">Trainierte Personen</span>
+                        <span>{{ t "diagnostics.compreface_subjects" }} ({{len .CompreFaceSubjects}})</span>
+                        <span class="badge bg-info">{{ t "diagnostics.trained_persons" }}</span>
                     </div>
                     <div class="card-body">
                         {{if eq (len .CompreFaceSubjects) 0}}
-                            <p class="card-text text-muted">Keine trainierten Personen in CompreFace gefunden.</p>
+                            <p class="card-text text-muted">{{ t "diagnostics.no_trained_persons" }}</p>
                         {{else}}
                             <div class="row row-cols-1 row-cols-md-3 g-4">
                                 {{range .CompreFaceSubjects}}
@@ -235,6 +227,8 @@
 
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Globale Funktionen -->
+    <script src="/static/js/global.js"></script>
     
     <script>
         // JavaScript für die Aktualisierung der Systemstatistiken

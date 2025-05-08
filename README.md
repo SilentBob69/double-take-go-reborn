@@ -113,6 +113,9 @@ Die Hauptkonfigurationsdatei ist `config.yaml`. Wichtige Einstellungen sind:
 - **Toast-Benachrichtigungen**: Moderne, nicht-blockierende Benachrichtigungen für Systemereignisse und Benutzeraktionen.
 - **Verbesserte Diagnostics-Seite**: Zeigt detaillierte Informationen über das System, die Datenbank und die CompreFace-Integration.
 - **Bild-Neuverarbeitung**: Bilder können jetzt direkt aus der Benutzeroberfläche neu verarbeitet werden.
+- **Vollständige Mehrsprachigkeit**: Komplette Unterstützung für Deutsch und Englisch in allen Teilen der Benutzeroberfläche mit Sprachauswahl und persistenter Speicherung der Spracheinstellung.
+- **Verbesserte Navigation**: Fixierte Navigationsleiste für bessere Benutzerfreundlichkeit und Konsistenz über alle Seiten hinweg.
+- **Scrollposition-Erhaltung**: Bei Sprachumschaltung bleibt die Scrollposition erhalten, was die Benutzerfreundlichkeit erhöht.
 
 ## API-Dokumentation
 

@@ -8,7 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
+	"encoding/json"
 
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/core/models"
@@ -20,17 +23,86 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"encoding/json"
 )
 
 // WebHandler behandelt Anfragen für die Weboberfläche
 type WebHandler struct {
 	db          *gorm.DB
 	cfg         *config.Config
-	templates   *template.Template
+	templates   *template.Template // Alle Template mit Standardfunktionen
 	sseHub      *sse.Hub
 	workerPool  *processor.WorkerPool // Zugriff auf den Worker-Pool
 	compreface  *compreface.Client    // Zugriff auf den CompreFace-Client
+	translations map[string]map[string]string // Cache für Übersetzungen
+	transMutex  sync.RWMutex               // Mutex für thread-sicheren Zugriff
+	activeLanguage string                 // Aktuelle Sprache für Standardanzeige
+}
+
+// loadTranslations lädt Übersetzungen aus JSON-Dateien
+func loadTranslations(language string) (map[string]string, error) {
+	// Prüfen, ob eine gültige Sprache angegeben wurde
+	if language != "de" && language != "en" {
+		language = "de" // Fallback auf Deutsch
+	}
+	
+	// Pfad zur Übersetzungsdatei (auf absoluten Pfad im Docker-Container setzen)
+	filePath := filepath.Join("/app/web/locales", language+".json")
+	
+	// Zusätzliche Debug-Ausgabe
+	log.Debugf("Versuche Übersetzungsdatei zu laden: %s", filePath)
+	
+	// Prüfen, ob die Datei existiert
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Versuche es mit relativen Pfad für lokale Entwicklung
+		alternativePath := filepath.Join("./web/locales", language+".json")
+		log.Debugf("Datei nicht gefunden, versuche alternativen Pfad: %s", alternativePath)
+		
+		if _, err := os.Stat(alternativePath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("translation file not found at %s or %s", filePath, alternativePath)
+		}
+		
+		filePath = alternativePath
+	}
+	
+	// Datei lesen
+	fileData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading translation file %s: %w", filePath, err)
+	}
+	
+	// JSON-Daten parsen
+	var data map[string]interface{}
+	if err := json.Unmarshal(fileData, &data); err != nil {
+		return nil, fmt.Errorf("error parsing JSON in %s: %w", filePath, err)
+	}
+	
+	// Flache Map erstellen für einfacheren Zugriff
+	translations := make(map[string]string)
+	flattenTranslations(data, "", translations)
+	
+	log.Debugf("Erfolgreich %d Übersetzungen für Sprache %s geladen", len(translations), language)
+	return translations, nil
+}
+
+// flattenTranslations konvertiert verschachtelte JSON-Struktur in flache Map
+func flattenTranslations(data map[string]interface{}, prefix string, result map[string]string) {
+	for key, value := range data {
+		newKey := key
+		if prefix != "" {
+			newKey = prefix + "." + key
+		}
+		
+		switch v := value.(type) {
+		case string:
+			result[newKey] = v
+			log.Debugf("Flache Übersetzung hinzugefügt: %s = %s", newKey, v)
+		case map[string]interface{}:
+			log.Debugf("Verschachtelte Map gefunden für Schlüssel: %s", newKey)
+			flattenTranslations(v, newKey, result)
+		default:
+			log.Warnf("Unbekannter Typ für Schlüssel %s: %T", newKey, v)
+		}
+	}
 }
 
 // PageData ist eine Basisstruktur für Templatedaten
@@ -49,6 +121,21 @@ func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool 
 		sseHub:      sseHub,
 		workerPool:  workerPool,
 		compreface:  compreFaceClient,
+		translations: make(map[string]map[string]string),
+	}
+
+	// Übersetzungen vorab laden
+	deTranslations, err := loadTranslations("de")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load default translations: %w", err)
+	}
+	h.translations["de"] = deTranslations
+
+	enTranslations, err := loadTranslations("en")
+	if err != nil {
+		log.Warnf("Failed to load English translations: %v", err)
+	} else {
+		h.translations["en"] = enTranslations
 	}
 
 	// Templates laden
@@ -59,12 +146,51 @@ func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool 
 	return h, nil
 }
 
-// loadTemplates lädt alle HTML-Templates
+// loadTemplates lädt alle HTML-Templates mit der Übersetzungsfunktion
 func (h *WebHandler) loadTemplates() error {
 	log.Infof("Loading templates from %s", h.cfg.Server.TemplateDir)
 
+	// Setze die Standard-Sprache
+	h.activeLanguage = "de"
+
+	// Übersetzungsfunktion definieren
+	tFunc := func(key string) string {
+		// Get active language from handler instance
+		lang := h.activeLanguage
+		
+		// Try to get translation for active language
+		h.transMutex.RLock()
+		defer h.transMutex.RUnlock()
+		
+		translations, exists := h.translations[lang]
+		if !exists {
+			// Fall back to German if language not found
+			translations = h.translations["de"]
+		}
+		
+		// Return translation or key if not found
+		if translations != nil {
+			if val, ok := translations[key]; ok {
+				return val
+			}
+		}
+		
+		// For English, try falling back to German as second attempt
+		if lang == "en" {
+			if deTranslations, ok := h.translations["de"]; ok {
+				if val, ok := deTranslations[key]; ok {
+					return val
+				}
+			}
+		}
+		
+		return key
+	}
+
 	// Template-Funktionen definieren
 	funcMap := template.FuncMap{
+		// Übersetzungsfunktion
+		"t": tFunc,
 		"formatTime": func(t time.Time) string {
 			return t.Format("02.01.2006 15:04:05")
 		},
@@ -83,28 +209,42 @@ func (h *WebHandler) loadTemplates() error {
 		"add": func(a, b int) int {
 			return a + b
 		},
+		"sub": func(a, b int) int {
+			return a - b
+		},
+		// Alias für die Subtraktion (wird in den Templates verwendet)
 		"subtract": func(a, b int) int {
 			return a - b
 		},
-		"paginationRange": func(current, total int) []int {
-			start := current - 2
+		"formatBytes": utils.FormatBytes,
+		"paginationRange": func(currentPage, totalPages, maxPages int) []int {
+			if totalPages <= maxPages {
+				// Wenn die Gesamtseitenzahl kleiner ist als die maximale Anzahl angezeigter Seiten,
+				// zeige einfach alle Seiten an
+				pages := make([]int, totalPages)
+				for i := 0; i < totalPages; i++ {
+					pages[i] = i + 1
+				}
+				return pages
+			}
+
+			// Berechne Start- und Endseite
+			half := maxPages / 2
+			start := currentPage - half
 			if start < 1 {
 				start = 1
 			}
-			
-			end := start + 4
-			if end > total {
-				end = total
-			}
-			
-			if end-start < 4 && start > 1 {
-				start = end - 4
+			end := start + maxPages - 1
+			if end > totalPages {
+				end = totalPages
+				start = end - maxPages + 1
 				if start < 1 {
 					start = 1
 				}
 			}
-			
-			var pages []int
+
+			// Erstelle die Seitenbereichsarray
+			pages := make([]int, 0, end-start+1)
 			for i := start; i <= end; i++ {
 				pages = append(pages, i)
 			}
@@ -131,7 +271,7 @@ func (h *WebHandler) loadTemplates() error {
 	return nil
 }
 
-// renderTemplate rendert ein Template mit den gegebenen Daten
+// renderTemplate rendert ein Template mit den gegebenen Daten und berücksichtigt die Spracheinstellung
 func (h *WebHandler) renderTemplate(c *gin.Context, name string, data interface{}) {
 	// Prüfen, ob das Template existiert
 	if h.templates.Lookup(name) == nil {
@@ -147,10 +287,10 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data interface{
 	if dataMap, ok := data.(gin.H); ok {
 		templateData = dataMap
 	} else {
-		// Fallback, wenn data kein gin.H ist
+		// Wenn data kein gin.H ist, erstellen wir eine neue Map
 		templateData = gin.H{"Data": data}
 	}
-	
+
 	// Basisdaten hinzufügen, aber nur wenn nicht bereits vorhanden
 	if _, exists := templateData["Title"]; !exists {
 		templateData["Title"] = "Double-Take"
@@ -164,13 +304,72 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data interface{
 	if _, exists := templateData["Config"]; !exists {
 		templateData["Config"] = h.cfg
 	}
+	
+	// Sprachauswahl über lang-Parameter oder Cookie
+	language := "de" // Standardsprache Deutsch
+	
+	// 1. Zuerst URL-Parameter prüfen
+	langParam := c.Query("lang")
+	if langParam == "de" || langParam == "en" {
+		language = langParam
+		// Bei language-Parameter im URL immer den Cookie aktualisieren
+		log.Infof("Setze Sprache aus URL-Parameter auf: %s", language)
+		c.SetCookie("language", language, 3600*24*30, "/", "", false, false)
+	} else {
+		// 2. Wenn kein Parameter vorhanden, Cookie prüfen
+		lang, err := c.Cookie("language")
+		if err == nil && (lang == "de" || lang == "en") {
+			// Cookie vorhanden und gültige Sprache
+			language = lang
+			log.Infof("Verwende Sprache aus Cookie: %s", language)
+		} else {
+			// 3. Default-Sprache verwenden und neuen Cookie setzen
+			log.Infof("Verwende Standard-Sprache: %s", language)
+			c.SetCookie("language", language, 3600*24*30, "/", "", false, false)
+		}
+	}
 
+	// Sprache an Template übergeben für die Anzeige des aktiven Buttons
+	templateData["language"] = language
+
+	// Wichtig: Die aktuelle Sprache im WebHandler setzen, damit die t-Funktion (Closure) die richtige Sprache verwendet
+	h.activeLanguage = language
+	
+	// Übersetzungsfunktion zum Template hinzufügen
+	templateData["t"] = func(key string) string {
+		log.Debugf("Suche Übersetzung für Schlüssel: '%s' in Sprache: %s", key, language)
+		
+		if translations, ok := h.translations[language]; ok {
+			// Direkter Lookup in der flachen Map (flattenTranslations erstellt bereits eine flache Map)
+			if val, ok := translations[key]; ok {
+				log.Debugf("Übersetzung gefunden für '%s': '%s'", key, val)
+				return val
+			}
+			
+			// Debug: Zeige alle verfügbaren Schlüssel an, wenn der gesuchte nicht gefunden wurde
+			log.Warnf("Keine Übersetzung gefunden für Schlüssel: '%s'", key)
+			
+			// Versuche, ähnliche Schlüssel zu finden (zur Fehlersuche)
+			for k := range translations {
+				if strings.Contains(k, key) || strings.Contains(key, k) {
+					log.Debugf("Ähnlicher Schlüssel gefunden: '%s'", k)
+				}
+			}
+		}
+		
+		// Fallback auf den Schlüssel selbst, wenn keine Übersetzung gefunden wurde
+		return key
+	}
+
+	// Template mit Daten rendern
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	if err := h.templates.ExecuteTemplate(c.Writer, name, templateData); err != nil {
 		log.Errorf("Template execution error: %v", err)
 		c.String(http.StatusInternalServerError, "Template error: "+err.Error())
 		return
 	}
+
+	log.Infof("Template '%s' erfolgreich gerendert mit Sprache: %s", name, language)
 }
 
 // RegisterRoutes registriert alle Web-Routen

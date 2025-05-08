@@ -8,6 +8,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- Globale Styles -->
+    <link rel="stylesheet" href="/static/css/global.css">
     <style>
         /* Optional: Add some margin to the cards */
         .card {
@@ -49,19 +51,19 @@
 
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Recent Activity</h1>
-            <span class="badge bg-primary fs-5">{{ .Pagination.Total }} Ergebnisse</span>
+            <h1>{{ t "recent_activity" }}</h1>
+            <span class="badge bg-primary fs-5">{{ .Pagination.Total }} {{ t "common.results" }}</span>
         </div>
 
         <!-- Filter-Bereich -->
         <div class="card mb-4">
             <div class="card-header bg-secondary">
-                <h5 class="mb-0">Filter</h5>
+                <h5 class="mb-0">{{ t "filters.title" }}</h5>
             </div>
             <div class="card-body">
                 <form method="GET" action="/" class="row g-3">
                     <div class="col-md-3">
-                        <label for="source" class="form-label">Quelle</label>
+                        <label for="source" class="form-label">{{ t "filters.source" }}</label>
                         <select name="source" id="source" class="form-select">
                             <option value="">Alle</option>
                             {{range .Sources}}
@@ -70,42 +72,42 @@
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label for="hasfaces" class="form-label">Gesichter</label>
+                        <label for="hasfaces" class="form-label">{{ t "common.faces" }}</label>
                         <select name="hasfaces" id="hasfaces" class="form-select">
-                            <option value="">Alle</option>
-                            <option value="yes" {{if eq .Filter.HasFaces "yes"}}selected{{end}}>Mit Gesichtern</option>
-                            <option value="no" {{if eq .Filter.HasFaces "no"}}selected{{end}}>Ohne Gesichter</option>
+                            <option value="">{{ t "common.all" }}</option>
+                            <option value="yes" {{if eq .Filter.HasFaces "yes"}}selected{{end}}>{{ t "filters.with_faces" }}</option>
+                            <option value="no" {{if eq .Filter.HasFaces "no"}}selected{{end}}>{{ t "filters.without_faces" }}</option>
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label for="hasmatches" class="form-label">Matches</label>
+                        <label for="hasmatches" class="form-label">{{ t "common.matches" }}</label>
                         <select name="hasmatches" id="hasmatches" class="form-select">
-                            <option value="">Alle</option>
-                            <option value="yes" {{if eq .Filter.HasMatches "yes"}}selected{{end}}>Mit erkannten Identitäten</option>
-                            <option value="no" {{if eq .Filter.HasMatches "no"}}selected{{end}}>Ohne Identitäten</option>
+                            <option value="">{{ t "common.all" }}</option>
+                            <option value="yes" {{if eq .Filter.HasMatches "yes"}}selected{{end}}>{{ t "filters.with_identities" }}</option>
+                            <option value="no" {{if eq .Filter.HasMatches "no"}}selected{{end}}>{{ t "filters.without_identities" }}</option>
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label for="daterange" class="form-label">Zeitraum</label>
+                        <label for="daterange" class="form-label">{{ t "filters.date_range" }}</label>
                         <select name="daterange" id="daterange" class="form-select">
-                            <option value="">Alle</option>
-                            <option value="today" {{if eq .Filter.DateRange "today"}}selected{{end}}>Heute</option>
-                            <option value="yesterday" {{if eq .Filter.DateRange "yesterday"}}selected{{end}}>Gestern</option>
-                            <option value="week" {{if eq .Filter.DateRange "week"}}selected{{end}}>Letzte Woche</option>
-                            <option value="month" {{if eq .Filter.DateRange "month"}}selected{{end}}>Letzter Monat</option>
+                            <option value="">{{ t "common.all" }}</option>
+                            <option value="today" {{if eq .Filter.DateRange "today"}}selected{{end}}>{{ t "filters.today" }}</option>
+                            <option value="yesterday" {{if eq .Filter.DateRange "yesterday"}}selected{{end}}>{{ t "filters.yesterday" }}</option>
+                            <option value="week" {{if eq .Filter.DateRange "week"}}selected{{end}}>{{ t "filters.last_week" }}</option>
+                            <option value="month" {{if eq .Filter.DateRange "month"}}selected{{end}}>{{ t "filters.last_month" }}</option>
                         </select>
                     </div>
                     <div class="col-12 d-flex justify-content-between align-items-center">
                         <div>
                             <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-filter"></i> Filtern
+                                <i class="bi bi-filter-circle-fill me-1"></i> {{ t "common.filter" }}
                             </button>
                             <a href="/" class="btn btn-outline-secondary">
-                                <i class="bi bi-x-circle"></i> Zurücksetzen
+                                <i class="bi bi-x-circle-fill me-1"></i> {{ t "common.reset" }}
                             </a>
                         </div>
                         <button id="deleteAllButton" class="btn btn-danger">
-                            <i class="bi bi-trash3-fill me-1"></i> Alle Bilder löschen
+                            <i class="bi bi-trash3-fill me-1"></i> {{ t "images.delete_all" }}
                         </button>
                     </div>
                 </form>
@@ -117,11 +119,11 @@
             <div class="card shadow-sm bg-body-tertiary" id="image-card-{{.ID}}">
                 <img src="/snapshots/{{.FilePath}}" class="card-img-top" alt="Snapshot {{.ID}}">
                 <div class="card-body">
-                    <h5 class="card-title">Image ID: {{.ID}}</h5>
+                    <h5 class="card-title">{{ t "images.image_id" }}: {{.ID}}</h5>
                     <p class="card-text">
-                        <small class="text-muted">Timestamp: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
+                        <small class="text-muted">{{ t "images.timestamp" }}: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
                         {{if .Faces}}
-                            Detected Faces:
+                            {{ t "images.detected_faces" }}:
                             <ul>
                                 {{range .Faces}}
                                     <li>
@@ -142,7 +144,7 @@
                                 {{end}}
                             </ul>
                         {{else}}
-                            <span class="text-warning">No face detected</span>
+                            <span class="text-warning">{{ t "images.no_face" }}</span>
                         {{end}}
                     </p>
                     <button class="btn btn-danger btn-sm delete-btn" data-image-id="{{.ID}}" title="Delete Image">
@@ -157,10 +159,10 @@
         {{ end }}
 
         {{if not (or .ImagesWithFaces .ImagesWithoutFaces)}}
-            <p class="text-muted">No recent images found.</p>
+            <p class="text-muted">{{ t "no_images_yet" }}</p>
         {{else}}
             {{if .ImagesWithFaces}}
-                <h2 class="mt-4">Bilder mit erkannten Gesichtern</h2>
+                <h2>{{ t "images.title" }}</h2>
                 <div class="row" id="images-with-faces-container">
                     {{range .ImagesWithFaces}}
                         {{ template "imageCard" . }}
@@ -169,7 +171,7 @@
             {{end}}
 
             {{if .ImagesWithoutFaces}}
-                <h2 class="mt-5">Bilder ohne erkannte Gesichter</h2>
+                <h2>{{ t "images.title_without_faces" }}</h2>
                 <div class="row" id="images-without-faces-container">
                     {{range .ImagesWithoutFaces}}
                         {{ template "imageCard" . }}
@@ -184,7 +186,7 @@
             <ul class="pagination justify-content-center">
                 <li class="page-item {{ if eq .Pagination.Current 1 }}disabled{{ end }}">
                     <a class="page-link" href="/?page={{ subtract .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Previous">
-                        <span aria-hidden="true">&laquo;</span>
+                        <span aria-hidden="true">&laquo; {{ t "pagination.previous" }}</span>
                     </a>
                 </li>
                 
@@ -196,7 +198,7 @@
                 
                 <li class="page-item {{ if eq .Pagination.Current .Pagination.TotalPages }}disabled{{ end }}">
                     <a class="page-link" href="/?page={{ add .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Next">
-                        <span aria-hidden="true">&raquo;</span>
+                        <span aria-hidden="true">{{ t "pagination.next" }} &raquo;</span>
                     </a>
                 </li>
             </ul>
@@ -206,6 +208,8 @@
 
     <!-- Bootstrap Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Globale Funktionen -->
+    <script src="/static/js/global.js"></script>
 
     <script>
         // Function to create the card HTML (needed for SSE updates)
@@ -267,14 +271,14 @@
 
                     if (deleteButton) {
                         const imageId = deleteButton.dataset.imageId;
-                        if (confirm(`Are you sure you want to delete image ${imageId}?`)) {
+                        if (confirm(translations.deleteConfirm)) {
                             deleteImage(imageId);
                         }
                     } else if (recognizeButton) {
                         const imageId = recognizeButton.dataset.imageId;
                         recognizeImage(imageId);
                     } else if (deleteAllButton) { // Handle delete all
-                        if (confirm('WARNUNG: Sind Sie sicher, dass Sie ALLE Bilder und zugehörigen Daten löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden!')) {
+                        if (confirm('{{ t "images.delete_confirm_single" }}')) {
                             deleteAllImages();
                         }
                     } else if (editMatchButton) {
@@ -298,7 +302,7 @@
                  // Example: Create and append the container dynamically if needed
                  const h2 = document.createElement('h2');
                  h2.className = 'mt-4';
-                 h2.textContent = 'Bilder mit erkannten Gesichtern';
+                 h2.textContent = '{{ t "images.title" }}';
                  const newContainer = document.createElement('div');
                  newContainer.className = 'row';
                  newContainer.id = 'images-with-faces-container';
@@ -311,7 +315,7 @@
                  console.warn("'images-without-faces-container' not found, creating...");
                  const h2 = document.createElement('h2');
                  h2.className = 'mt-5';
-                 h2.textContent = 'Bilder ohne erkannte Gesichter';
+                 h2.textContent = '{{ t "images.title_without_faces" }}';
                  const newContainer = document.createElement('div');
                  newContainer.className = 'row';
                  newContainer.id = 'images-without-faces-container';
@@ -373,6 +377,7 @@
                 .then(response => {
                     if (response.ok) {
                         console.log(`Image ${imageId} deleted successfully.`);
+                        showToast(translations.success, `{{ t "images.deleted_success_single" }} ${imageId}`, 'success');
                         // Remove the card from the DOM
                         const card = document.getElementById(`image-card-${imageId}`);
                         if (card) {
@@ -385,13 +390,18 @@
                              }
                         }
                     } else {
-                        console.error(`Failed to delete image ${imageId}:`, response.statusText);
-                        alert(`Error deleting image ${imageId}: ${response.statusText}`);
+                        response.json().then(data => {
+                             console.error(`Failed to delete image ${imageId}:`, response.status, data.error);
+                             showToast(translations.error, `{{ t "images.delete_error_single" }}: ${data.error || '{{ t "common.unknown_error" }}'}`, 'error');
+                         }).catch(() => {
+                             console.error(`Failed to delete image ${imageId}:`, response.statusText);
+                             showToast(translations.error, '{{ t "common.server_error" }}', 'error');
+                         });
                     }
                 })
                 .catch(error => {
                     console.error('Error during delete request:', error);
-                    alert(`Network error deleting image ${imageId}. See console.`);
+                    showToast(translations.error, '{{ t "common.network_error" }}', 'error');
                 });
         }
 
@@ -400,20 +410,20 @@
                 .then(response => {
                     if (response.ok) {
                         console.log(`Re-recognition triggered for image ${imageId}.`);
-                        showToast('Erfolg', `Neuverarbeitung für Bild ${imageId} gestartet. Die Ansicht wird aktualisiert, sobald neue Ergebnisse vorliegen.`, 'success');
+                        showToast(translations.success, `{{ t "images.reprocess_started" }} ${imageId}`, 'success');
                     } else {
                         response.json().then(data => {
                              console.error(`Failed to trigger re-recognition for image ${imageId}:`, response.status, data.error);
-                             showToast('Fehler', `Neuverarbeitung für Bild ${imageId} fehlgeschlagen: ${data.error || response.statusText}`, 'error');
-                         }).catch(() => {
-                             console.error(`Failed to trigger re-recognition for image ${imageId}:`, response.statusText);
-                             showToast('Fehler', `Neuverarbeitung für Bild ${imageId} fehlgeschlagen: ${response.statusText}`, 'error');
+                             showToast(translations.error, `{{ t "images.reprocess_error" }}: ${data.error || '{{ t "common.unknown_error" }}'}`, 'error');
+                         }).catch(err => {
+                             console.error(`Error parsing response for image ${imageId}:`, err);
+                             showToast(translations.error, '{{ t "common.server_error" }}', 'error');
                          });
                     }
                 })
                 .catch(error => {
                     console.error('Error during recognize request:', error);
-                    showToast('Netzwerkfehler', `Netzwerkfehler bei der Neuverarbeitung von Bild ${imageId}.`, 'error');
+                    showToast(translations.error, '{{ t "common.network_error" }}', 'error');
                 });
         }
 
@@ -422,40 +432,25 @@
                 .then(response => {
                     if (response.ok) {
                         console.log('All images deleted successfully.');
+                        showToast(translations.success, '{{ t "images.deleted_all" }}', 'success');
                         // Remove all cards from both containers
                         const containerWithFaces = document.getElementById('images-with-faces-container');
                         const containerWithoutFaces = document.getElementById('images-without-faces-container');
                         if(containerWithFaces) containerWithFaces.innerHTML = '';
                         if(containerWithoutFaces) containerWithoutFaces.innerHTML = '';
-                        alert('Alle Bilder wurden gelöscht.');
-                         // Optionally, display a message like "No recent images found."
-                         const mainContainer = document.querySelector('.container'); // Adjust selector if needed
-                         if (mainContainer) {
-                             // Remove existing message if present
-                             const existingMsg = mainContainer.querySelector('.text-muted');
-                             if (existingMsg) existingMsg.remove();
-                             // Add new message
-                             const noImagesMsg = document.createElement('p');
-                             noImagesMsg.className = 'text-muted';
-                             noImagesMsg.textContent = 'No recent images found.';
-                             // Find a suitable place to append, e.g., after the h1 and delete button
-                             const h1 = mainContainer.querySelector('h1');
-                             if (h1) {
-                                 h1.insertAdjacentElement('afterend', noImagesMsg);
-                             }
-                         }
                     } else {
                          response.json().then(data => {
                              console.error('Failed to delete all images:', response.status, data.error);
-                            alert(`Fehler beim Löschen aller Bilder: ${data.error || response.statusText}`);
+                            showToast(translations.error, `{{ t "images.delete_error_all" }}: ${data.error || '{{ t "common.unknown_error" }}'}`, 'error');
                          }).catch(() => {
                              console.error('Failed to delete all images:', response.statusText);
-                            alert(`Fehler beim Löschen aller Bilder: ${response.statusText}`);
+                            showToast(translations.error, '{{ t "common.server_error" }}', 'error');
                         });
                     }
                 })
                 .catch(error => {
                     console.error('Error during delete all request:', error);
+                    showToast(translations.error, '{{ t "common.network_error" }}', 'error');
                     alert('Netzwerkfehler beim Löschen aller Bilder. Siehe Konsole.');
                 });
         }
@@ -666,11 +661,11 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="identityModalLabel">Identität zuweisen/korrigieren</h5>
+                    <h5 class="modal-title" id="identityModalLabel">{{ t "identities.assign_identity" }}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Wähle die korrekte Identität für dieses Gesicht:</p>
+                    <p>{{ t "identities.correct_identity" }}:</p>
                     <select class="form-select" id="identitySelect" aria-label="Identity selection">
                         <!-- Options will be populated by JavaScript -->
                     </select>
@@ -678,8 +673,8 @@
                     <input type="hidden" id="modalObjectId">   <!-- Stores matchId or faceId -->
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-                    <button type="button" class="btn btn-primary" id="saveIdentityButton">Speichern</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t "common.cancel" }}</button>
+                    <button type="button" class="btn btn-primary" id="saveIdentityButton">{{ t "common.save" }}</button>
                 </div>
             </div>
         </div>

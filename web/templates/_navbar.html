@@ -1,5 +1,5 @@
 {{/* Define the navigation bar partial */}}
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 border-bottom border-secondary">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top border-bottom border-secondary">
     <div class="container-fluid">
         <a class="navbar-brand" href="/">{{ t "app.name" }}</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -26,8 +26,8 @@
             <!-- Sprachumschalter -->
             <div class="d-flex">
                 <div class="btn-group" role="group" aria-label="Language Selector">
-                    <a href="?lang=de" class="btn btn-sm {{if eq .language "de"}}btn-primary{{else}}btn-outline-light{{end}}" title="Deutsch">DE</a>
-                    <a href="?lang=en" class="btn btn-sm {{if eq .language "en"}}btn-primary{{else}}btn-outline-light{{end}}" title="English">EN</a>
+                    <a href="javascript:void(0)" onclick="changeLanguage('de')" class="btn btn-sm {{if eq .language "de"}}btn-primary{{else}}btn-outline-light{{end}}" title="Deutsch">DE</a>
+                    <a href="javascript:void(0)" onclick="changeLanguage('en')" class="btn btn-sm {{if eq .language "en"}}btn-primary{{else}}btn-outline-light{{end}}" title="English">EN</a>
                 </div>
             </div>
         </div>

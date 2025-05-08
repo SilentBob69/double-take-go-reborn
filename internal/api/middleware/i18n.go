@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,7 +49,7 @@ func NewTranslator(config I18nConfig) (*Translator, error) {
 	}
 
 	// Alle Übersetzungsdateien laden
-	localeFiles, err := ioutil.ReadDir(config.LocalesDir)
+	localeFiles, err := os.ReadDir(config.LocalesDir)
 	if err != nil {
 		return nil, err
 	}

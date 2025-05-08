@@ -22,7 +22,7 @@
 {{ define "content" }}
 <div class="row">
     <div class="col-12">
-        <h1 class="mb-4">Dashboard</h1>
+        <h1 class="mb-4">{{ t "dashboard" }}</h1>
     </div>
 </div>
 
@@ -31,7 +31,7 @@
         <div class="card stats-card bg-primary text-white">
             <div class="card-body text-center">
                 <h2>{{ .Stats.ImageCount }}</h2>
-                <p class="card-text">Bilder</p>
+                <p class="card-text">{{ t "images" }}</p>
             </div>
         </div>
     </div>
@@ -39,7 +39,7 @@
         <div class="card stats-card bg-success text-white">
             <div class="card-body text-center">
                 <h2>{{ .Stats.FaceCount }}</h2>
-                <p class="card-text">Gesichter</p>
+                <p class="card-text">{{ t "faces" }}</p>
             </div>
         </div>
     </div>
@@ -47,7 +47,7 @@
         <div class="card stats-card bg-info text-white">
             <div class="card-body text-center">
                 <h2>{{ .Stats.IdentityCount }}</h2>
-                <p class="card-text">Identitäten</p>
+                <p class="card-text">{{ t "identities" }}</p>
             </div>
         </div>
     </div>
@@ -55,7 +55,7 @@
         <div class="card stats-card bg-warning text-white">
             <div class="card-body text-center">
                 <h2>{{ .Stats.MatchCount }}</h2>
-                <p class="card-text">Matches</p>
+                <p class="card-text">{{ t "matches" }}</p>
             </div>
         </div>
     </div>
@@ -65,7 +65,7 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5>Letzte Aktivität</h5>
+                <h5>{{ t "recent_activity" }}</h5>
             </div>
             <div class="card-body">
                 <div class="chart-container">
@@ -77,7 +77,7 @@
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
-                <h5>Top Kameras</h5>
+                <h5>{{ t "top_cameras" }}</h5>
             </div>
             <div class="card-body">
                 <div class="chart-container">
@@ -92,8 +92,8 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5>Neueste Bilder</h5>
-                <a href="/images" class="btn btn-sm btn-primary">Alle anzeigen</a>
+                <h5>{{ t "latest_images" }}</h5>
+                <a href="/images" class="btn btn-sm btn-primary">{{ t "show_all" }}</a>
             </div>
             <div class="card-body">
                 <div class="row recent-images" data-image-container data-sse-updates>
@@ -102,18 +102,18 @@
                         <div class="col-md-3 mb-4">
                             <div class="card">
                                 <a href="/images/{{ .ID }}">
-                                    <img src="/snapshots/{{ .FilePath }}" class="card-img-top img-fluid" alt="Bild">
+                                    <img src="/snapshots/{{ .FilePath }}" class="card-img-top img-fluid" alt="{{ t "image" }}">
                                 </a>
                                 <div class="card-body">
                                     <p class="card-text">
                                         <small class="text-muted">{{ .Source }} - {{ formatTime .DetectedAt }}</small>
                                     </p>
                                     <p class="card-text">
-                                        <span class="badge bg-info">{{ .FaceCount }} Gesichter</span>
+                                        <span class="badge bg-info">{{ .FaceCount }} {{ t "faces" }}</span>
                                         {{ if .HasMatches }}
-                                        <span class="badge bg-success">Erkannt</span>
+                                        <span class="badge bg-success">{{ t "recognized" }}</span>
                                         {{ else }}
-                                        <span class="badge bg-secondary">Unbekannt</span>
+                                        <span class="badge bg-secondary">{{ t "unknown" }}</span>
                                         {{ end }}
                                     </p>
                                 </div>
@@ -122,7 +122,7 @@
                         {{ end }}
                     {{ else }}
                         <div class="col-12 text-center py-5">
-                            <p>Noch keine Bilder vorhanden.</p>
+                            <p>{{ t "no_images_yet" }}</p>
                         </div>
                     {{ end }}
                 </div>
@@ -134,15 +134,20 @@
 
 {{ define "scripts" }}
 <script>
+    // Define translations as JavaScript variables
+    const translations = {
+        detectedImages: "{{ t "detected_images" }}"
+    };
+    
     document.addEventListener('DOMContentLoaded', function() {
-        // Aktivitätsdiagramm
+        // Activity Chart
         const activityCtx = document.getElementById('activityChart').getContext('2d');
         new Chart(activityCtx, {
             type: 'line',
             data: {
                 labels: {{ .ActivityChartLabels }},
                 datasets: [{
-                    label: 'Erkannte Bilder',
+                    label: translations.detectedImages,
                     data: {{ .ActivityChartData }},
                     borderColor: 'rgba(75, 192, 192, 1)',
                     backgroundColor: 'rgba(75, 192, 192, 0.2)',
@@ -164,7 +169,7 @@
             }
         });
 
-        // Kamera-Diagramm
+        // Camera Chart
         const cameraCtx = document.getElementById('cameraChart').getContext('2d');
         new Chart(cameraCtx, {
             type: 'doughnut',

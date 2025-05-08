@@ -3,6 +3,7 @@
     "name": "Double Take Go",
     "title": "Double Take Go - Facial Recognition"
   },
+  "dashboard": "Dashboard",
   "nav": {
     "recent_activity": "Recent Activity",
     "diagnostics": "Diagnostics",
@@ -10,10 +11,18 @@
     "settings": "Settings"
   },
   "common": {
+    "images": "Images",
+    "faces": "Faces",
+    "identities": "Identities",
+    "matches": "Matches",
+    "image": "Image",
+    "recognized": "Recognized",
+    "unknown": "Unknown",
     "yes": "Yes",
     "no": "No",
     "save": "Save",
     "cancel": "Cancel",
+    "abort": "Cancel",
     "delete": "Delete",
     "edit": "Edit",
     "details": "Details",
@@ -28,7 +37,15 @@
     "success": "Success",
     "warning": "Warning",
     "info": "Information",
-    "all": "All"
+    "all": "All",
+    "name": "Name",
+    "create": "Create",
+    "action_irreversible": "This action cannot be undone",
+    "network_error": "Network error communicating with the server",
+    "server_error": "Error processing server response",
+    "unknown_error": "Unknown error",
+    "never": "Never",
+    "refresh": "Refresh"
   },
   "filters": {
     "title": "Filters",
@@ -47,15 +64,24 @@
   },
   "images": {
     "title": "Images",
+    "title_without_faces": "Images without Detected Faces",
     "delete_all": "Delete All Images",
     "delete_confirm": "Are you sure you want to delete all images?",
+    "delete_confirm_single": "Are you sure you want to delete this image?",
     "delete_success": "Images successfully deleted",
     "delete_error": "Error deleting images",
+    "delete_error_single": "Error deleting image",
+    "delete_error_all": "Error deleting all images",
+    "deleted_success_single": "Image successfully deleted",
+    "deleted_all": "All images have been deleted",
     "no_face": "No face detected",
     "detected_faces": "Detected Faces",
     "timestamp": "Timestamp",
     "image_id": "Image ID",
     "reprocess": "Reprocess",
+    "reprocess_success": "Reprocessing successful",
+    "reprocess_error": "Error reprocessing image",
+    "reprocess_started": "Reprocessing started for image",
     "source": "Source",
     "delete_image": "Delete Image",
     "reprocess_image": "Reprocess Faces"
@@ -63,6 +89,7 @@
   "identities": {
     "title": "Identities",
     "add_new": "New Identity",
+    "new_identity": "New Identity",
     "edit_identity": "Edit Identity",
     "delete_identity": "Delete Identity",
     "name": "Name",
@@ -72,17 +99,31 @@
     "confidence": "Confidence",
     "assign_identity": "Assign Identity",
     "correct_identity": "Correct Identity",
-    "unknown_face": "Unknown Face"
+    "unknown_face": "Unknown Face",
+    "recognitions": "Recognitions",
+    "none_found": "No Identities Found",
+    "add_new_hint": "Add new identities to categorize faces.",
+    "create_first": "Create First Identity",
+    "create_new": "Create New Identity",
+    "delete_confirm": "Are you sure you want to delete the identity",
+    "delete_warning": "This action cannot be undone. All associations to this identity will be removed."
   },
   "pagination": {
     "previous": "Previous",
     "next": "Next",
     "page": "Page"
   },
+  "latest_images": "Latest Images",
+  "recent_activity": "Recent Activity",
+  "top_cameras": "Top Cameras",
+  "show_all": "Show All",
+  "no_images_yet": "No images yet.",
+  "detected_images": "Detected Images",
   "diagnostics": {
     "title": "Diagnostics",
     "system_info": "System Information",
     "database": "Database",
+    "database_size": "Database Size",
     "memory_usage": "Memory Usage",
     "cpu_usage": "CPU Usage",
     "uptime": "Uptime",
@@ -92,6 +133,31 @@
     "compreface": "CompreFace",
     "mqtt": "MQTT",
     "frigate": "Frigate",
-    "homeassistant": "Home Assistant"
+    "homeassistant": "Home Assistant",
+    "system_stats": "System Statistics",
+    "worker_pool": "Worker Pool",
+    "workers": "Workers",
+    "cpu_cores": "CPU Cores",
+    "memory_alloc": "Memory (Allocated)",
+    "memory_sys": "Memory (System)",
+    "goroutines": "Goroutines",
+    "active_jobs": "Active Jobs",
+    "queue": "Queue Capacity",
+    "last_update": "Last Update",
+    "last_detection": "Last Detection",
+    "last_recognition": "Last Recognition",
+    "external_services": "External Services",
+    "compreface_subjects": "CompreFace Subjects",
+    "trained_persons": "Trained Persons",
+    "no_trained_persons": "No trained persons found in CompreFace",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "Verbunden": "Connected",
+    "Aktiviert": "Enabled",
+    "Deaktiviert": "Disabled",
+    "Fehler": "Error"
+  },
+  "footer": {
+    "copyright": "Double-Take Go"
   }
 }
