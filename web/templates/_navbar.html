@@ -25,9 +25,15 @@
             
             <!-- Sprachumschalter -->
             <div class="d-flex">
-                <div class="btn-group" role="group" aria-label="Language Selector">
-                    <a href="javascript:void(0)" onclick="changeLanguage('de')" class="btn btn-sm {{if eq .language "de"}}btn-primary{{else}}btn-outline-light{{end}}" title="Deutsch">DE</a>
-                    <a href="javascript:void(0)" onclick="changeLanguage('en')" class="btn btn-sm {{if eq .language "en"}}btn-primary{{else}}btn-outline-light{{end}}" title="English">EN</a>
+                <div class="language-selector">
+                    <a href="javascript:void(0)" onclick="changeLanguage('de')" class="language-item {{if eq .language "de"}}active{{end}}" title="Deutsch">
+                        <span class="flag-icon">🇩🇪</span>
+                        <span class="language-name">Deutsch</span>
+                    </a>
+                    <a href="javascript:void(0)" onclick="changeLanguage('en')" class="language-item {{if eq .language "en"}}active{{end}}" title="English">
+                        <span class="flag-icon">🇬🇧</span>
+                        <span class="language-name">English</span>
+                    </a>
                 </div>
             </div>
         </div>

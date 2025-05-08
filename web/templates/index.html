@@ -45,6 +45,8 @@
             background-color: #17a2b8 !important;
         }
     </style>
+    <!-- Bootstrap JS (wichtig für Tooltips) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </head>
 <body>
     {{template "_navbar.html" .}}
@@ -99,14 +101,14 @@
                     </div>
                     <div class="col-12 d-flex justify-content-between align-items-center">
                         <div>
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_filter" }}">
                                 <i class="bi bi-filter-circle-fill me-1"></i> {{ t "common.filter" }}
                             </button>
-                            <a href="/" class="btn btn-outline-secondary">
+                            <a href="/" class="btn btn-outline-secondary" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_reset" }}">
                                 <i class="bi bi-x-circle-fill me-1"></i> {{ t "common.reset" }}
                             </a>
                         </div>
-                        <button id="deleteAllButton" class="btn btn-danger">
+                        <button id="deleteAllButton" class="btn btn-danger" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_delete_all" }}">
                             <i class="bi bi-trash3-fill me-1"></i> {{ t "images.delete_all" }}
                         </button>
                     </div>
@@ -129,14 +131,14 @@
                                     <li>
                                         {{if .Matches}}
                                             {{range .Matches}}
-                                                <strong>{{.Identity.Name}}</strong> (Confidence: {{printf "%.2f" .Confidence}}%)
-                                                <button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="{{.ID}}" title="Match korrigieren">
+                                                <strong>{{.Identity.Name}}</strong> ({{ t "images.confidence" }}: {{printf "%.2f" .Confidence}}%)
+                                                <button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "identities.correct_match" }}">
                                                     <i class="bi bi-pencil-square"></i>
                                                 </button>
                                             {{end}}
                                         {{else}}
-                                            <em>Unknown Face</em>
-                                            <button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="{{.ID}}" title="Gesicht zuordnen">
+                                            <em>{{ t "common.unknown" }}</em>
+                                            <button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "identities.assign_face" }}">
                                                 <i class="bi bi-pencil-square"></i>
                                             </button>
                                         {{end}}
@@ -147,10 +149,10 @@
                             <span class="text-warning">{{ t "images.no_face" }}</span>
                         {{end}}
                     </p>
-                    <button class="btn btn-danger btn-sm delete-btn" data-image-id="{{.ID}}" title="Delete Image">
+                    <button class="btn btn-danger btn-sm delete-btn" data-image-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_delete" }}">
                         <i class="bi bi-trash"></i>
                     </button>
-                    <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="{{.ID}}" title="Re-recognize Faces">
+                    <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_reprocess" }}">
                         <i class="bi bi-arrow-repeat"></i>
                     </button>
                 </div>
@@ -212,21 +214,45 @@
     <script src="/static/js/global.js"></script>
 
     <script>
+        // Übersetzungen für JavaScript
+        const translations = {
+            success: '{{ t "common.success" }}',
+            error: '{{ t "common.error" }}',
+            warning: '{{ t "common.warning" }}',
+            info: '{{ t "common.info" }}',
+            deleteConfirm: '{{ t "images.delete_confirm_single" }}',
+            deleteAllConfirm: '{{ t "images.delete_confirm_all" }}',
+            noFace: '{{ t "images.no_face" }}',
+            detectedFaces: '{{ t "images.detected_faces" }}',
+            unknown: '{{ t "common.unknown" }}',
+            confidence: '{{ t "images.confidence" }}',
+            correctMatch: '{{ t "identities.correct_match" }}',
+            assignFace: '{{ t "identities.assign_face" }}',
+            imageId: '{{ t "images.image_id" }}',
+            timestamp: '{{ t "images.timestamp" }}',
+            tooltipDelete: '{{ t "images.tooltip_delete" }}',
+            tooltipReprocess: '{{ t "images.tooltip_reprocess" }}'
+        };
+        
+        // Debug-Ausgabe: Übersetzungen in der Konsole anzeigen
+        console.log('Current language:', '{{ .language }}');
+        console.log('Translations:', translations);
+        
         // Function to create the card HTML (needed for SSE updates)
         function createImageCardHTML(data) {
-            let facesHTML = '<span class="text-warning">No face detected</span>';
+            let facesHTML = `<span class="text-warning">${translations.noFace}</span>`;
             if (data.faces && data.faces.length > 0) {
-                facesHTML = 'Detected Faces:<ul>';
+                facesHTML = `${translations.detectedFaces}:<ul>`;
                 data.faces.forEach(face => {
                     facesHTML += '<li>';
                     if (face.matches && face.matches.length > 0) {
                         face.matches.forEach(match => {
-                            facesHTML += `<strong>${match.name}</strong> (Confidence: ${match.confidence.toFixed(2)}%)`;
-                            facesHTML += `<button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="${match.id}" title="Match korrigieren"><i class="bi bi-pencil-square"></i></button>`;
+                            facesHTML += `<strong>${match.name}</strong> (${translations.confidence}: ${match.confidence.toFixed(2)}%)`;
+                            facesHTML += `<button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="${match.id}" title="${translations.correctMatch}"><i class="bi bi-pencil-square"></i></button>`;
                         });
                     } else {
-                        facesHTML += '<em>Unknown Face</em>';
-                        facesHTML += `<button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="${face.id}" title="Gesicht zuordnen"><i class="bi bi-pencil-square"></i></button>`;
+                        facesHTML += `<em>${translations.unknown}</em>`;
+                        facesHTML += `<button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="${face.id}" title="${translations.assignFace}"><i class="bi bi-pencil-square"></i></button>`;
                     }
                     facesHTML += '</li>';
                 });
@@ -240,15 +266,15 @@
                     <div class="card shadow-sm bg-body-tertiary" id="image-card-${data.id}">
                         <img src="/snapshots/${data.filepath}" class="card-img-top" alt="Snapshot ${data.id}">
                         <div class="card-body">
-                            <h5 class="card-title">Image ID: ${data.id}</h5>
+                            <h5 class="card-title">${translations.imageId}: ${data.id}</h5>
                             <p class="card-text">
-                                <small class="text-muted">Timestamp: ${timestamp}</small><br>
+                                <small class="text-muted">${translations.timestamp}: ${timestamp}</small><br>
                                 ${facesHTML}
                             </p>
-                            <button class="btn btn-danger btn-sm delete-btn" data-image-id="${data.id}" title="Delete Image">
+                            <button class="btn btn-danger btn-sm delete-btn tooltip-enabled" data-image-id="${data.id}" data-bs-toggle="tooltip" data-bs-title="${translations.tooltipDelete}">
                                 <i class="bi bi-trash"></i>
                             </button>
-                            <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="${data.id}" title="Re-recognize Faces">
+                            <button class="btn btn-secondary btn-sm recognize-btn ms-1 tooltip-enabled" data-image-id="${data.id}" data-bs-toggle="tooltip" data-bs-title="${translations.tooltipReprocess}">
                                 <i class="bi bi-arrow-repeat"></i>
                             </button>
                         </div>
@@ -258,9 +284,34 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Combined event listener for both containers
-            const mainContainer = document.querySelector('.container'); // Or a more specific parent if needed
+            // Aktiviere Bootstrap-Tooltips
+            const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+            const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+            
+            // Event-Delegation für dynamisch hinzugefügte Tooltips und Event-Listener
+            const mainContainer = document.querySelector('.container');
             if (mainContainer) {
+                // MutationObserver, um auf hinzugefügte Elemente zu achten
+                const observer = new MutationObserver(mutations => {
+                    mutations.forEach(mutation => {
+                        if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                            // Prüfen auf neue Tooltip-Elemente
+                            mutation.addedNodes.forEach(node => {
+                                if (node.nodeType === 1) { // 1 = ELEMENT_NODE
+                                    const tooltips = node.querySelectorAll('.tooltip-enabled');
+                                    tooltips.forEach(el => {
+                                        new bootstrap.Tooltip(el);
+                                    });
+                                }
+                            });
+                        }
+                    });
+                });
+                
+                // Observer starten
+                observer.observe(mainContainer, { childList: true, subtree: true });
+                
+                // Event-Listeners für Buttons
                  mainContainer.addEventListener('click', (event) => {
                     const target = event.target;
                     const deleteButton = target.closest('.delete-btn');
@@ -277,8 +328,8 @@
                     } else if (recognizeButton) {
                         const imageId = recognizeButton.dataset.imageId;
                         recognizeImage(imageId);
-                    } else if (deleteAllButton) { // Handle delete all
-                        if (confirm('{{ t "images.delete_confirm_single" }}')) {
+                     } else if (deleteAllButton) { // Handle delete all
+                        if (confirm(translations.deleteAllConfirm)) {
                             deleteAllImages();
                         }
                     } else if (editMatchButton) {

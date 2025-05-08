@@ -4,4 +4,70 @@ body {
     padding-top: 70px; /* Abstand für die fixierte Navbar */
 }
 
+/* Sprachumschalter-Stile */
+.language-selector {
+    display: flex;
+    margin-left: 1rem;
+}
+
+.language-item {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    color: #f8f9fa;
+    text-decoration: none;
+    margin-left: 0.5rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.language-item:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.language-item.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.flag-icon {
+    margin-right: 0.5rem;
+    font-size: 1.2rem;
+}
+
+.language-name {
+    font-size: 0.85rem;
+}
+
+/* Toast-Stile */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+}
+
+.toast {
+    min-width: 250px;
+}
+
+.toast-success {
+    background-color: #28a745 !important;
+}
+
+.toast-error {
+    background-color: #dc3545 !important;
+}
+
+.toast-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.toast-info {
+    background-color: #17a2b8 !important;
+}
+
 /* Zusätzliche globale Stile hier hinzufügen */
