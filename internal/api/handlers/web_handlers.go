@@ -181,7 +181,7 @@ func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
 
 	// Routen registrieren
 	router.GET("/", h.handleIndex)
-	router.GET("/images", h.handleGallery)
+	// Die /images Route wurde in die Startseite integriert
 	router.GET("/identities", h.handleIdentities)
 	router.GET("/identities/:id", h.handleIdentityDetails)
 	router.POST("/identities/:id/addTrainingImage", h.handleAddTrainingImage)
@@ -194,15 +194,77 @@ func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/debug/system-stats", h.handleSystemStats)
 }
 
-// handleIndex zeigt die Hauptseite an
+// handleIndex zeigt die Hauptseite an mit integrierten Bildern und Filterfunktionen
 func (h *WebHandler) handleIndex(c *gin.Context) {
-	// Letzte Erkennungen mit Gesichtern abrufen
-	var recentImages []models.Image
-	if err := h.db.Preload("Faces.Matches.Identity").Order("created_at DESC").Limit(24).Find(&recentImages).Error; err != nil {
-		log.Errorf("Failed to fetch recent images: %v", err)
+	// Paginierung
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize := 24 // Größer als auf der alten Bilder-Seite, da dies die Hauptseite ist
+	offset := (page - 1) * pageSize
+
+	// Filter einlesen
+	sourceFilter := c.Query("source")
+	hasFacesFilter := c.Query("hasfaces")
+	hasMatchesFilter := c.Query("hasmatches")
+	dateRangeFilter := c.Query("daterange")
+
+	// Query vorbereiten
+	query := h.db.Model(&models.Image{}).Order("created_at DESC")
+
+	// Filter anwenden
+	if sourceFilter != "" {
+		query = query.Where("source = ?", sourceFilter)
 	}
-	
-	// Bilder in solche mit und ohne Gesichter aufteilen
+
+	// Filter für Bilder mit/ohne Gesichter
+	if hasFacesFilter == "yes" {
+		query = query.Where("EXISTS (SELECT 1 FROM faces WHERE faces.image_id = images.id)")
+	} else if hasFacesFilter == "no" {
+		query = query.Where("NOT EXISTS (SELECT 1 FROM faces WHERE faces.image_id = images.id)")
+	}
+
+	// Filter für Bilder mit/ohne Matches
+	if hasMatchesFilter == "yes" {
+		query = query.Where("EXISTS (SELECT 1 FROM faces JOIN matches ON faces.id = matches.face_id WHERE faces.image_id = images.id)")
+	} else if hasMatchesFilter == "no" {
+		query = query.Where("NOT EXISTS (SELECT 1 FROM faces JOIN matches ON faces.id = matches.face_id WHERE faces.image_id = images.id)")
+	}
+
+	// Zeitraumfilter
+	if dateRangeFilter != "" {
+		now := time.Now()
+		var startTime time.Time
+
+		switch dateRangeFilter {
+		case "today":
+			startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		case "yesterday":
+			yesterday := now.AddDate(0, 0, -1)
+			startTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, now.Location())
+			endTime := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			query = query.Where("created_at BETWEEN ? AND ?", startTime, endTime)
+			break // Sonderfall: Hier setzen wir Start- und Endzeit
+		case "week":
+			startTime = now.AddDate(0, 0, -7)
+		case "month":
+			startTime = now.AddDate(0, -1, 0)
+		}
+
+		if dateRangeFilter != "yesterday" { // Für yesterday haben wir bereits die BETWEEN-Abfrage gesetzt
+			query = query.Where("created_at >= ?", startTime)
+		}
+	}
+
+	// Zählen für Paginierung
+	var total int64
+	query.Count(&total)
+
+	// Bilder abrufen mit allen Filterungen
+	var recentImages []models.Image
+	if err := query.Preload("Faces.Matches.Identity").Offset(offset).Limit(pageSize).Find(&recentImages).Error; err != nil {
+		log.Errorf("Failed to fetch images: %v", err)
+	}
+
+	// Bilder in solche mit und ohne Gesichter aufteilen (für die Statistik-Karten)
 	var imagesWithFaces []models.Image
 	var imagesWithoutFaces []models.Image
 	
@@ -223,6 +285,10 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	h.db.Model(&models.Face{}).Count(&faceCount)
 	h.db.Model(&models.Identity{}).Count(&identityCount)
 
+	// Quellen für Filter abrufen
+	var sources []string
+	h.db.Model(&models.Image{}).Distinct().Pluck("source", &sources)
+
 	// Daten für das Template
 	data := gin.H{
 		"Images":            recentImages,
@@ -232,6 +298,21 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 		"FaceCount":         faceCount,
 		"IdentityCount":     identityCount,
 		"UpdatedAt":         time.Now(),
+		"Sources":           sources,
+		"Pagination":        gin.H{
+			"Current":     page,
+			"PageSize":    pageSize,
+			"Total":       total,
+			"TotalPages":  (total + int64(pageSize) - 1) / int64(pageSize),
+			"HasPrevious": page > 1,
+			"HasNext":     int64(page*pageSize) < total,
+		},
+		"Filter": gin.H{
+			"Source":     sourceFilter,
+			"HasFaces":   hasFacesFilter,
+			"HasMatches": hasMatchesFilter,
+			"DateRange":  dateRangeFilter,
+		},
 	}
 
 	h.renderTemplate(c, "index.html", data)

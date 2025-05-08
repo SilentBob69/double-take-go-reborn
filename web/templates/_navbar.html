@@ -19,10 +19,7 @@
                     {{/* Check if 'identities' page is active */}}
                     <a class="nav-link {{if eq .CurrentPage "identities"}}active{{end}}" {{if eq .CurrentPage "identities"}}aria-current="page"{{end}} href="/identities">Identitäten</a>
                 </li>
-                <li class="nav-item">
-                    {{/* Check if 'images' page is active */}}
-                    <a class="nav-link {{if eq .CurrentPage "images"}}active{{end}}" {{if eq .CurrentPage "images"}}aria-current="page"{{end}} href="/images">Bilder</a>
-                </li>
+                <!-- Bilder-Link entfernt und in Recent Activity integriert -->
                 <!-- Add other nav items here later -->
             </ul>
         </div>

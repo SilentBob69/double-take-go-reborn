@@ -48,13 +48,68 @@
     {{template "_navbar.html" .}}
 
     <div class="container mt-4">
-        <h1>Recent Activity</h1>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Recent Activity</h1>
+            <span class="badge bg-primary fs-5">{{ .Pagination.Total }} Ergebnisse</span>
+        </div>
 
-        <!-- Button to delete all images -->
-        <div class="mb-3 d-flex justify-content-end">
-            <button id="deleteAllButton" class="btn btn-danger">
-                <i class="bi bi-trash3-fill me-1"></i> Alle Bilder löschen
-            </button>
+        <!-- Filter-Bereich -->
+        <div class="card mb-4">
+            <div class="card-header bg-secondary">
+                <h5 class="mb-0">Filter</h5>
+            </div>
+            <div class="card-body">
+                <form method="GET" action="/" class="row g-3">
+                    <div class="col-md-3">
+                        <label for="source" class="form-label">Quelle</label>
+                        <select name="source" id="source" class="form-select">
+                            <option value="">Alle</option>
+                            {{range .Sources}}
+                                <option value="{{.}}" {{if eq $.Filter.Source .}}selected{{end}}>{{.}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="hasfaces" class="form-label">Gesichter</label>
+                        <select name="hasfaces" id="hasfaces" class="form-select">
+                            <option value="">Alle</option>
+                            <option value="yes" {{if eq .Filter.HasFaces "yes"}}selected{{end}}>Mit Gesichtern</option>
+                            <option value="no" {{if eq .Filter.HasFaces "no"}}selected{{end}}>Ohne Gesichter</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="hasmatches" class="form-label">Matches</label>
+                        <select name="hasmatches" id="hasmatches" class="form-select">
+                            <option value="">Alle</option>
+                            <option value="yes" {{if eq .Filter.HasMatches "yes"}}selected{{end}}>Mit erkannten Identitäten</option>
+                            <option value="no" {{if eq .Filter.HasMatches "no"}}selected{{end}}>Ohne Identitäten</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="daterange" class="form-label">Zeitraum</label>
+                        <select name="daterange" id="daterange" class="form-select">
+                            <option value="">Alle</option>
+                            <option value="today" {{if eq .Filter.DateRange "today"}}selected{{end}}>Heute</option>
+                            <option value="yesterday" {{if eq .Filter.DateRange "yesterday"}}selected{{end}}>Gestern</option>
+                            <option value="week" {{if eq .Filter.DateRange "week"}}selected{{end}}>Letzte Woche</option>
+                            <option value="month" {{if eq .Filter.DateRange "month"}}selected{{end}}>Letzter Monat</option>
+                        </select>
+                    </div>
+                    <div class="col-12 d-flex justify-content-between align-items-center">
+                        <div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-filter"></i> Filtern
+                            </button>
+                            <a href="/" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> Zurücksetzen
+                            </a>
+                        </div>
+                        <button id="deleteAllButton" class="btn btn-danger">
+                            <i class="bi bi-trash3-fill me-1"></i> Alle Bilder löschen
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         {{ define "imageCard" }}
@@ -122,6 +177,31 @@
                 </div>
             {{end}}
         {{end}}
+
+        <!-- Paginierung -->
+        {{ if gt .Pagination.TotalPages 1 }}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ if eq .Pagination.Current 1 }}disabled{{ end }}">
+                    <a class="page-link" href="/?page={{ subtract .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+                
+                {{ range $i := paginationRange .Pagination.Current .Pagination.TotalPages }}
+                <li class="page-item {{ if eq $i $.Pagination.Current }}active{{ end }}">
+                    <a class="page-link" href="/?page={{ $i }}{{ if $.Filter.Source }}&source={{ $.Filter.Source }}{{ end }}{{ if $.Filter.HasFaces }}&hasfaces={{ $.Filter.HasFaces }}{{ end }}{{ if $.Filter.HasMatches }}&hasmatches={{ $.Filter.HasMatches }}{{ end }}{{ if $.Filter.DateRange }}&daterange={{ $.Filter.DateRange }}{{ end }}">{{ $i }}</a>
+                </li>
+                {{ end }}
+                
+                <li class="page-item {{ if eq .Pagination.Current .Pagination.TotalPages }}disabled{{ end }}">
+                    <a class="page-link" href="/?page={{ add .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        {{ end }}
     </div>
 
     <!-- Bootstrap Bundle with Popper -->
