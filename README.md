@@ -126,6 +126,16 @@ Double-Take Go stellt eine umfangreiche REST-API bereit, mit der andere Anwendun
 
 Die API ermöglicht die Steuerung aller wichtigen Funktionen des Systems, einschließlich der Bildverarbeitung, Identitätsverwaltung und Systemfunktionen.
 
+## Feedback willkommen!
+
+Wir freuen uns über Ihr Interesse an Double-Take Go Reborn und laden Sie herzlich ein, Feedback zu geben, Fragen zu stellen oder Verbesserungsvorschläge einzureichen. Ihre Beiträge helfen uns, das Projekt kontinuierlich zu verbessern!
+
+- **Issues**: Haben Sie einen Fehler gefunden oder eine Idee für eine neue Funktion? [Erstellen Sie ein Issue](https://github.com/SilentBob69/double-take-go-reborn/issues/new)!
+- **Discussions**: Fragen zur Verwendung oder allgemeine Diskussionen finden im [Discussions-Bereich](https://github.com/SilentBob69/double-take-go-reborn/discussions) statt.
+- **Pull Requests**: Code-Beiträge sind sehr willkommen! Schauen Sie sich unsere [Beitragsrichtlinien](CONTRIBUTING.md) an.
+
+Jedes Feedback ist wertvoll, unabhängig davon, ob Sie ein erfahrener Entwickler sind oder das Projekt einfach nur ausprobieren möchten.
+
 ## Zukünftige Pläne
 
 - Verbesserung der Gesichtserkennungsgenauigkeit
