@@ -393,10 +393,17 @@ func (h *APIHandler) AddIdentityExample(c *gin.Context) {
 		return
 	}
 
+	// Debugging-Informationen ausgeben
+	log.Infof("Attempting to add example for identity '%s' (%d) with file '%s' (size: %d bytes)", 
+		identity.Name, identity.ID, header.Filename, len(imageData))
+	log.Infof("CompreFace config: URL=%s, Recognition API Key=%s (length: %d chars)", 
+		h.cfg.CompreFace.URL, "[hidden]", len(h.cfg.CompreFace.RecognitionAPIKey))
+
 	// Beispiel zu CompreFace hinzufügen
 	ctx := c.Request.Context()
 	result, err := h.compreface.AddSubjectExample(ctx, identity.Name, imageData, header.Filename)
 	if err != nil {
+		log.Errorf("CompreFace error details: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to add example to CompreFace: %v", err)})
 		return
 	}
@@ -654,16 +661,51 @@ func (h *APIHandler) UpdateMatch(c *gin.Context) {
 	// Alte Identität für Logging
 	oldIdentityName := match.Identity.Name
 	
-	// Hier könnte in Zukunft eine CompreFace-Synchronisierung implementiert werden
-	// Für die aktuelle Version überspringen wir das und aktualisieren nur lokal
-
-	// Aktualisieren des Matches in der lokalen Datenbank
+	// Wir synchronisieren die Identitätszuweisung auch mit CompreFace
+	log.Infof("Synchronizing identity assignment with CompreFace: Face ID %d to identity %s", match.Face.ID, newIdentity.Name)
+	
+	// 1. Aktualisieren des Matches in der lokalen Datenbank
 	match.IdentityID = req.IdentityID
 	match.Identity = newIdentity
-	
 	if err := h.db.Save(&match).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update match: %v", err)})
 		return
+	}
+	
+	// 2. Gesichtsbild aus der Datenbank laden
+	if match.Face.Image.FilePath == "" {
+		log.Warnf("Cannot synchronize with CompreFace: No image found for face ID %d", match.Face.ID)
+		// Wir geben keinen Fehler an den Client zurück, da die DB-Aktualisierung erfolgreich war
+	} else {
+		// 3. Bildpfad generieren
+		imageFilePath := filepath.Join(h.cfg.Server.SnapshotDir, match.Face.Image.FilePath)
+		log.Debugf("Loading image from: %s", imageFilePath)
+		
+		// 4. Bilddaten lesen
+		imageData, err := os.ReadFile(imageFilePath)
+		if err != nil {
+			log.Errorf("Failed to read image file: %v", err)
+			// Wir geben keinen Fehler an den Client zurück, da die DB-Aktualisierung erfolgreich war
+		} else {
+			// 5. Das Bild als Beispiel für die neue Identität zu CompreFace hinzufügen
+			ctx := c.Request.Context()
+			filename := filepath.Base(imageFilePath)
+			
+			// Zuerst prüfen, ob die Identität in CompreFace existiert, und ggf. erstellen
+			_, err := h.compreface.CreateSubject(ctx, newIdentity.Name)
+			if err != nil {
+				log.Warnf("Failed to create subject in CompreFace (might already exist): %v", err)
+			}
+			
+			// Bild als Beispiel hinzufügen
+			result, err := h.compreface.AddSubjectExample(ctx, newIdentity.Name, imageData, filename)
+			if err != nil {
+				log.Errorf("Failed to add example to CompreFace: %v", err)
+				// Wir geben keinen Fehler an den Client zurück, da die DB-Aktualisierung erfolgreich war
+			} else {
+				log.Infof("Successfully added example to CompreFace: %s (ID: %s)", newIdentity.Name, result.ImageID)
+			}
+		}
 	}
 
 	log.Infof("Updated match %d from identity %s to %s", match.ID, oldIdentityName, newIdentity.Name)
