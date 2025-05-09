@@ -4,6 +4,8 @@
 [![Go Version](https://img.shields.io/badge/Go-1.24-blue.svg)](https://golang.org)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-red.svg)]()
 [![Docker](https://img.shields.io/badge/Docker-Required-blue.svg)]()
+[![GitHub Stars](https://img.shields.io/github/stars/SilentBob69/double-take-go-reborn.svg?style=social)](https://github.com/SilentBob69/double-take-go-reborn/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/SilentBob69/double-take-go-reborn.svg?style=social)](https://github.com/SilentBob69/double-take-go-reborn/network/members)
 
 *Read this in [English](README.en.md)*
 
