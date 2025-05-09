@@ -374,23 +374,28 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data interface{
 
 // RegisterRoutes registriert alle Web-Routen
 func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
-	// Statische Dateien bereitstellen
+	// Statische Dateien
 	router.Static("/static", "./web/static")
 	router.Static("/snapshots", h.cfg.Server.SnapshotDir)
-
-	// Routen registrieren
+	
+	// Hauptseiten
 	router.GET("/", h.handleIndex)
-	// Die /images Route wurde in die Startseite integriert
+	router.GET("/gallery", h.handleGallery)
 	router.GET("/identities", h.handleIdentities)
 	router.GET("/identities/:id", h.handleIdentityDetails)
-	router.POST("/identities/:id/addTrainingImage", h.handleAddTrainingImage)
+	router.POST("/identities/:id/training", h.handleAddTrainingImage)
 	router.POST("/identities/:id/delete", h.handleDeleteIdentity)
 	router.GET("/settings", h.handleSettings)
-	router.GET("/sse", h.handleSSE)
 	router.GET("/diagnostics", h.handleDiagnostics)
-
-	// Aktualisierungen der Debug-Seite
-	router.GET("/debug/system-stats", h.handleSystemStats)
+	
+	// Treffer/Matches
+	router.POST("/matches/:id/update", h.handleUpdateMatch)
+	
+	// SSE-Endpunkt für Echtzeit-Updates
+	router.GET("/events", h.handleSSE)
+	
+	// API für die Weboberfläche
+	router.GET("/system/stats", h.handleSystemStats)
 }
 
 // handleIndex zeigt die Hauptseite an mit integrierten Bildern und Filterfunktionen
@@ -978,4 +983,67 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	}
 	
 	h.renderTemplate(c, "diagnostics.html", data)
+}
+
+// handleUpdateMatch verarbeitet die Aktualisierung eines Treffers mit einer neuen Identität
+func (h *WebHandler) handleUpdateMatch(c *gin.Context) {
+	// Überprüfe, ob CompreFace aktiviert ist
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace-Integration ist nicht aktiviert"})
+		return
+	}
+
+	// ID des zu aktualisierenden Treffers
+	id := c.Param("id")
+	
+	// Formularparameter abrufen
+	identityID := c.PostForm("identity_id")
+	
+	// Validiere die Parameter
+	if id == "" || identityID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Ungültige Parameter"})
+		return
+	}
+	
+	// Match in der Datenbank finden
+	var match models.Match
+	if err := h.db.Preload("Face").Preload("Face.Image").Preload("Identity").First(&match, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Treffer nicht gefunden"})
+		return
+	}
+
+	// Alte Identität für Logging und Weiterleitung
+	oldIdentityName := match.Identity.Name
+	
+	// Konvertiere identity_id zu uint
+	newIdentityID, err := strconv.ParseUint(identityID, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Ungültige Identitäts-ID"})
+		return
+	}
+	
+	// Neue Identität in der Datenbank finden
+	var newIdentity models.Identity
+	if err := h.db.First(&newIdentity, newIdentityID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Neue Identität nicht gefunden"})
+		return
+	}
+
+	// Aktualisieren des Matches in der lokalen Datenbank
+	match.IdentityID = uint(newIdentityID)
+	match.Identity = newIdentity
+	
+	if err := h.db.Save(&match).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Fehler beim Aktualisieren des Treffers: %v", err)})
+		return
+	}
+
+	log.Infof("Treffer %d von Identität %s zu %s aktualisiert", match.ID, oldIdentityName, newIdentity.Name)
+	
+	// Erfolgreiche Meldung an den Benutzer und Weiterleitung zur Bilddetailseite
+	messageKey := fmt.Sprintf("Treffer erfolgreich von '%s' zu '%s' aktualisiert", oldIdentityName, newIdentity.Name)
+	c.SetCookie("success_message", messageKey, 300, "/", "", false, true)
+	
+	// Zurück zur Bilddetailseite
+	c.Redirect(http.StatusFound, fmt.Sprintf("/images/%d", match.Face.ImageID))
 }

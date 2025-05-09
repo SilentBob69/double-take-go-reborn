@@ -600,7 +600,7 @@
             console.log(`Save clicked for type: ${objectType}, id: ${objectId}, selectedIdentityId: ${selectedIdentityId}`);
 
             if (!selectedIdentityId) {
-                 alert('Bitte wähle eine Identität aus der Liste.');
+                 showToast(translations.error, 'Bitte wähle eine Identität aus der Liste.', 'error');
                  return;
             }
 
@@ -616,12 +616,12 @@
             let body = {};
 
             if (objectType === 'match') {
-                url = `/api/matches/${objectId}/identity`;
+                url = `/api/matches/${objectId}`;
                 method = 'PUT';
                 body = { identity_id: parseInt(selectedIdentityId, 10) }; // Ensure integer
             } else if (objectType === 'face') {
                 if (selectedIdentityId === '0') {
-                    alert('Kann kein unbekanntes Gesicht einer unbekannten Identität zuweisen.');
+                    showToast(translations.error, 'Kann kein unbekanntes Gesicht einer unbekannten Identität zuweisen.', 'error');
                     return; // Cannot create a match with identity 0
                 }
                 url = `/api/matches`;
@@ -632,7 +632,7 @@
                 };
             } else {
                 console.error('Unknown object type:', objectType);
-                alert('Unbekannter Objekttyp beim Speichern.');
+                showToast(translations.error, 'Unbekannter Objekttyp beim Speichern.', 'error');
                 return;
             }
 
@@ -653,7 +653,7 @@
 
                 const result = await response.json();
                 console.log('Save successful:', result);
-                alert('Identität erfolgreich gespeichert!');
+                showToast(translations.success, 'Identität erfolgreich gespeichert!', 'success');
                 // TODO: Ideally, update the specific card via SSE or manual DOM manipulation
                 // For now, suggest a page reload or wait for SSE update
                 // location.reload(); // Force reload - simple but disruptive
@@ -661,7 +661,7 @@
 
             } catch (error) {
                 console.error('Error saving identity assignment:', error);
-                alert(`Fehler beim Speichern der Identität: ${error.message}`);
+                showToast(translations.error, `Fehler beim Speichern der Identität: ${error.message}`, 'error');
             }
         }
 

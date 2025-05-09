@@ -60,6 +60,9 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.DELETE("/identities/:id/examples/:exampleId", h.DeleteIdentityExample)
 	router.POST("/identities/:id/rename", h.RenameIdentity)
 
+	// Match-Endpunkte (Treffer)
+	router.PUT("/matches/:id", h.UpdateMatch)
+
 	// System-Endpunkte
 	router.GET("/status", h.GetStatus)
 	router.POST("/sync/compreface", h.SyncCompreFace)
@@ -67,7 +70,7 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	
 	// Test-Endpunkt, um zu überprüfen, ob Änderungen wirksam werden
 	router.GET("/test-update", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "Die Änderungen wurden erfolgreich übernommen! Zeitstempel: May 7, 2025 09:31"})
+		c.JSON(http.StatusOK, gin.H{"message": "Die Änderungen wurden erfolgreich übernommen! Zeitstempel: May 9, 2025 17:05"})
 	})
 }
 
@@ -612,5 +615,60 @@ func (h *APIHandler) DeleteAllTraining(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "All training data deleted successfully",
 		"count": result.Deleted,
+	})
+}
+
+// UpdateMatch aktualisiert die Identität eines Treffers
+func (h *APIHandler) UpdateMatch(c *gin.Context) {
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace integration is not enabled"})
+		return
+	}
+
+	id := c.Param("id")
+	
+	// Request-Daten abrufen
+	var req struct {
+		IdentityID uint `json:"identity_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	// Match in der Datenbank finden
+	var match models.Match
+	if err := h.db.Preload("Face").Preload("Face.Image").Preload("Identity").First(&match, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Match not found"})
+		return
+	}
+	
+	// Neue Identität in der Datenbank finden
+	var newIdentity models.Identity
+	if err := h.db.First(&newIdentity, req.IdentityID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "New identity not found"})
+		return
+	}
+
+	// Alte Identität für Logging
+	oldIdentityName := match.Identity.Name
+	
+	// Hier könnte in Zukunft eine CompreFace-Synchronisierung implementiert werden
+	// Für die aktuelle Version überspringen wir das und aktualisieren nur lokal
+
+	// Aktualisieren des Matches in der lokalen Datenbank
+	match.IdentityID = req.IdentityID
+	match.Identity = newIdentity
+	
+	if err := h.db.Save(&match).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to update match: %v", err)})
+		return
+	}
+
+	log.Infof("Updated match %d from identity %s to %s", match.ID, oldIdentityName, newIdentity.Name)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Match updated successfully",
+		"match": match,
 	})
 }
