@@ -2,6 +2,7 @@ package sse
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +41,12 @@ type NewImageData struct {
 	FacesCount int       `json:"faces_count"`
 	Source     string    `json:"source"`
 	Matches    []MatchData `json:"matches"`
+	// Frigate-spezifische Felder
+	EventID    string    `json:"event_id,omitempty"`
+	Camera     string    `json:"camera,omitempty"`
+	Label      string    `json:"label,omitempty"`
+	Zone       string    `json:"zone,omitempty"`
+	EventType  string    `json:"event_type,omitempty"` // "new", "update", etc.
 }
 
 // MatchData enthält vereinfachte Informationen über Matches für die SSE-Nachricht
@@ -145,6 +152,33 @@ func (h *Hub) BroadcastNewImage(image models.Image, snapshotURL string, matches 
 		FacesCount: len(image.Faces),
 		Source:     image.Source,
 		Matches:    matchDataList,
+	}
+	
+	// Frigate-Metadaten extrahieren, falls vorhanden (z.B. EventID, camera, etc.)
+	if image.Source == "frigate" {
+		// EventID ist direkt im Image-Modell
+		data.EventID = image.EventID
+		// Zone ist direkt im Image-Modell
+		data.Zone = image.Zone
+		// Label ist direkt im Image-Modell
+		data.Label = image.Label
+		
+		// Event-Typ aus dem Dateinamen extrahieren
+		if strings.Contains(image.FilePath, "_seq") {
+			data.EventType = "new"
+		} else if strings.Contains(image.FilePath, "_update") {
+			data.EventType = "update"
+		}
+		
+		// Kamera aus den SourceData extrahieren, falls vorhanden
+		if len(image.SourceData) > 0 {
+			var sourceData map[string]interface{}
+			if err := json.Unmarshal(image.SourceData, &sourceData); err == nil {
+				if camera, ok := sourceData["camera"].(string); ok {
+					data.Camera = camera
+				}
+			}
+		}
 	}
 	
 	// Daten als JSON serialisieren

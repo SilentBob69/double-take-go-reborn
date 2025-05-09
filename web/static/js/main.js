@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Bildergalerie-Funktionen
     initImageGallery();
     
+    // Server-Sent Events initialisieren
+    initSSE();
+    
     // Timeout für Erfolgs-/Fehlermeldungen
     setTimeout(function() {
         const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
@@ -115,28 +118,44 @@ function updateImageGallery(imageData) {
     const container = document.querySelector('[data-image-container]');
     if (!container) return;
     
+    // Erstelle Toast-Benachrichtigung für das neue Bild
+    createImageToast(imageData);
+    
     // Erstelle ein neues Bild-Element
     const col = document.createElement('div');
     col.className = 'col-md-3 mb-4 fade-in';
     
     let badges = '';
-    if (imageData.faceCount > 0) {
-        badges += `<span class="badge bg-info">${imageData.faceCount} Gesichter</span> `;
+    if (imageData.faces_count > 0) {
+        badges += `<span class="badge bg-info">${imageData.faces_count} Gesichter</span> `;
     }
     
-    if (imageData.hasMatches) {
+    if (imageData.matches && imageData.matches.length > 0) {
         badges += `<span class="badge bg-success">Erkannt</span>`;
+    }
+    
+    // Zusätzliche Frigate-Badges für Frigate-Events
+    if (imageData.source === 'frigate') {
+        if (imageData.camera) {
+            badges += ` <span class="badge bg-primary">${imageData.camera}</span>`;
+        }
+        if (imageData.label) {
+            badges += ` <span class="badge bg-secondary">${imageData.label}</span>`;
+        }
+        if (imageData.zone) {
+            badges += ` <span class="badge bg-warning text-dark">${imageData.zone}</span>`;
+        }
     }
     
     col.innerHTML = `
         <div class="card image-card">
             <a href="/images/${imageData.id}">
-                <img src="/snapshots/${imageData.filePath}" class="image-thumbnail" alt="Bild">
+                <img src="${imageData.snapshot_url || ('/snapshots/' + imageData.file_path)}" class="image-thumbnail" alt="Bild">
             </a>
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <h6 class="card-title">${imageData.source}</h6>
-                    <small class="text-muted">${formatTime(imageData.detectedAt)}</small>
+                    <small class="text-muted">${formatTime(imageData.timestamp)}</small>
                 </div>
                 <div class="mt-2">
                     ${badges}
@@ -185,4 +204,92 @@ function formatTime(dateTime) {
     } else {
         return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}, ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
     }
+}
+
+/**
+ * Initialisiert Server-Sent Events für Echtzeit-Updates
+ */
+function initSSE() {
+    // Überprüfen, ob SSE vom Browser unterstützt wird
+    if (typeof EventSource === 'undefined') {
+        console.warn('Server-Sent Events werden vom Browser nicht unterstützt.');
+        return;
+    }
+    
+    // SSE-Verbindung herstellen
+    const eventSource = new EventSource('/events');
+    
+    // Event-Handler für neue Bilder
+    eventSource.addEventListener('message', function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('SSE Nachricht empfangen:', data);
+            
+            // Bildergalerie aktualisieren, wenn sie existiert
+            updateImageGallery(data);
+        } catch (error) {
+            console.error('Fehler beim Verarbeiten der SSE-Nachricht:', error);
+        }
+    });
+    
+    // Event-Handler für Verbindungsfehler
+    eventSource.onerror = function() {
+        console.warn('SSE-Verbindung unterbrochen. Versuche neu zu verbinden...');
+    };
+}
+
+/**
+ * Erstellt eine Toast-Benachrichtigung für ein neues Bild
+ * @param {Object} imageData - Daten des neuen Bildes
+ */
+function createImageToast(imageData) {
+    // Übersetzungen für Toast-Typen
+    const toastTypeMap = {
+        'frigate': 'Frigate',
+        'upload': 'Upload',
+        'webcam': 'Webcam',
+        'other': 'Andere Quelle'
+    };
+    
+    // Standard-Nachricht
+    let title = toastTypeMap[imageData.source] || 'Neues Bild';
+    let message = 'Ein neues Bild wurde erkannt.';
+    let type = 'info';
+    
+    // Erweiterte Nachricht für Frigate-Events
+    if (imageData.source === 'frigate') {
+        // Verbesserte Toast-Meldung basierend auf verfügbaren Frigate-Metadaten
+        if (imageData.label) {
+            title = `${title}: ${imageData.label}`;
+        }
+        
+        if (imageData.camera) {
+            message = `Kamera: ${imageData.camera}`;
+            if (imageData.zone) {
+                message += `, Zone: ${imageData.zone}`;
+            }
+        }
+        
+        // Typ des Toasts basierend auf Event-Typ
+        if (imageData.event_type === 'new') {
+            type = 'warning';
+        } else if (imageData.event_type === 'update') {
+            type = 'info';
+        }
+        
+        // Gesichtserkennung-Informationen hinzufügen
+        if (imageData.faces_count > 0) {
+            message += `, ${imageData.faces_count} Gesichter erkannt`;
+            
+            // Wenn Matches vorhanden sind, diese anzeigen
+            if (imageData.matches && imageData.matches.length > 0) {
+                const matchNames = imageData.matches.map(m => m.identity).join(', ');
+                message += `: ${matchNames}`;
+                type = 'success';
+            }
+        }
+    }
+    
+    // Toast anzeigen
+    showToast(title, message, type);
 }

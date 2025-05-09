@@ -325,19 +325,21 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 	}
 
 	// Snapshot-URL extrahieren
-	if eventData.Snapshot == "" {
+	snapshotURL := eventData.GetSnapshotURL()
+	if snapshotURL == "" {
 		log.Debug("Skipping Frigate event: no snapshot URL")
 		return nil
 	}
 
 	// Ein neues Ereignis verarbeiten - hier nutzen wir sowohl den Thumbnail als auch den Snapshot
 	// Der Thumbnail enthält oft ein früheres Bild der Person, wenn sie auf die Kamera zuläuft
-	snapshotPaths := []string{eventData.Snapshot}
+	snapshotPaths := []string{snapshotURL}
 	
 	// Wenn ein Thumbnail verfügbar ist, diesen auch verarbeiten
-	if eventData.Thumbnail != "" && eventData.Thumbnail != eventData.Snapshot {
-		snapshotPaths = append(snapshotPaths, eventData.Thumbnail)
-		log.Debugf("Added thumbnail to processing queue for event %s: %s", eventData.ID, eventData.Thumbnail)
+	thumbnailURL := eventData.GetThumbnailURL()
+	if thumbnailURL != "" && thumbnailURL != snapshotURL {
+		snapshotPaths = append(snapshotPaths, thumbnailURL)
+		log.Debugf("Added thumbnail to processing queue for event %s: %s", eventData.ID, thumbnailURL)
 	}
 
 	// Für jeden Snapshot-Pfad ein Bild verarbeiten
@@ -394,7 +396,8 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 	}
 
 	eventData := event.After
-	if eventData.Snapshot == "" {
+	snapshotURL := eventData.GetSnapshotURL()
+	if snapshotURL == "" {
 		return nil
 	}
 
@@ -425,7 +428,7 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 	fullPath := filepath.Join(p.cfg.Server.SnapshotDir, localPath)
 
 	// Snapshot herunterladen
-	if err := p.frigateClient.DownloadSnapshot(eventData.Snapshot, fullPath); err != nil {
+	if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
 		return fmt.Errorf("failed to download snapshot: %w", err)
 	}
 
