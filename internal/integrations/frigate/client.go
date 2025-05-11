@@ -34,18 +34,31 @@ type FrigateEvent struct {
 
 // FrigateEventData enthält die Details eines Frigate-Ereignisses
 type FrigateEventData struct {
-	ID          string      `json:"id"`
-	Label       string      `json:"label"`
-	Score       float64     `json:"score"`
-	TopScore    float64     `json:"top_score"`
-	Type        string      `json:"type"`
-	Camera      string      `json:"camera"`
-	StartTime   interface{} `json:"start_time"`
-	EndTime     interface{} `json:"end_time,omitempty"`
-	CurrentTime interface{} `json:"current_time"`
-	Thumbnail   interface{} `json:"thumbnail"`
-	Snapshot    interface{} `json:"snapshot"`
-	Zone        string      `json:"zone"`
+	ID          string       `json:"id"`
+	Camera      string       `json:"camera"`
+	Label       string       `json:"label"`
+	SubLabel    string       `json:"sub_label,omitempty"`
+	Score       float64      `json:"score"`
+	TopScore    float64      `json:"top_score"`
+	FalsePositive bool       `json:"false_positive"`
+	StartTime   interface{}  `json:"start_time"` // Kann unterschiedliche Formate haben
+	EndTime     interface{}  `json:"end_time,omitempty"`
+	Box         []int        `json:"box"`
+	Area        int          `json:"area"`
+	Ratio       float64      `json:"ratio"`
+	Region      []int        `json:"region"`
+	Active      bool         `json:"active"`
+	Stationary  bool         `json:"stationary"`
+	MotionlessCount int      `json:"motionless_count"`
+	CurrentZones   []string  `json:"current_zones"`
+	EnteredZones   []string  `json:"entered_zones"`
+	HasClip     bool         `json:"has_clip"`
+	HasSnapshot bool         `json:"has_snapshot"`
+	CurrentAttributes []string `json:"current_attributes"`
+	FrameTime   interface{}  `json:"frame_time"`
+	Snapshot    interface{}  `json:"snapshot"` // Kann ein String oder ein Objekt sein
+	Thumbnail   interface{}  `json:"thumbnail"` // Kann ein String oder ein Objekt sein
+	PathData    [][]interface{} `json:"path_data,omitempty"`
 }
 
 // GetStartTime konvertiert StartTime in ein time.Time-Objekt
@@ -58,36 +71,135 @@ func (d *FrigateEventData) GetEndTime() time.Time {
 	return parseTimeValue(d.EndTime)
 }
 
-// GetCurrentTime konvertiert CurrentTime in ein time.Time-Objekt
+// GetCurrentTime liefert die aktuelle Zeit des Events, verwendet FrameTime
 func (d *FrigateEventData) GetCurrentTime() time.Time {
-	return parseTimeValue(d.CurrentTime)
+	// Verwende FrameTime, falls vorhanden, ansonsten StartTime
+	if d.FrameTime != nil {
+		return parseTimeValue(d.FrameTime)
+	}
+	// Fallback auf StartTime
+	return d.GetStartTime()
 }
 
 // GetSnapshotURL extrahiert die Snapshot-URL aus dem Snapshot-Feld
 func (d *FrigateEventData) GetSnapshotURL() string {
-	return extractURL(d.Snapshot)
+	// Wenn die has_snapshot Flag false ist, gibt es keinen Snapshot
+	if !d.HasSnapshot {
+		return ""
+	}
+	
+	// Extrahiere URL mit Kamera-Kontext
+	return extractURLWithCamera(d.Snapshot, d.Camera)
 }
 
 // GetThumbnailURL extrahiert die Thumbnail-URL aus dem Thumbnail-Feld
 func (d *FrigateEventData) GetThumbnailURL() string {
-	return extractURL(d.Thumbnail)
+	// Extrahiere URL mit Kamera-Kontext
+	return extractURLWithCamera(d.Thumbnail, d.Camera)
 }
 
-// extractURL extrahiert eine URL aus verschiedenen möglichen Formaten
-func extractURL(value interface{}) string {
+// extractURLWithCamera extrahiert eine URL aus verschiedenen möglichen Formaten mit Kamerakontext
+func extractURLWithCamera(value interface{}, camera string) string {
+	if value == nil {
+		return ""
+	}
+
 	switch v := value.(type) {
 	case string:
 		// Einfache String-URL
 		return v
 		
 	case map[string]interface{}:
-		// Komplexes Objekt mit URL-Feld
-		if url, ok := v["url"].(string); ok {
-			return url
+		// Frigate v16+ Format: Das Snapshot-Objekt enthält evtl. eine URL direkt
+		if v["url"] != nil {
+			if url, ok := v["url"].(string); ok {
+				return url
+			}
 		}
-		// Alternatives Feld mit Pfad
-		if path, ok := v["path"].(string); ok {
-			return path
+
+		// Frigate v16+ Format mit Frame-ID und Kamera aus dem Event
+		if v["frame_time"] != nil {
+			hasCamera := camera != ""
+			
+			// Frame-Zeit extrahieren
+			var frameTime float64
+			switch ft := v["frame_time"].(type) {
+			case float64:
+				frameTime = ft
+			case int64:
+				frameTime = float64(ft)
+			case string:
+				if f, err := strconv.ParseFloat(ft, 64); err == nil {
+					frameTime = f
+				}
+			default:
+				log.Warnf("Unerwarteter Typ für frame_time: %T", ft)
+			}
+
+			if hasCamera && frameTime > 0 {
+				// Aktuelles Frigate v16 Snapshot-URL-Format
+				// Probiere verschiedene Formate aus, basierend auf der Dokumentation und üblichen Mustern
+				
+				// Format 1: /api/events/{id}/snapshot.jpg
+				if v["id"] != nil {
+					if id, ok := v["id"].(string); ok {
+						return fmt.Sprintf("/api/events/%s/snapshot.jpg", id)
+					}
+				}
+				
+				// Format 2: /api/snapshots/{camera}/{timestamp}.jpg
+				return fmt.Sprintf("/api/snapshots/%s/%f.jpg", camera, frameTime)
+			}
+		}
+		
+		// Alternatives Feld mit Pfad (für ältere Frigate-Versionen)
+		if v["path"] != nil {
+			if path, ok := v["path"].(string); ok {
+				return path
+			}
+		}
+		
+		// Wenn kein bekanntes Feld gefunden wurde, als JSON protokollieren
+		jsonData, _ := json.Marshal(v)
+		log.Warnf("Unbekanntes URL-Objekt: %s", string(jsonData))
+		return ""
+		
+	default:
+		// Unbekannter Typ
+		log.Warnf("Unbekannter URL-Typ: %T", v)
+		return ""
+	}
+}
+
+// extractURL extrahiert eine URL aus verschiedenen möglichen Formaten
+// Diese Funktion wird für Rückwärtskompatibilität beibehalten
+func extractURL(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+
+	switch v := value.(type) {
+	case string:
+		// Einfache String-URL
+		return v
+		
+	case map[string]interface{}:
+		// Frigate v16+ Format: Das Snapshot-Objekt enthält evtl. eine URL direkt
+		if v["url"] != nil {
+			if url, ok := v["url"].(string); ok {
+				return url
+			}
+		}
+
+		// Für Frigate v16+ mit Frame-ID
+		// In dieser Version der Funktion schauen wir nur nach URL oder path
+		// Die camera wird in extractURLWithCamera verwendet
+		
+		// Alternatives Feld mit Pfad (für ältere Frigate-Versionen)
+		if v["path"] != nil {
+			if path, ok := v["path"].(string); ok {
+				return path
+			}
 		}
 		
 		// Wenn kein bekanntes Feld gefunden wurde, als JSON protokollieren
@@ -265,24 +377,34 @@ func (c *FrigateClient) ToImage(event *FrigateEventData, filePath string) *model
 	
 	// JSON-Daten für SourceData vorbereiten
 	sourceDataJSON, err := json.Marshal(map[string]interface{}{
-		"camera":    event.Camera,
-		"event_id":  event.ID,
-		"label":     event.Label,
-		"score":     event.Score,
-		"top_score": event.TopScore,
-		"start_time": event.GetStartTime().Format(time.RFC3339),
+		"camera":          event.Camera,
+		"event_id":        event.ID,
+		"label":           event.Label,
+		"score":           event.Score,
+		"top_score":       event.TopScore,
+		"start_time":      event.GetStartTime().Format(time.RFC3339),
+		"current_zones":   event.CurrentZones,
+		"entered_zones":   event.EnteredZones,
 	})
 	
 	if err != nil {
 		log.Errorf("Fehler beim Serialisieren der Frigatedaten: %v", err)
 		sourceDataJSON = []byte("{}")
 	}
+
+	// Kombiniere die Zonen zu einem String
+	var zoneString string
+	if len(event.CurrentZones) > 0 {
+		zoneString = strings.Join(event.CurrentZones, ",")
+	} else if len(event.EnteredZones) > 0 {
+		zoneString = strings.Join(event.EnteredZones, ",")
+	}
 	
 	return &models.Image{
 		Source:      "frigate",
 		EventID:     event.ID,
 		Label:       event.Label,
-		Zone:        event.Zone,
+		Zone:        zoneString,
 		FilePath:    filePath,
 		Timestamp:   currentTime,
 		ContentHash: "",  // Wird später berechnet

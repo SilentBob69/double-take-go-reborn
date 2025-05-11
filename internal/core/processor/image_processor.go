@@ -28,6 +28,7 @@ type ProcessingOptions struct {
 	// Hier können bei Bedarf weitere Optionen hinzugefügt werden
 	DetectFaces    bool
 	RecognizeFaces bool
+	Metadata       map[string]interface{} // Zusätzliche Metadaten
 }
 
 // ImageProcessor verarbeitet Bilder, extrahiert Gesichter und identifiziert Personen
@@ -88,7 +89,7 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 	// 3. Prüfen, ob Bild bereits verarbeitet wurde (Deduplizierung)
 	var existingImage models.Image
 	if result := p.db.Where("content_hash = ?", hash).First(&existingImage); result.Error == nil {
-		log.Infof("Image with hash %s already processed (ID: %d), skipping", hash, existingImage.ID)
+		log.Infof("Bild mit Hash %s wurde bereits verarbeitet (ID: %d), überspringe", hash, existingImage.ID)
 		return &existingImage, nil
 	}
 
@@ -115,6 +116,39 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		Source:      source,
 	}
 
+	// Optional sind Metadaten vorhanden (z.B. von Frigate-Events)
+	if options.Metadata != nil {
+		// Wir speichern relevante Metadaten in den entsprechenden Feldern
+		if eventID, ok := options.Metadata["event_id"].(string); ok {
+			image.EventID = eventID
+		}
+		if label, ok := options.Metadata["label"].(string); ok {
+			image.Label = label
+		}
+		
+		// Zonen-Informationen extrahieren und zusammenführen, wenn vorhanden
+		var zones []string
+		if currentZones, ok := options.Metadata["current_zones"].([]string); ok && len(currentZones) > 0 {
+			zones = append(zones, currentZones...)
+		}
+		if enteredZones, ok := options.Metadata["entered_zones"].([]string); ok && len(enteredZones) > 0 {
+			for _, zone := range enteredZones {
+				if !contains(zones, zone) {
+					zones = append(zones, zone)
+				}
+			}
+		}
+		if len(zones) > 0 {
+			image.Zone = strings.Join(zones, ",")
+		}
+
+		// Alle übrigen Metadaten als JSON serialisieren und speichern
+		if sourceData, err := json.Marshal(options.Metadata); err == nil {
+			image.SourceData = sourceData
+		}
+	}
+
+	// Speichern des Basis-Image-Eintrags in der Datenbank
 	if err := p.db.Create(&image).Error; err != nil {
 		return nil, fmt.Errorf("failed to create image record: %w", err)
 	}
@@ -125,29 +159,50 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 	var allMatches []models.Match
 	
 	if p.cfg.CompreFace.Enabled && p.compreface != nil {
+		// CompreFace-Verarbeitung durchführen
+		log.Infof("Processing image %s with CompreFace", imagePath)
 		allMatches, err = p.processWithCompreFace(ctx, imagePath, &image)
 		if err != nil {
 			log.Errorf("CompreFace processing failed: %v", err)
 			// Wir fahren fort, auch wenn CompreFace fehlschlägt
 		}
+
+		// 6. SSE-Broadcast ERST NACH CompreFace-Verarbeitung durchführen
+		if p.sseHub != nil && (err == nil || !strings.Contains(err.Error(), "No face is found")) {
+			// Anzahl der Gesichter zählen für das Logging
+			var faceCount int64 = 0
+			if err == nil {
+				// Gesichter in der Datenbank zählen
+				p.db.Model(&models.Face{}).Where("image_id = ?", image.ID).Count(&faceCount)
+				log.Infof("Gesichter in Bild ID %d erkannt: %d", image.ID, faceCount)
+			}
+
+			// Broadcast nur, wenn CompreFace-Verarbeitung erfolgreich oder explizit keine Gesichter gefunden wurden
+			log.Infof("Sende SSE-Broadcast für Bild ID %d mit %d Matches (Gesichter: %d)", image.ID, len(allMatches), faceCount)
+			p.sseHub.BroadcastNewImage(image, p.cfg.Server.SnapshotURL+"/"+image.FilePath, allMatches)
+		}
+
+		// Home Assistant Ergebnis veröffentlichen (wenn aktiviert)
+		if p.haPublisher != nil && p.cfg.MQTT.HomeAssistant.Enabled && p.cfg.MQTT.HomeAssistant.PublishResults {
+			if err := p.haPublisher.PublishCameraResult(&image, allMatches, time.Since(time.Now()).Seconds(), 1); err != nil {
+				log.Errorf("Failed to publish camera result to Home Assistant: %v", err)
+			}
+		}
 	} else {
 		log.Info("CompreFace processing is disabled")
 	}
 
-	// 6. SSE-Broadcast für neue Bild-Erkennung, falls aktiviert
-	if p.sseHub != nil {
-		// Broadcast für alle Bilder, auch ohne erkannte Gesichter
-		p.sseHub.BroadcastNewImage(image, p.cfg.Server.SnapshotURL+"/"+image.FilePath, allMatches)
-	}
+	return &image, nil
+}
 
-	// Home Assistant Ergebnis veröffentlichen (wenn aktiviert)
-	if p.haPublisher != nil && p.cfg.MQTT.HomeAssistant.Enabled && p.cfg.MQTT.HomeAssistant.PublishResults {
-		if err := p.haPublisher.PublishCameraResult(&image, allMatches, time.Since(time.Now()).Seconds(), 1); err != nil {
-			log.Errorf("Failed to publish camera result to Home Assistant: %v", err)
+// contains prüft, ob ein String in einem Slice enthalten ist
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
 		}
 	}
-
-	return &image, nil
+	return false
 }
 
 // processWithCompreFace verarbeitet ein Bild mit CompreFace
@@ -315,19 +370,26 @@ func (p *ImageProcessor) ProcessFrigateEvent(ctx context.Context, payload []byte
 func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frigate.FrigateEvent) error {
 	// Prüfen, ob es ein Personen-Event ist (falls process_person_only aktiviert ist)
 	if p.cfg.Frigate.ProcessPersonOnly && !p.frigateClient.IsPersonEvent(event) {
-		log.Debug("Skipping non-person Frigate event")
+		log.Debug("Ignoriere Nicht-Personen-Event von Frigate")
 		return nil
 	}
 
+	// Extrahieren der Event-Daten (After hat Priorität)
 	eventData := p.frigateClient.GetEventData(event)
 	if eventData == nil {
-		return fmt.Errorf("no event data found in Frigate event")
+		return fmt.Errorf("keine Event-Daten im Frigate-Event gefunden")
+	}
+
+	// Prüfen, ob das Event einen Snapshot hat
+	if !eventData.HasSnapshot {
+		log.Debug("Ignoriere Frigate-Event ohne Snapshot")
+		return nil
 	}
 
 	// Snapshot-URL extrahieren
 	snapshotURL := eventData.GetSnapshotURL()
 	if snapshotURL == "" {
-		log.Debug("Skipping Frigate event: no snapshot URL")
+		log.Debug("Ignoriere Frigate-Event: Snapshot-URL konnte nicht extrahiert werden")
 		return nil
 	}
 
@@ -339,7 +401,19 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 	thumbnailURL := eventData.GetThumbnailURL()
 	if thumbnailURL != "" && thumbnailURL != snapshotURL {
 		snapshotPaths = append(snapshotPaths, thumbnailURL)
-		log.Debugf("Added thumbnail to processing queue for event %s: %s", eventData.ID, thumbnailURL)
+		log.Debugf("Thumbnail zur Verarbeitungswarteschlange für Event %s hinzugefügt: %s", eventData.ID, thumbnailURL)
+	}
+
+	// Metadaten für die Bildverarbeitung vorbereiten
+	metadata := map[string]interface{}{
+		"event_id":        eventData.ID,
+		"camera":          eventData.Camera,
+		"label":           eventData.Label,
+		"score":           eventData.Score,
+		"current_zones":   eventData.CurrentZones,
+		"entered_zones":   eventData.EnteredZones,
+		"start_time":      eventData.GetStartTime().Format(time.RFC3339),
+		"source":          "frigate",
 	}
 
 	// Für jeden Snapshot-Pfad ein Bild verarbeiten
@@ -359,23 +433,33 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 
 		// Snapshot herunterladen
 		if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
-			log.Warnf("Failed to download snapshot %d for event %s: %v", i, eventData.ID, err)
+			log.Warnf("Konnte Snapshot %d für Event %s nicht herunterladen: %v", i, eventData.ID, err)
 			continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
 		}
 
-		// Bild in der Datenbank speichern
-		image := p.frigateClient.ToImage(eventData, localPath)
-		if err := p.db.Create(image).Error; err != nil {
-			log.Errorf("Failed to save image to database: %v", err)
-			continue
+		// Zum aktuellen Bild spezifische Metadaten hinzufügen
+		imageMetadata := make(map[string]interface{})
+		for k, v := range metadata {
+			imageMetadata[k] = v
+		}
+		imageMetadata["sequence"] = i
+		if i == 1 { // Thumbnail
+			imageMetadata["image_type"] = "thumbnail"
+		} else { // Hauptbild
+			imageMetadata["image_type"] = "snapshot"
 		}
 
-		log.Infof("Saved Frigate event image %d of %d: %s", i+1, len(snapshotPaths), localPath)
-
-		// Bild verarbeiten (Gesichtserkennung)
-		_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{})
+		// Bild zur Verarbeitung an den Worker-Pool übergeben
+		// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
+		_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+			DetectFaces:    true,
+			RecognizeFaces: true,
+			Metadata:       imageMetadata,
+		})
 		if err != nil {
-			log.Warnf("Failed to process image %s: %v", fullPath, err)
+			log.Warnf("Fehler bei der Verarbeitung des Bildes %s: %v", fullPath, err)
+		} else {
+			log.Infof("Frigate-Event-Bild %d von %d verarbeitet: %s", i+1, len(snapshotPaths), localPath)
 		}
 	}
 
@@ -387,17 +471,27 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *frigate.FrigateEvent) error {
 	// Prüfen, ob es ein Personen-Event ist (falls process_person_only aktiviert ist)
 	if p.cfg.Frigate.ProcessPersonOnly && !p.frigateClient.IsPersonEvent(event) {
+		log.Debug("Ignoriere Nicht-Personen-Update-Event von Frigate")
 		return nil
 	}
 
 	// Bei Updates interessieren uns insbesondere die After-Daten
 	if event.After == nil {
+		log.Debug("Ignoriere Frigate-Update-Event ohne After-Daten")
 		return nil
 	}
 
 	eventData := event.After
+	
+	// Prüfen, ob das Event einen Snapshot hat
+	if !eventData.HasSnapshot {
+		log.Debug("Ignoriere Frigate-Update-Event ohne Snapshot")
+		return nil
+	}
+
 	snapshotURL := eventData.GetSnapshotURL()
 	if snapshotURL == "" {
+		log.Debug("Ignoriere Frigate-Update-Event: Snapshot-URL konnte nicht extrahiert werden")
 		return nil
 	}
 
@@ -405,12 +499,68 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 	// Wir wollen nicht jedes Update verarbeiten, sondern in regelmäßigen Abständen
 	var existingImages []models.Image
 	if err := p.db.Where("event_id = ?", eventData.ID).Find(&existingImages).Error; err != nil {
-		log.Warnf("Failed to query existing images for event %s: %v", eventData.ID, err)
+		log.Warnf("Fehler bei der Abfrage existierender Bilder für Event %s: %v", eventData.ID, err)
 	}
 
 	// Wenn wir schon viele Bilder für dieses Ereignis haben, überspringen wir dieses Update
 	if len(existingImages) >= 3 {
+		log.Debugf("Überspringe Update für Event %s: Bereits %d Bilder vorhanden", eventData.ID, len(existingImages))
 		return nil
+	}
+
+	// Metadaten für die Bildverarbeitung vorbereiten
+	metadata := map[string]interface{}{
+		"event_id":        eventData.ID,
+		"camera":          eventData.Camera,
+		"label":           eventData.Label,
+		"score":           eventData.Score,
+		"current_zones":   eventData.CurrentZones,
+		"entered_zones":   eventData.EnteredZones,
+		"update_number":   len(existingImages),
+		"start_time":      eventData.GetStartTime().Format(time.RFC3339),
+		"frame_time":      eventData.GetCurrentTime().Format(time.RFC3339),
+		"source":          "frigate",
+		"event_type":      "update",
+	}
+
+	// Lösche vorhandene Gesichter und Matches für aktuelle Ereignisse,
+	// um Duplikate zu vermeiden. Nur für Update-Events!
+	if len(existingImages) > 0 {
+		log.Infof("Lösche vorhandene Gesichter und Matches für Event %s vor der Neuverarbeitung", eventData.ID)
+		
+		// Sammle alle Bild-IDs dieses Events
+		var imageIDs []uint
+		for _, img := range existingImages {
+			imageIDs = append(imageIDs, img.ID)
+		}
+		
+		// Finde alle Gesichter dieser Bilder
+		var faces []models.Face
+		if err := p.db.Where("image_id IN ?", imageIDs).Find(&faces).Error; err != nil {
+			log.Warnf("Fehler beim Finden vorhandener Gesichter: %v", err)
+		} else {
+			// Sammle alle Gesichts-IDs
+			var faceIDs []uint
+			for _, face := range faces {
+				faceIDs = append(faceIDs, face.ID)
+			}
+			
+			// Lösche alle Matches dieser Gesichter
+			if len(faceIDs) > 0 {
+				if err := p.db.Where("face_id IN ?", faceIDs).Delete(&models.Match{}).Error; err != nil {
+					log.Warnf("Fehler beim Löschen vorhandener Matches: %v", err)
+				} else {
+					log.Infof("Vorhandene Matches für %d Gesichter gelöscht", len(faceIDs))
+				}
+			}
+			
+			// Lösche alle Gesichter
+			if err := p.db.Where("image_id IN ?", imageIDs).Delete(&models.Face{}).Error; err != nil {
+				log.Warnf("Fehler beim Löschen vorhandener Gesichter: %v", err)
+			} else {
+				log.Infof("Vorhandene Gesichter für Event %s gelöscht", eventData.ID)
+			}
+		}
 	}
 
 	// Dateiname für den Snapshot generieren
@@ -429,23 +579,21 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 
 	// Snapshot herunterladen
 	if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
-		return fmt.Errorf("failed to download snapshot: %w", err)
+		return fmt.Errorf("Fehler beim Herunterladen des Snapshots: %w", err)
 	}
 
-	// Bild in der Datenbank speichern
-	image := p.frigateClient.ToImage(eventData, localPath)
-	if err := p.db.Create(image).Error; err != nil {
-		return fmt.Errorf("failed to save image to database: %w", err)
-	}
-
-	log.Infof("Saved Frigate update event image: %s", localPath)
-
-	// Bild verarbeiten (Gesichtserkennung)
-	_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{})
+	// Bild zur Verarbeitung an den Worker-Pool übergeben
+	// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
+	_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+		DetectFaces:    true,
+		RecognizeFaces: true,
+		Metadata:       metadata,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to process image: %w", err)
+		return fmt.Errorf("Fehler bei der Bildverarbeitung: %w", err)
 	}
 
+	log.Infof("Frigate Update-Event-Bild verarbeitet: %s", localPath)
 	return nil
 }
 

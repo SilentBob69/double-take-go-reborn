@@ -22,7 +22,7 @@ FROM alpine:3.16
 WORKDIR /app
 
 # Abhängigkeiten installieren
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata mosquitto-clients jq curl
 
 # Zeitzone-Daten beibehalten
 ENV TZ=Europe/Berlin
