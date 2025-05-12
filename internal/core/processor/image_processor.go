@@ -456,13 +456,8 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 		var imageData []byte
 		var err error
 		
-		// Versuche Bilddaten direkt aus dem Event zu extrahieren
-		imageData, err = p.frigateClient.ExtractSnapshotFromEvent(eventData)
-		if err != nil {
-			log.Infof("Keine Bilddaten im MQTT-Payload gefunden, versuche API-Download: %v", err)
-			
-			// Fallback: Versuche Snapshot über API herunterzuladen
-			if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
+		// Versuche Snapshot über API herunterzuladen
+		if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
 				log.Warnf("Konnte Snapshot %d für Event %s weder aus MQTT noch über API laden: %v", i, eventData.ID, err)
 				continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
 			}
@@ -638,17 +633,14 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 	// Zuerst versuchen, Bilddaten direkt aus dem Event-Objekt zu extrahieren
 	var imageData []byte
 	
-	// Versuche Bilddaten direkt aus dem Event zu extrahieren
-	imageData, err := p.frigateClient.ExtractSnapshotFromEvent(eventData)
-	if err != nil {
-		log.Infof("Keine Bilddaten im MQTT-Payload gefunden, versuche API-Download: %v", err)
-		
-		// Fallback: Versuche Snapshot über API herunterzuladen
-		if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
-			return fmt.Errorf("Fehler beim Herunterladen des Snapshots: %w", err)
-		}
-	} else {
-		// Bilddaten aus MQTT-Payload direkt in Datei schreiben
+	// Versuche Snapshot über API herunterzuladen
+	if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
+		return fmt.Errorf("Fehler beim Herunterladen des Snapshots: %w", err)
+	}
+	
+	// Nachfolgende Alternative kommentiert, bis ExtractSnapshotFromEvent implementiert ist
+	/*
+	// Bilddaten aus MQTT-Payload direkt in Datei schreiben
 		log.Infof("Speichere Bilddaten aus MQTT-Payload in %s", fullPath)
 		
 		// Verzeichnis erstellen, falls es nicht existiert
@@ -660,7 +652,7 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 		if err := os.WriteFile(fullPath, imageData, 0644); err != nil {
 			return fmt.Errorf("Konnte Bilddaten nicht in Datei speichern: %v", err)
 		}
-	}
+	*/
 
 	// Bild zur Verarbeitung an den Worker-Pool übergeben
 	// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
