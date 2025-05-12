@@ -355,6 +355,7 @@
 
             // --- SSE Setup ---
             const eventSource = new EventSource('/events');
+            // mainContainer wurde bereits in Zeile 303 definiert
             let containerWithFaces = document.getElementById('images-with-faces-container');
             let containerWithoutFaces = document.getElementById('images-without-faces-container');
             // Make sure the containers exist, even if initially empty, or handle null case
