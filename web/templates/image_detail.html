@@ -48,7 +48,7 @@
     <div class="col-md-8">
         <div class="card mb-4">
             <div class="card-body p-0 text-center">
-                <img src="/snapshots/{{ .Image.FilePath }}" class="img-fluid main-image" alt="Bild">
+                <img src="{{ imagePath .Image.FilePath }}" class="img-fluid main-image" alt="Bild">
             </div>
         </div>
     </div>
@@ -67,7 +67,7 @@
                         </tr>
                         <tr>
                             <th>Quelle</th>
-                            <td>{{ .Image.Source }}</td>
+                            <td>{{ getCameraName .Image.Source .Image.SourceData }}</td>
                         </tr>
                         <tr>
                             <th>Erkannt am</th>

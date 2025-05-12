@@ -1,0 +1,293 @@
+{{ define "event_details" }}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t "app.title" }} - {{ t "images.event_group" }}</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Globale Styles -->
+    <link rel="stylesheet" href="/static/css/global.css">
+    <style>
+        .event-card {
+            transition: all 0.3s ease;
+        }
+        .event-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .image-thumbnail {
+            height: 200px;
+            object-fit: cover;
+        }
+        
+        /* Toast-Stile */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        .toast {
+            min-width: 250px;
+        }
+        .toast-success {
+            background-color: #28a745 !important;
+        }
+        .toast-error {
+            background-color: #dc3545 !important;
+        }
+        .toast-warning {
+            background-color: #ffc107 !important;
+            color: #212529 !important;
+        }
+        .toast-info {
+            background-color: #17a2b8 !important;
+        }
+    </style>
+    <!-- Bootstrap JS (wichtig für Tooltips) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    {{template "_navbar.html" .}}
+    <div class="container py-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">{{ t "dashboard" }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ t "images.event_group" }} - {{ .Event.EventID }}</li>
+            </ol>
+        </nav>
+
+        <div class="row mb-4">
+            <div class="col-lg-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">{{ t "images.event_group" }} - {{ .Event.Label }}</h5>
+                        <div>
+                            <button 
+                                class="btn btn-sm btn-outline-light me-2" 
+                                id="editGroupBtn"
+                                data-bs-toggle="tooltip" 
+                                data-bs-title="{{ t "images.tooltip_edit_group" }}">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                            <button 
+                                class="btn btn-sm btn-outline-light" 
+                                id="deleteGroupBtn"
+                                data-event-id="{{ .Event.EventID }}"
+                                data-bs-toggle="tooltip" 
+                                data-bs-title="{{ t "images.tooltip_delete_group" }}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <th>{{ t "images.event_id" }}:</th>
+                                            <td>{{ .Event.EventID }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>{{ t "images.timestamp" }}:</th>
+                                            <td>{{ formatDateTime .Event.Timestamp }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>{{ t "images.source" }}:</th>
+                                            <td>{{ .Event.Source }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th>{{ t "images.label" }}:</th>
+                                            <td>{{ .Event.Label }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                             <th>{{ t "images.camera" }}:</th>
+                                            <td>{{ .Event.Camera }}</td>
+                                        </tr>
+                                        {{ if .Event.Zone }}
+                                        <tr>
+                                            <th>{{ t "images.zones" }}:</th>
+                                            <td>{{ .Event.Zone }}</td>
+                                        </tr>
+                                        {{ end }}
+                                        <tr>
+                                            <th>{{ t "common.faces" }}:</th>
+                                            <td>
+                                                {{ if .Event.HasFaces }}
+                                                    <span class="badge bg-success">{{ t "common.yes" }}</span>
+                                                {{ else }}
+                                                    <span class="badge bg-secondary">{{ t "common.no" }}</span>
+                                                {{ end }}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th>{{ t "common.matches" }}:</th>
+                                            <td>
+                                                {{ if .Event.HasMatches }}
+                                                    <span class="badge bg-success">{{ t "common.yes" }}</span>
+                                                {{ else }}
+                                                    <span class="badge bg-secondary">{{ t "common.no" }}</span>
+                                                {{ end }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12 mb-2">
+                <h4>{{ t "images.title" }} ({{ len .Images }})</h4>
+            </div>
+            
+            {{ if .Images }}
+                {{ range .Images }}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                <span class="small text-muted">{{ formatDateTime .Timestamp }}</span>
+                                <div class="badges">
+                                    {{ if .HasFaces }}
+                                        <span class="badge bg-primary" data-bs-toggle="tooltip" data-bs-title="{{ t "common.faces" }}">
+                                            <i class="bi bi-person"></i> {{ .FaceCount }}
+                                        </span>
+                                    {{ end }}
+                                    {{ if .HasMatches }}
+                                        <span class="badge bg-success" data-bs-toggle="tooltip" data-bs-title="{{ t "common.matches" }}">
+                                            <i class="bi bi-check-circle"></i> {{ .MatchCount }}
+                                        </span>
+                                    {{ end }}
+                                </div>
+                            </div>
+                            <div class="position-relative">
+                                <a href="/image/{{ .ID }}">
+                                    <img src="{{ .URL }}" class="card-img-top" alt="Image {{ .ID }}">
+                                </a>
+                                {{ if .HasFaces }}
+                                    <div class="position-absolute bottom-0 start-0 p-2 w-100 bg-dark bg-opacity-75">
+                                        {{ range .Faces }}
+                                            <span class="badge {{ if .HasMatch }}bg-success{{ else }}bg-primary{{ end }} me-1 fs-6">
+                                                {{ if .HasMatch }}
+                                                    <strong>{{ .MatchName }}</strong> ({{ .Confidence }}%)
+                                                {{ else }}
+                                                    {{ t "common.unknown" }}
+                                                {{ end }}
+                                            </span>
+                                        {{ end }}
+                                    </div>
+                                {{ end }}
+                            </div>
+                            <div class="card-footer d-flex justify-content-end">
+                                <button 
+                                    class="btn btn-sm btn-outline-primary me-2" 
+                                    data-image-id="{{ .ID }}"
+                                    data-action="reprocess"
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-title="{{ t "images.tooltip_reprocess" }}">
+                                    <i class="bi bi-arrow-repeat"></i>
+                                </button>
+                                <button 
+                                    class="btn btn-sm btn-outline-danger" 
+                                    data-image-id="{{ .ID }}"
+                                    data-action="delete"
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-title="{{ t "images.tooltip_delete" }}">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                {{ end }}
+            {{ else }}
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        {{ t "common.no_data" }}
+                    </div>
+                </div>
+            {{ end }}
+        </div>
+    </div>
+
+    <footer class="bg-dark text-light py-3 mt-5">
+        <div class="container text-center">
+            <p class="mb-0">Double-Take Go &copy; 2025</p>
+        </div>
+    </footer>
+    
+    <script>
+        $(document).ready(function() {
+            // Löschfunktion für Event-Gruppe
+            $('#deleteGroupBtn').on('click', function() {
+                const eventId = $(this).data('event-id');
+                if (confirm('{{ t "images.delete_confirm_group" }}')) {
+                    $.ajax({
+                        url: `/api/events/${eventId}`,
+                        type: 'DELETE',
+                        success: function() {
+                            window.location.href = '/';
+                        },
+                        error: function() {
+                            showToast('{{ t "common.error" }}', '{{ t "images.delete_error_single" }}', 'danger');
+                        }
+                    });
+                }
+            });
+
+            // Einzelbild-Aktionen
+            $('[data-action="delete"]').on('click', function() {
+                const imageId = $(this).data('image-id');
+                if (confirm('{{ t "images.delete_confirm_single" }}')) {
+                    $.ajax({
+                        url: `/api/images/${imageId}`,
+                        type: 'DELETE',
+                        success: function() {
+                            $(`[data-image-id="${imageId}"]`).closest('.col-md-6').fadeOut(500, function() {
+                                $(this).remove();
+                                // Prüfe, ob nach dem Löschen noch Bilder vorhanden sind
+                                if ($('.card.shadow-sm').length === 0) {
+                                    location.reload();
+                                }
+                            });
+                        },
+                        error: function() {
+                            showToast('{{ t "common.error" }}', '{{ t "images.delete_error_single" }}', 'danger');
+                        }
+                    });
+                }
+            });
+
+            $('[data-action="reprocess"]').on('click', function() {
+                const imageId = $(this).data('image-id');
+                $.ajax({
+                    url: `/api/images/${imageId}/recognize`,
+                    type: 'POST',
+                    success: function() {
+                        showToast('{{ t "common.success" }}', '{{ t "images.reprocess_started" }}', 'success');
+                    },
+                    error: function() {
+                        showToast('{{ t "common.error" }}', '{{ t "images.reprocess_error" }}', 'danger');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
+{{ end }}

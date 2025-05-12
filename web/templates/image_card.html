@@ -1,14 +1,14 @@
 {{/* Definiere das Template für eine einzelne Bildkarte */}}
 {{ define "imageCard" }}
 <div class="col-md-6 col-lg-4 mb-4">
-    <div class="card shadow-sm bg-body-tertiary" id="image-card-{{.ID}}">
+    <div class="card shadow-sm bg-body-tertiary image-card" id="image-card-{{.ID}}" data-image-id="{{.ID}}">
         <img src="/snapshots/{{.FilePath}}" class="card-img-top" alt="Snapshot {{.ID}}" onerror="this.onerror=null; this.src='/static/img/no-image.png'; console.log('Bild konnte nicht geladen werden, verwende Fallback-Bild');">
         <div class="card-body">
             <h5 class="card-title">{{ t "images.image_id" }}: {{.ID}}</h5>
             <p class="card-text">
                 <small class="text-muted">{{ t "images.timestamp" }}: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
                 <small class="text-muted">{{ t "images.source" }}: Frigate</small><br>
-                <small class="text-muted">{{ t "images.camera" }}: {{.Source}}</small><br>
+                <small class="text-muted">{{ t "images.camera" }}: {{getCameraName .Source .SourceData}}</small><br>
                 {{if .Label}}<small class="text-muted">{{ t "images.label" }}: {{.Label}}</small><br>{{end}}
                     
                 {{if .Area}}

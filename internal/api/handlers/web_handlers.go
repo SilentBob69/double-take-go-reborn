@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +21,8 @@ import (
 	"double-take-go-reborn/internal/integrations/compreface"
 	"double-take-go-reborn/internal/server/sse"
 	"double-take-go-reborn/internal/utils"
+
+	"gorm.io/datatypes"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -240,44 +244,56 @@ func (h *WebHandler) loadTemplates() error {
 		},
 		"formatBytes": utils.FormatBytes,
 		"paginationRange": func(currentPage, totalPages, maxPages int) []int {
-			if totalPages <= maxPages {
-				// Wenn die Gesamtseitenzahl kleiner ist als die maximale Anzahl angezeigter Seiten,
-				// zeige einfach alle Seiten an
-				pages := make([]int, totalPages)
-				for i := 0; i < totalPages; i++ {
-					pages[i] = i + 1
-				}
-				return pages
+			var pages []int
+			
+			// Berechne Start- und Endseite basierend auf maxPages
+			halfMax := maxPages / 2
+			startPage := math.Max(1, float64(currentPage-halfMax))
+			endPage := math.Min(float64(totalPages), startPage+float64(maxPages)-1)
+			
+			// Adjustiere die Startseite, wenn wir am Ende des Bereichs sind
+			if endPage-startPage+1 < float64(maxPages) && startPage > 1 {
+				startPage = math.Max(1, endPage-float64(maxPages)+1)
 			}
-
-			// Berechne Start- und Endseite
-			half := maxPages / 2
-			start := currentPage - half
-			if start < 1 {
-				start = 1
-			}
-			end := start + maxPages - 1
-			if end > totalPages {
-				end = totalPages
-				start = end - maxPages + 1
-				if start < 1 {
-					start = 1
-				}
-			}
-
-			// Erstelle die Seitenbereichsarray
-			pages := make([]int, 0, end-start+1)
-			for i := start; i <= end; i++ {
+			
+			for i := int(startPage); i <= int(endPage); i++ {
 				pages = append(pages, i)
 			}
 			return pages
 		},
-		"formatJSON": func(data interface{}) string {
-			jsonBytes, err := json.MarshalIndent(data, "", "  ")
+		"formatJSON": func(data datatypes.JSON) string {
+			var jsonObj interface{}
+			err := json.Unmarshal(data, &jsonObj)
+			if err != nil {
+				return fmt.Sprintf("Error parsing JSON: %v", err)
+			}
+			
+			jsonBytes, err := json.MarshalIndent(jsonObj, "", "  ")
 			if err != nil {
 				return fmt.Sprintf("Error formatting JSON: %v", err)
 			}
 			return string(jsonBytes)
+		},
+		"getCameraName": func(source string, sourceData datatypes.JSON) string {
+			// Wenn keine SourceData vorhanden sind, gib die Quelle zurück
+			if len(sourceData) == 0 {
+				return source
+			}
+			
+			// Versuche, den Kameranamen aus den SourceData zu extrahieren
+			var data map[string]interface{}
+			err := json.Unmarshal(sourceData, &data)
+			if err != nil {
+				log.Errorf("Fehler beim Parsen der SourceData: %v", err)
+				return source
+			}
+			
+			// Überprüfe, ob die SourceData einen Kameranamen enthalten
+			if camera, ok := data["camera"].(string); ok && camera != "" {
+				return camera
+			}
+			
+			return source
 		},
 		"imagePath": h.getImagePath, // Funktion zur korrekten Pfadbestimmung für Bilder
 	}
@@ -424,132 +440,235 @@ func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
 	
 	// API für die Weboberfläche
 	router.GET("/system/stats", h.handleSystemStats)
-	
-	// Alle anderen Pfade werden als statische HTML-Seiten behandelt
-	router.NoRoute(h.handleIndex)
+}
+
+// EventGroup repräsentiert eine Gruppe von Bildern, die zum selben Event gehören
+type EventGroup struct {
+	EventID      string
+	Images       []models.Image
+	HasFaces     bool
+	HasMatches   bool
+	ThumbnailURL string
+	Source       string
+	Camera       string
+	Label        string
+	Zone         string
+	Timestamp    time.Time
+	Count        int
 }
 
 // handleIndex zeigt die Hauptseite an mit integrierten Bildern und Filterfunktionen
 func (h *WebHandler) handleIndex(c *gin.Context) {
-	// Paginierung
+	// Paginierung und Filter extrahieren
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize := 24 // Größer als auf der alten Bilder-Seite, da dies die Hauptseite ist
+	pageSize := 18 // Gruppen pro Seite
 	offset := (page - 1) * pageSize
-
-	// Filter einlesen
-	sourceFilter := c.Query("source")
-	hasFacesFilter := c.Query("hasfaces")
-	hasMatchesFilter := c.Query("hasmatches")
-	dateRangeFilter := c.Query("daterange")
-
-	// Query vorbereiten
-	query := h.db.Model(&models.Image{}).Order("created_at DESC")
-
+	
+	// Filteroptionen extrahieren
+	source := c.DefaultQuery("source", "")
+	hasfaces := c.DefaultQuery("hasfaces", "")
+	hasmatches := c.DefaultQuery("hasmatches", "")
+	daterange := c.DefaultQuery("daterange", "")
+	
+	// Datenbankabfrage vorbereiten
+	db := h.db.Model(&models.Image{})
+	
 	// Filter anwenden
-	if sourceFilter != "" {
-		query = query.Where("source = ?", sourceFilter)
+	if source != "" {
+		db = db.Where("source = ?", source)
 	}
-
-	// Filter für Bilder mit/ohne Gesichter
-	if hasFacesFilter == "yes" {
-		query = query.Where("EXISTS (SELECT 1 FROM faces WHERE faces.image_id = images.id)")
-	} else if hasFacesFilter == "no" {
-		query = query.Where("NOT EXISTS (SELECT 1 FROM faces WHERE faces.image_id = images.id)")
+	
+	// Filter für Gesichter
+	if hasfaces == "yes" {
+		db = db.Joins("LEFT JOIN faces ON faces.image_id = images.id").Where("faces.id IS NOT NULL").Group("images.id")
+	} else if hasfaces == "no" {
+		db = db.Where("NOT EXISTS (SELECT 1 FROM faces WHERE faces.image_id = images.id)")
 	}
-
-	// Filter für Bilder mit/ohne Matches
-	if hasMatchesFilter == "yes" {
-		query = query.Where("EXISTS (SELECT 1 FROM faces JOIN matches ON faces.id = matches.face_id WHERE faces.image_id = images.id)")
-	} else if hasMatchesFilter == "no" {
-		query = query.Where("NOT EXISTS (SELECT 1 FROM faces JOIN matches ON faces.id = matches.face_id WHERE faces.image_id = images.id)")
+	
+	// Filter für Matches/Identitäten
+	if hasmatches == "yes" {
+		db = db.Joins("LEFT JOIN faces ON faces.image_id = images.id").Joins("LEFT JOIN matches ON matches.face_id = faces.id").Where("matches.id IS NOT NULL").Group("images.id")
+	} else if hasmatches == "no" {
+		db = db.Where("NOT EXISTS (SELECT 1 FROM faces WHERE faces.image_id = images.id AND EXISTS (SELECT 1 FROM matches WHERE matches.face_id = faces.id))")
 	}
-
-	// Zeitraumfilter
-	if dateRangeFilter != "" {
-		now := time.Now()
-		var startTime time.Time
-
-		switch dateRangeFilter {
+	
+	// Datumsbereich-Filter
+	var startDate time.Time
+	switch daterange {
 		case "today":
-			startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			today := time.Now().Truncate(24 * time.Hour) // Heute 00:00
+			startDate = today
 		case "yesterday":
-			yesterday := now.AddDate(0, 0, -1)
-			startTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, now.Location())
-			endTime := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-			query = query.Where("created_at BETWEEN ? AND ?", startTime, endTime)
-			break // Sonderfall: Hier setzen wir Start- und Endzeit
+			yesterday := time.Now().Truncate(24 * time.Hour).Add(-24 * time.Hour) // Gestern 00:00
+			startDate = yesterday
 		case "week":
-			startTime = now.AddDate(0, 0, -7)
+			weekStart := time.Now().Truncate(24 * time.Hour).Add(-7 * 24 * time.Hour) // Vor 7 Tagen 00:00
+			startDate = weekStart
 		case "month":
-			startTime = now.AddDate(0, -1, 0)
-		}
-
-		if dateRangeFilter != "yesterday" { // Für yesterday haben wir bereits die BETWEEN-Abfrage gesetzt
-			query = query.Where("created_at >= ?", startTime)
-		}
+			monthStart := time.Now().Truncate(24 * time.Hour).Add(-30 * 24 * time.Hour) // Vor 30 Tagen 00:00
+			startDate = monthStart
 	}
-
-	// Zählen für Paginierung
-	var total int64
-	query.Count(&total)
-
-	// Bilder abrufen mit allen Filterungen
-	var recentImages []models.Image
-	if err := query.Preload("Faces.Matches.Identity").Offset(offset).Limit(pageSize).Find(&recentImages).Error; err != nil {
-		log.Errorf("Failed to fetch images: %v", err)
-	}
-
-	// Bilder in solche mit und ohne Gesichter aufteilen (für die Statistik-Karten)
-	var imagesWithFaces []models.Image
-	var imagesWithoutFaces []models.Image
 	
-	for _, img := range recentImages {
-		if len(img.Faces) > 0 {
-			imagesWithFaces = append(imagesWithFaces, img)
+	if !startDate.IsZero() {
+		db = db.Where("timestamp >= ?", startDate)
+	}
+	
+	// Bilder abfragen ohne Paginierung für die Gruppierung
+	var images []models.Image
+	db = db.Order("timestamp DESC").Preload("Faces.Matches.Identity")
+	result := db.Find(&images)
+	
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Fehler beim Laden der Bilder"})
+		return
+	}
+	
+	// Bilder nach EventID gruppieren
+	eventGroups := make(map[string]*EventGroup)
+	singleImages := make([]models.Image, 0)
+	
+	for i := range images {
+		images[i].FileName = filepath.Base(images[i].FilePath)
+		
+		// Zusätzlich für Frigate-Events: Versuche, Metadaten zu extrahieren
+		if images[i].Source == "frigate" && len(images[i].SourceData) > 0 {
+			// Versuche, als Frigate-Event zu parsen
+			var eventData map[string]interface{}
+			if err := json.Unmarshal(images[i].SourceData, &eventData); err == nil {
+				// Bestimmte Felder extrahieren, falls vorhanden
+				if zones, ok := eventData["current_zones"].([]interface{}); ok && len(zones) > 0 {
+					// Zonen als Komma-getrennte Liste
+					zoneStrs := make([]string, 0, len(zones))
+					for _, z := range zones {
+						if zStr, ok := z.(string); ok {
+							zoneStrs = append(zoneStrs, zStr)
+						}
+					}
+					images[i].Zone = strings.Join(zoneStrs, ", ")
+				}
+			}
+		}
+		
+		// Bilder nach EventID gruppieren
+		if images[i].EventID != "" {
+			// Prüfen, ob bereits eine Gruppe für diese EventID existiert
+			group, exists := eventGroups[images[i].EventID]
+			
+			if !exists {
+				// Neue Gruppe erstellen
+				group = &EventGroup{
+					EventID:      images[i].EventID,
+					Images:       make([]models.Image, 0),
+					Source:       images[i].Source,
+					Label:        images[i].Label,
+					Zone:         images[i].Zone,
+					Timestamp:    images[i].Timestamp,
+					ThumbnailURL: h.getImagePath(images[i].FilePath),
+				}
+				eventGroups[images[i].EventID] = group
+			}
+			
+			// Bild zur Gruppe hinzufügen
+			group.Images = append(group.Images, images[i])
+			group.Count = len(group.Images)
+			
+			// Prüfen, ob dieses Bild Gesichter oder Matches hat
+			if len(images[i].Faces) > 0 {
+				group.HasFaces = true
+				
+				// Prüfen, ob Gesichter Matches haben
+				for _, face := range images[i].Faces {
+					if len(face.Matches) > 0 {
+						group.HasMatches = true
+						break
+					}
+				}
+				
+				// Falls dieses Bild Gesichter hat, als Thumbnail verwenden
+				group.ThumbnailURL = h.getImagePath(images[i].FilePath)
+			}
 		} else {
-			imagesWithoutFaces = append(imagesWithoutFaces, img)
+			// Bilder ohne EventID als einzelne Bilder behandeln
+			singleImages = append(singleImages, images[i])
 		}
 	}
 	
-	// Statistiken abrufen
-	var imageCount int64
-	var faceCount int64
-	var identityCount int64
-
-	h.db.Model(&models.Image{}).Count(&imageCount)
-	h.db.Model(&models.Face{}).Count(&faceCount)
-	h.db.Model(&models.Identity{}).Count(&identityCount)
-
-	// Quellen für Filter abrufen
+	// EventGroups in eine sortierte Liste umwandeln
+	groupsList := make([]*EventGroup, 0, len(eventGroups))
+	for _, group := range eventGroups {
+		groupsList = append(groupsList, group)
+	}
+	
+	// Gruppen nach Timestamp absteigend sortieren
+	sort.Slice(groupsList, func(i, j int) bool {
+		return groupsList[i].Timestamp.After(groupsList[j].Timestamp)
+	})
+	
+	// Anzahl der Datensätze für Paginierung ermitteln
+	total := int64(len(groupsList) + len(singleImages))
+	
+	// Paginierung anwenden
+	allItems := make([]interface{}, 0)
+	
+	// Zuerst EventGroups hinzufügen
+	for _, group := range groupsList {
+		allItems = append(allItems, group)
+	}
+	
+	// Dann einzelne Bilder hinzufügen
+	for _, img := range singleImages {
+		allItems = append(allItems, img)
+	}
+	
+	// Paginierte Teilmenge auswählen
+	start := offset
+	end := offset + pageSize
+	
+	if start > len(allItems) {
+		start = len(allItems)
+	}
+	
+	if end > len(allItems) {
+		end = len(allItems)
+	}
+	
+	paginatedItems := allItems[start:end]
+	
+	// Verfügbare Quellen für Filter-Dropdown abfragen
 	var sources []string
 	h.db.Model(&models.Image{}).Distinct().Pluck("source", &sources)
-
-	// Daten für das Template
+	
+	// Pagination-Informationen vorbereiten
+	totalPages := int(total) / pageSize
+	if int(total) % pageSize > 0 {
+		totalPages++
+	}
+	
+	if totalPages == 0 {
+		totalPages = 1 // Mindestens eine Seite anzeigen
+	}
+	
+	// Daten an das Template übergeben
 	data := gin.H{
-		"Images":            recentImages,
-		"ImagesWithFaces":   imagesWithFaces,
-		"ImagesWithoutFaces": imagesWithoutFaces,
-		"ImageCount":        imageCount,
-		"FaceCount":         faceCount,
-		"IdentityCount":     identityCount,
-		"UpdatedAt":         time.Now(),
-		"Sources":           sources,
-		"Pagination":        gin.H{
-			"Current":     page,
-			"PageSize":    pageSize,
-			"Total":       total,
-			"TotalPages":  (total + int64(pageSize) - 1) / int64(pageSize),
-			"HasPrevious": page > 1,
-			"HasNext":     int64(page*pageSize) < total,
-		},
+		"Items": paginatedItems, // Gemischte Liste aus Gruppen und einzelnen Bildern
+		"Sources": sources,
 		"Filter": gin.H{
-			"Source":     sourceFilter,
-			"HasFaces":   hasFacesFilter,
-			"HasMatches": hasMatchesFilter,
-			"DateRange":  dateRangeFilter,
+			"Source": source,
+			"HasFaces": hasfaces,
+			"HasMatches": hasmatches,
+			"DateRange": daterange,
+		},
+		"Pagination": gin.H{
+			"Current": page,
+			"TotalPages": totalPages,
+			"HasPrev": page > 1,
+			"HasNext": page < totalPages,
+			"PrevPage": page - 1,
+			"NextPage": page + 1,
+			"Total": total, // Gesamtzahl der Items
 		},
 	}
-
+	
 	h.renderTemplate(c, "index.html", data)
 }
 
