@@ -452,31 +452,20 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 		localPath := filepath.Join("frigate", filename)
 		fullPath := filepath.Join(p.cfg.Server.SnapshotDir, "frigate", filename)
 
-		// Zuerst versuchen, Bilddaten direkt aus dem Event-Objekt zu extrahieren
-		var imageData []byte
-		var err error
-		
-		// Versuche Snapshot über API herunterzuladen
-		if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
-				log.Warnf("Konnte Snapshot %d für Event %s weder aus MQTT noch über API laden: %v", i, eventData.ID, err)
-				continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
-			}
-		} else {
-			// Bilddaten aus MQTT-Payload direkt in Datei schreiben
-			log.Infof("Speichere Bilddaten aus MQTT-Payload in %s", fullPath)
-			
-			// Verzeichnis erstellen, falls es nicht existiert
-			if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-				log.Warnf("Konnte Verzeichnis für Snapshot nicht erstellen: %v", err)
-				continue
-			}
-			
-			// Bild speichern
-			if err := os.WriteFile(fullPath, imageData, 0644); err != nil {
-				log.Warnf("Konnte Bilddaten nicht in Datei speichern: %v", err)
-				continue
-			}
+		// Pfad für den Snapshot vorbereiten
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			log.Warnf("Konnte Verzeichnis für Snapshot nicht erstellen: %v", err)
+			continue
 		}
+
+		// Snapshot über API herunterladen
+		if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
+			log.Warnf("Konnte Snapshot %d für Event %s nicht über API laden: %v", i, eventData.ID, err)
+			continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
+		}
+
+		// Hinweis: Die direkte Extraktion von Bilddaten aus dem Event ist momentan nicht implementiert
+		// Zukünftige Implementierung: ExtractSnapshotFromEvent in FrigateClient
 
 		// Zum aktuellen Bild spezifische Metadaten hinzufügen
 		imageMetadata := make(map[string]interface{})
