@@ -84,6 +84,7 @@
     "source": "Quelle",
     "delete_image": "Bild löschen",
     "reprocess_image": "Gesichter neu erkennen",
+    "updated": "Bild aktualisiert",
     "tooltip_delete": "Dieses Bild löschen",
     "tooltip_reprocess": "Gesichtserkennung für dieses Bild erneut durchführen",
     "tooltip_filter": "Bilder nach verschiedenen Kriterien filtern",

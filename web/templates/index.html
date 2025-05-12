@@ -119,7 +119,7 @@
         {{ define "imageCard" }}
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card shadow-sm bg-body-tertiary" id="image-card-{{.ID}}">
-                <img src="/snapshots/{{.FilePath}}" class="card-img-top" alt="Snapshot {{.ID}}">
+                <img src="{{ imagePath .FilePath }}" class="card-img-top" alt="Snapshot {{.ID}}">
                 <div class="card-body">
                     <h5 class="card-title">{{ t "images.image_id" }}: {{.ID}}</h5>
                     <p class="card-text">
@@ -264,7 +264,8 @@
             return `
                 <div class="col-md-6 col-lg-4 mb-4">
                     <div class="card shadow-sm bg-body-tertiary" id="image-card-${data.id}">
-                        <img src="/snapshots/${data.filepath}" class="card-img-top" alt="Snapshot ${data.id}">
+                        <!-- Hier können wir die Template-Funktion nicht direkt verwenden, da wir in JavaScript sind -->
+                        <img src="${getImagePathJS(data.filepath)}" class="card-img-top" alt="Snapshot ${data.id}">
                         <div class="card-body">
                             <h5 class="card-title">${translations.imageId}: ${data.id}</h5>
                             <p class="card-text">
@@ -283,7 +284,17 @@
             `;
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // JavaScript-Hilfsfunktion für Bildpfade
+        function getImagePathJS(filepath) {
+            // Für Frigate-Bilder den korrekten Pfad verwenden
+            if (filepath.startsWith('frigate_')) {
+                return '/images/frigate/' + filepath;
+            }
+            // Für alle anderen Bilder den Standard-Pfad verwenden
+            return '/images/' + filepath;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
             // Aktiviere Bootstrap-Tooltips
             const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
             const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
@@ -343,18 +354,18 @@
             }
 
             // --- SSE Setup ---
-            const eventSource = new EventSource('/sse');
-            const containerWithFaces = document.getElementById('images-with-faces-container');
-            const containerWithoutFaces = document.getElementById('images-without-faces-container');
+            const eventSource = new EventSource('/events');
+            let containerWithFaces = document.getElementById('images-with-faces-container');
+            let containerWithoutFaces = document.getElementById('images-without-faces-container');
             // Make sure the containers exist, even if initially empty, or handle null case
             if (!containerWithFaces && document.getElementById('images-with-faces-container') == null) { // Check if ID exists at all
                 // Inject container if needed, or handle differently
                  console.warn("'images-with-faces-container' not found, creating...");
                  // Example: Create and append the container dynamically if needed
-                 const h2 = document.createElement('h2');
+                 let h2 = document.createElement('h2');
                  h2.className = 'mt-4';
                  h2.textContent = '{{ t "images.title" }}';
-                 const newContainer = document.createElement('div');
+                 let newContainer = document.createElement('div');
                  newContainer.className = 'row';
                  newContainer.id = 'images-with-faces-container';
                  mainContainer.appendChild(h2);
@@ -364,10 +375,10 @@
             }
              if (!containerWithoutFaces && document.getElementById('images-without-faces-container') == null) {
                  console.warn("'images-without-faces-container' not found, creating...");
-                 const h2 = document.createElement('h2');
+                 let h2 = document.createElement('h2');
                  h2.className = 'mt-5';
                  h2.textContent = '{{ t "images.title_without_faces" }}';
-                 const newContainer = document.createElement('div');
+                 let newContainer = document.createElement('div');
                  newContainer.className = 'row';
                  newContainer.id = 'images-without-faces-container';
                  mainContainer.appendChild(h2);
@@ -383,8 +394,22 @@
                     console.log('Parsed SSE data:', data);
 
                     // Check if card already exists
-                    if (document.getElementById(`image-card-${data.id}`)) {
-                        console.log(`Image card ${data.id} already exists, skipping.`);
+                    const existingCardContainer = document.getElementById(`image-card-${data.id}`)?.closest('.col-md-6');
+                    if (existingCardContainer) {
+                        console.log(`Image card ${data.id} already exists, updating...`);
+                        
+                        // Create new card HTML
+                        const cardHTML = createImageCardHTML(data);
+                        const cardElement = document.createElement('div');
+                        cardElement.innerHTML = cardHTML.trim();
+                        const newCard = cardElement.firstChild;
+                        
+                        // Replace the existing card
+                        existingCardContainer.replaceWith(newCard.closest('.col-md-6'));
+                        
+                        // Determine if we need to move the card to a different container
+                        moveCardToCorrectContainer(newCard.closest('.col-md-6'), data);
+                        showToast(translations.success, `{{ t "images.updated" }} ${data.id}`, 'info');
                         return;
                     }
 
@@ -422,6 +447,34 @@
             };
         });
 
+        // --- Helper Functions ---
+        // Funktion zum Verschieben einer Karte in den richtigen Container basierend auf ihren Daten
+        function moveCardToCorrectContainer(cardElement, data) {
+            // Container referenzieren
+            const containerWithFaces = document.getElementById('images-with-faces-container');
+            const containerWithoutFaces = document.getElementById('images-without-faces-container');
+            
+            // Aktuelle Position der Karte bestimmen
+            const currentContainer = cardElement.parentElement;
+            
+            // Zielcontainer bestimmen
+            let targetContainer;
+            if (data.faces && data.faces.length > 0) {
+                targetContainer = containerWithFaces;
+            } else {
+                targetContainer = containerWithoutFaces;
+            }
+            
+            // Nichts tun, wenn die Karte bereits im richtigen Container ist
+            if (currentContainer === targetContainer) return;
+            
+            // Karte in den richtigen Container verschieben
+            if (targetContainer) {
+                console.log(`Moving card ${data.id} to ${data.faces && data.faces.length > 0 ? 'WITH' : 'WITHOUT'} faces container`);
+                targetContainer.prepend(cardElement);
+            }
+        }
+        
         // --- Action Functions (delete, recognize, delete all) ---
         function deleteImage(imageId) {
             fetch(`/api/images/${imageId}`, { method: 'DELETE' })

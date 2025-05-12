@@ -84,6 +84,7 @@
     "source": "Source",
     "delete_image": "Delete Image",
     "reprocess_image": "Re-recognize Faces",
+    "updated": "Image updated",
     "tooltip_delete": "Delete this image",
     "tooltip_reprocess": "Run face recognition again for this image",
     "tooltip_filter": "Filter images by various criteria",
