@@ -232,7 +232,7 @@
                             </a>
                         </li>
                         
-                        {{ range $i := paginationRange .CurrentPage .TotalPages }}
+                        {{ range $i := paginationRange .CurrentPage .TotalPages 5 }}
                         <li class="page-item {{ if eq $i $.CurrentPage }}active{{ end }}">
                             <a class="page-link" href="/identities/{{ $.Identity.ID }}?page={{ $i }}">{{ $i }}</a>
                         </li>

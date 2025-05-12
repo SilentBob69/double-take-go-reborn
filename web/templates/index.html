@@ -192,7 +192,7 @@
                     </a>
                 </li>
                 
-                {{ range $i := paginationRange .Pagination.Current .Pagination.TotalPages }}
+                {{ range $i := paginationRange .Pagination.Current .Pagination.TotalPages 5 }}
                 <li class="page-item {{ if eq $i $.Pagination.Current }}active{{ end }}">
                     <a class="page-link" href="/?page={{ $i }}{{ if $.Filter.Source }}&source={{ $.Filter.Source }}{{ end }}{{ if $.Filter.HasFaces }}&hasfaces={{ $.Filter.HasFaces }}{{ end }}{{ if $.Filter.HasMatches }}&hasmatches={{ $.Filter.HasMatches }}{{ end }}{{ if $.Filter.DateRange }}&daterange={{ $.Filter.DateRange }}{{ end }}">{{ $i }}</a>
                 </li>
