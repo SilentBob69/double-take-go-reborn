@@ -121,10 +121,10 @@ function updateImageGallery(imageData) {
     // Erstelle Toast-Benachrichtigung für das neue Bild
     createImageToast(imageData);
     
-    // Erstelle ein neues Bild-Element
-    const col = document.createElement('div');
-    col.className = 'col-md-3 mb-4 fade-in';
+    // Überprüfen, ob eine Karte für dieses Bild bereits existiert
+    const existingCard = document.querySelector(`[data-image-id="${imageData.id}"]`);
     
+    // Badges generieren (für neue oder bestehende Karten)
     let badges = '';
     if (imageData.faces_count > 0) {
         badges += `<span class="badge bg-info">${imageData.faces_count} Gesichter</span> `;
@@ -147,35 +147,95 @@ function updateImageGallery(imageData) {
         }
     }
     
-    col.innerHTML = `
-        <div class="card image-card">
-            <a href="/images/${imageData.id}">
-                <img src="${imageData.snapshot_url || ('/snapshots/' + imageData.file_path)}" class="image-thumbnail" alt="Bild">
-            </a>
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <h6 class="card-title">${imageData.source}</h6>
-                    <small class="text-muted">${formatTime(imageData.timestamp)}</small>
-                </div>
-                <div class="mt-2">
-                    ${badges}
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Füge das neue Bild als erstes Element ein
-    const firstChild = container.firstChild;
-    if (firstChild) {
-        container.insertBefore(col, firstChild);
+    // Korrekte Bildpfad-Generierung mit Fallback und Fehlerbehandlung
+    let imagePath;
+    if (imageData.snapshot_url && imageData.snapshot_url.trim() !== '') {
+        imagePath = imageData.snapshot_url;
+    } else if (imageData.file_path && imageData.file_path.trim() !== '') {
+        // Stellen Sie sicher, dass der Pfad nicht doppelt mit /snapshots/ beginnt
+        if (imageData.file_path.startsWith('/snapshots/')) {
+            imagePath = imageData.file_path;
+        } else {
+            imagePath = '/snapshots/' + imageData.file_path;
+        }
     } else {
-        container.appendChild(col);
+        // Fallback auf Platzhalter-Bild, wenn kein gültiger Pfad vorhanden ist
+        imagePath = '/static/img/no-image.png';
+        console.warn(`Kein gültiger Bildpfad für Bild ID ${imageData.id} gefunden`);
     }
     
-    // Entferne das letzte Element, wenn die Ansicht voll ist
-    const items = container.querySelectorAll('.col-md-3');
-    if (items.length > 12) {
-        container.removeChild(items[items.length - 1]);
+    if (existingCard) {
+        // Bestehende Karte aktualisieren
+        console.log(`Aktualisiere bestehende Karte für Bild ID ${imageData.id}`);
+        
+        // Bildquelle aktualisieren
+        const img = existingCard.querySelector('img');
+        if (img) {
+            img.src = imagePath;
+            // Wenn das Bild nicht geladen werden kann, auf Fallback zurücksetzen
+            img.onerror = function() {
+                this.onerror = null;
+                this.src = '/static/img/no-image.png';
+                console.log('Bild konnte nicht geladen werden, verwende Fallback-Bild');
+            };
+        }
+        
+        // Badges aktualisieren
+        const badgesContainer = existingCard.querySelector('.mt-2');
+        if (badgesContainer) {
+            badgesContainer.innerHTML = badges;
+        }
+        
+        // Wenn ein Update-Ereignis den Container wechseln muss (z.B. von 'no-faces' zu 'has-faces')
+        const moveToContainer = (imageData.faces_count > 0) ? 
+            document.querySelector('[data-image-container="has-faces"]') : 
+            document.querySelector('[data-image-container="no-faces"]');
+        
+        if (moveToContainer && container !== moveToContainer) {
+            console.log(`Verschiebe Karte zu anderem Container: ${imageData.faces_count > 0 ? 'has-faces' : 'no-faces'}`);
+            const parentCol = existingCard.closest('.col-md-3');
+            if (parentCol) {
+                // Entferne aus dem aktuellen Container und füge zum neuen hinzu
+                container.removeChild(parentCol);
+                moveToContainer.insertBefore(parentCol, moveToContainer.firstChild);
+            }
+        }
+    } else {
+        // Neue Karte erstellen
+        console.log(`Erstelle neue Karte für Bild ID ${imageData.id}`);
+        const col = document.createElement('div');
+        col.className = 'col-md-3 mb-4 fade-in';
+        
+        col.innerHTML = `
+            <div class="card image-card" data-image-id="${imageData.id}">
+                <a href="/images/${imageData.id}">
+                    <img src="${imagePath}" class="image-thumbnail" alt="Bild" onerror="this.onerror=null; this.src='/static/img/no-image.png'; console.log('Bild konnte nicht geladen werden, verwende Fallback-Bild');">
+                </a>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <h6 class="card-title">${imageData.source}</h6>
+                        <small class="text-muted">${formatTime(imageData.timestamp)}</small>
+                    </div>
+                    <div class="mt-2">
+                        ${badges}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Füge das neue Bild als erstes Element ein
+        const firstChild = container.firstChild;
+        if (firstChild) {
+            container.insertBefore(col, firstChild);
+        } else {
+            container.appendChild(col);
+        }
+        
+        // Entferne das letzte Element, wenn die Ansicht voll ist
+        const items = container.querySelectorAll('.col-md-3');
+        if (items.length > 12) {
+            container.removeChild(items[items.length - 1]);
+        }
     }
 }
 
