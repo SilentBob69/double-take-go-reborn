@@ -481,13 +481,13 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 
 		// Bild zur Verarbeitung an den Worker-Pool übergeben
 		// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
-		_, err = p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+		_, processErr := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
 			DetectFaces:    true,
 			RecognizeFaces: true,
 			Metadata:       imageMetadata,
 		})
-		if err != nil {
-			log.Warnf("Fehler bei der Verarbeitung des Bildes %s: %v", fullPath, err)
+		if processErr != nil {
+			log.Warnf("Fehler bei der Verarbeitung des Bildes %s: %v", fullPath, processErr)
 		} else {
 			log.Infof("Frigate-Event-Bild %d von %d verarbeitet: %s", i+1, len(snapshotPaths), localPath)
 		}
@@ -619,9 +619,6 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 	localPath := filepath.Join("frigate", filename)
 	fullPath := filepath.Join(p.cfg.Server.SnapshotDir, "frigate", filename)
 
-	// Zuerst versuchen, Bilddaten direkt aus dem Event-Objekt zu extrahieren
-	var imageData []byte
-	
 	// Versuche Snapshot über API herunterzuladen
 	if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
 		return fmt.Errorf("Fehler beim Herunterladen des Snapshots: %w", err)
@@ -645,13 +642,13 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 
 	// Bild zur Verarbeitung an den Worker-Pool übergeben
 	// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
-	_, err = p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+	_, processErr := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
 		DetectFaces:    true,
 		RecognizeFaces: true,
 		Metadata:       metadata,
 	})
-	if err != nil {
-		return fmt.Errorf("Fehler bei der Bildverarbeitung: %w", err)
+	if processErr != nil {
+		return fmt.Errorf("Fehler bei der Bildverarbeitung: %w", processErr)
 	}
 
 	log.Infof("Frigate Update-Event-Bild verarbeitet: %s", localPath)
