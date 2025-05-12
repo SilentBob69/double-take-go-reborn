@@ -3,6 +3,7 @@ package mqtt
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"double-take-go-reborn/config"
@@ -35,22 +36,31 @@ type FrigateEvent struct {
 
 // FrigateEventData enthält die Details eines Frigate-Ereignisses
 type FrigateEventData struct {
-	ID       string     `json:"id"`
-	Label    string     `json:"label"`
-	Score    float64    `json:"score"`
-	TopScore float64    `json:"top_score"`
-	Box      [4]int     `json:"box"`
-	Area     int        `json:"area"`
-	Ratio    float64    `json:"ratio"`
-	Region   []int      `json:"region"`
-	Current  bool       `json:"current"`
-	Stationary bool     `json:"stationary"`
-	Motionless int      `json:"motionless"`
-	Thumbnail string    `json:"thumbnail"`
-	Snapshot  string    `json:"snapshot"`
-	StartTime time.Time `json:"start_time"`
-	EndTime   time.Time `json:"end_time,omitempty"`
-	Zones     []string  `json:"zones"`
+	ID                string         `json:"id"`
+	Camera            string         `json:"camera"`
+	Label             string         `json:"label"`
+	SubLabel          string         `json:"sub_label,omitempty"`
+	Score             float64        `json:"score"`
+	TopScore          float64        `json:"top_score"`
+	FalsePositive     bool           `json:"false_positive"`
+	StartTime         float64        `json:"start_time"`           // Zeitstempel als Float
+	EndTime           float64        `json:"end_time,omitempty"`   // Zeitstempel als Float
+	Box               []int          `json:"box"`
+	Area              int            `json:"area"`
+	Ratio             float64        `json:"ratio"`
+	Region            []int          `json:"region"`
+	Active            bool           `json:"active"`
+	Stationary        bool           `json:"stationary"`
+	MotionlessCount   int            `json:"motionless_count"`
+	CurrentZones      []string       `json:"current_zones"`
+	EnteredZones      []string       `json:"entered_zones"`
+	HasClip           bool           `json:"has_clip"`
+	HasSnapshot       bool           `json:"has_snapshot"`
+	CurrentAttributes []string       `json:"current_attributes"`
+	FrameTime         float64        `json:"frame_time"`           // Zeitstempel als Float
+	Snapshot          interface{}    `json:"snapshot"`             // Objekt mit Snapshot-Daten
+	Thumbnail         interface{}    `json:"thumbnail"`            // Objekt mit Thumbnail-Daten
+	PathData          []interface{}  `json:"path_data,omitempty"`
 }
 
 // NewClient erstellt einen neuen MQTT-Client
@@ -77,12 +87,18 @@ func (c *Client) Start() error {
 	// MQTT-Client-Optionen konfigurieren
 	opts := mqtt.NewClientOptions()
 	
-	// Broker-URL erstellen
+	// Broker-URL erstellen - TCP statt ws oder wss verwenden für bessere Stabilität
 	brokerURL := fmt.Sprintf("tcp://%s:%d", c.config.Broker, c.config.Port)
 	opts.AddBroker(brokerURL)
 	
-	// Client-ID
-	opts.SetClientID(c.config.ClientID)
+	// Client-ID mit Zeitstempel für Einzigartigkeit
+	clientID := c.config.ClientID
+	if !strings.HasPrefix(clientID, "dt_") {
+		clientID = "dt_" + clientID
+	}
+	// Timestamp anhängen, um bei Neustarts eine eindeutige Client-ID zu haben
+	clientID = fmt.Sprintf("%s_%d", clientID, time.Now().Unix())
+	opts.SetClientID(clientID)
 	
 	// Optionale Authentifizierung
 	if c.config.Username != "" {
@@ -94,22 +110,89 @@ func (c *Client) Start() error {
 	opts.SetOnConnectHandler(c.onConnectHandler)
 	opts.SetConnectionLostHandler(c.connectionLostHandler)
 	
-	// Automatische Wiederverbindung
+	// Verbindungsstabilität und automatische Wiederverbindung
 	opts.SetAutoReconnect(true)
-	opts.SetMaxReconnectInterval(1 * time.Minute)
+	// Häufigere, schnellere Wiederverbindungsversuche
+	opts.SetMaxReconnectInterval(3 * time.Second)  
+	opts.SetConnectTimeout(30 * time.Second)      
+	// Kürzeres Keep-Alive-Intervall für häufigere Lebenszeichen 
+	opts.SetKeepAlive(15 * time.Second)           
+	opts.SetPingTimeout(5 * time.Second)        
+	opts.SetCleanSession(true)                 
+	opts.SetOrderMatters(false)                
+	
+	// Mehr Server-Puffer-Einstellungen
+	opts.SetWriteTimeout(5 * time.Second)
+	
+	// Will-Nachricht (Last Will and Testament) einrichten
+	willTopic := fmt.Sprintf("double-take/status/%s", clientID)
+	willPayload := []byte("{\"status\": \"offline\", \"timestamp\": \"" + time.Now().Format(time.RFC3339) + "\"}")
+	opts.SetWill(willTopic, string(willPayload), 0, false) // QoS 0 und nicht retained für weniger Overhead
 	
 	// Client erstellen
 	c.client = mqtt.NewClient(opts)
 	
-	// Verbindung herstellen
+	// Verbindung herstellen und Wiederverbindungslogik im Fehlerfall
 	log.Infof("Connecting to MQTT broker at %s", brokerURL)
-	if token := c.client.Connect(); token.Wait() && token.Error() != nil {
-		log.Errorf("Failed to connect to MQTT broker: %v", token.Error())
-		return token.Error()
+	retry := 0
+	maxRetries := 3
+	connectBackoff := time.Second
+	
+	for retry < maxRetries {
+		if token := c.client.Connect(); token.Wait() && token.Error() != nil {
+			retry++
+			log.Warnf("MQTT connect attempt %d/%d failed: %v", retry, maxRetries, token.Error())
+			if retry < maxRetries {
+				log.Infof("Retrying in %v...", connectBackoff)
+				time.Sleep(connectBackoff)
+				connectBackoff *= 2 // Exponentielles Backoff
+			} else {
+				log.Errorf("Failed to connect to MQTT broker after %d attempts", maxRetries)
+				return token.Error()
+			}
+		} else {
+			// Verbindung erfolgreich
+			break
+		}
 	}
 	
 	log.Info("MQTT client connected successfully")
+	
+	// Starte einen Hintergrund-Goroutine, um die Verbindung zu überwachen
+	go c.monitorConnection()
+	
 	return nil
+}
+
+// monitorConnection überwacht die MQTT-Verbindung und führt regelmäßige Health-Checks durch
+func (c *Client) monitorConnection() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			if !c.client.IsConnected() {
+				log.Warn("MQTT connection check: Client is disconnected, attempting reconnect")
+				if token := c.client.Connect(); token.Wait() && token.Error() != nil {
+					log.Errorf("Failed to reconnect to MQTT broker: %v", token.Error())
+				} else {
+					log.Info("MQTT client reconnected successfully")
+				}
+			} else {
+				// Veröffentliche eine Heartbeat-Nachricht
+				topic := "double-take/heartbeat"
+				payload := fmt.Sprintf("{\"timestamp\":\"%s\",\"client_id\":\"%s\"}", 
+					time.Now().Format(time.RFC3339), c.config.ClientID)
+				
+				if token := c.client.Publish(topic, 0, false, payload); token.Wait() && token.Error() != nil {
+					log.Warnf("Failed to publish heartbeat: %v", token.Error())
+				} else {
+					log.Debug("MQTT heartbeat sent successfully")
+				}
+			}
+		}
+	}
 }
 
 // Stop beendet den MQTT-Client
@@ -143,8 +226,24 @@ func (c *Client) onConnectHandler(client mqtt.Client) {
 
 // connectionLostHandler wird aufgerufen, wenn die Verbindung verloren geht
 func (c *Client) connectionLostHandler(client mqtt.Client, err error) {
-	log.Errorf("MQTT connection lost: %v", err)
 	c.isConnected = false
+	
+	// Erweiterte Fehlerdiagnose
+	if err != nil {
+		log.Errorf("MQTT connection lost: %v", err)
+		
+		// Spezifische Fehlertypen identifizieren und protokollieren
+		if strings.Contains(err.Error(), "EOF") {
+			log.Warn("MQTT-Verbindung unterbrochen (EOF) - Der Broker hat möglicherweise die Verbindung geschlossen")
+			log.Info("Automatische Wiederverbindung wird versucht...")
+		} else if strings.Contains(err.Error(), "connection refused") {
+			log.Warn("MQTT-Verbindung verweigert - Der Broker ist möglicherweise nicht erreichbar oder blockiert die Verbindung")
+		} else if strings.Contains(err.Error(), "timeout") {
+			log.Warn("MQTT-Verbindungs-Timeout - Mögliche Netzwerkprobleme oder Broker überlastet")
+		}
+	} else {
+		log.Error("MQTT-Verbindung unterbrochen ohne spezifischen Fehler")
+	}
 }
 
 // messageHandler verarbeitet eingehende MQTT-Nachrichten
@@ -163,12 +262,18 @@ func (c *Client) messageHandler(client mqtt.Client, msg mqtt.Message) {
 		}
 		
 		// Log-Eintrag für das Ereignis erstellen
-		log.WithFields(log.Fields{
+		logFields := log.Fields{
 			"event_id": event.ID,
 			"camera":   event.Camera,
 			"type":     event.Type,
-			"label":    event.After.Label,
-		}).Info("Received Frigate event")
+		}
+		
+		// Prüfe, ob After-Ereignisdaten verfügbar sind
+		if event.After != nil {
+			logFields["label"] = event.After.Label
+		}
+		
+		log.WithFields(logFields).Info("Received Frigate event")
 	}
 	
 	// Nachricht an alle Handler weiterleiten

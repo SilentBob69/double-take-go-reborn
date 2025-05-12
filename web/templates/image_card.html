@@ -1,0 +1,65 @@
+{{/* Definiere das Template für eine einzelne Bildkarte */}}
+{{ define "imageCard" }}
+<div class="col-md-6 col-lg-4 mb-4">
+    <div class="card shadow-sm bg-body-tertiary" id="image-card-{{.ID}}">
+        <img src="/snapshots/{{.FilePath}}" class="card-img-top" alt="Snapshot {{.ID}}" onerror="this.onerror=null; this.src='/static/img/no-image.png'; console.log('Bild konnte nicht geladen werden, verwende Fallback-Bild');">
+        <div class="card-body">
+            <h5 class="card-title">{{ t "images.image_id" }}: {{.ID}}</h5>
+            <p class="card-text">
+                <small class="text-muted">{{ t "images.timestamp" }}: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
+                <small class="text-muted">{{ t "images.source" }}: Frigate</small><br>
+                <small class="text-muted">{{ t "images.camera" }}: {{.Source}}</small><br>
+                {{if .Label}}<small class="text-muted">{{ t "images.label" }}: {{.Label}}</small><br>{{end}}
+                    
+                {{if .Area}}
+                    <small class="text-muted">{{ t "images.area" }}: {{.Area}}px²</small><br>
+                {{end}}
+                    
+                {{if .Speed}}
+                    <small class="text-muted">{{ t "images.speed" }}: {{printf "%.2f" .Speed}}px/s</small><br>
+                {{end}}
+                    
+                {{if ne .Zones ""}}
+                    <small class="text-muted">{{ t "images.zones" }}: {{.Zones}}</small><br>
+                {{end}}
+                    
+                {{if ne .EventID ""}}
+                    <small class="text-muted">{{ t "images.event_id" }}: {{.EventID}}</small><br>
+                {{end}}
+            </p>
+            
+            <!-- Faces section -->
+            <div class="mt-2 mb-3">
+                {{if .Faces}}
+                    <strong>{{ t "images.detected_faces" }}:</strong>
+                    <ul class="list-unstyled">
+                        {{range .Faces}}
+                            <li class="mt-1">
+                                {{if .Matches}}
+                                    {{range .Matches}}
+                                        <span class="badge bg-success">{{.Identity.Name}}</span>
+                                        <small>({{ t "images.confidence" }}: {{printf "%.0f" .Confidence}}%)</small>
+                                    {{end}}
+                                {{else}}
+                                    <span class="badge bg-warning text-dark">{{ t "common.unknown" }}</span>
+                                    <button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "identities.assign_face" }}"><i class="bi bi-pencil-square"></i></button>
+                                {{end}}
+                            </li>
+                        {{end}}
+                    </ul>
+                {{else}}
+                    <span class="text-warning">{{ t "images.no_face" }}</span>
+                {{end}}
+            </div>
+            
+            <!-- Action buttons -->
+            <button class="btn btn-danger btn-sm delete-btn" data-image-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_delete" }}">
+                <i class="bi bi-trash"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_reprocess" }}">
+                <i class="bi bi-arrow-repeat"></i>
+            </button>
+        </div>
+    </div>
+</div>
+{{ end }}

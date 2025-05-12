@@ -18,6 +18,7 @@ data/snapshots/
 *.bmp
 
 # Config
+/config/config.yaml
 /config/config.local.yaml
 /config/config.production.yaml
 

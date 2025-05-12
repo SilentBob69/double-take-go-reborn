@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"encoding/json"
 
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/core/models"
@@ -111,6 +111,28 @@ type PageData struct {
 	CurrentPage string
 	Data        interface{}
 	Config      *config.Config
+}
+
+// getImagePath erzeugt den korrekten URL-Pfad für ein Bild basierend auf dem Dateinamen und der Quelle
+func (h *WebHandler) getImagePath(filename string) string {
+	// Prüfen, ob der Pfad bereits mit "frigate/" beginnt
+	if strings.HasPrefix(filename, "frigate/") {
+		// Pfad enthält bereits das frigate/-Präfix, direkt verwenden
+		log.Debugf("Frigate-Pfad erkannt (bereits präfixiert): %s, Pfad: /snapshots/%s", filename, filename)
+		return "/snapshots/" + filename
+	}
+	
+	// Prüfen, ob es ein Frigate-Bild ohne Pfad-Präfix ist
+	if strings.HasPrefix(filename, "frigate_") ||
+		(len(filename) > 8 && strings.Contains(filename, "_camera_")) {
+		// Frigate-Bild ohne Pfad-Präfix
+		log.Debugf("Frigate-Bild erkannt (ohne Pfad-Präfix): %s, Pfad: /snapshots/frigate/%s", filename, filename)
+		return "/snapshots/frigate/" + filename
+	}
+	
+	// Generischer Fall: Datei direkt aus dem Snapshot-Verzeichnis laden
+	log.Debugf("Generisches Bild erkannt: %s, Pfad: /snapshots/%s", filename, filename)
+	return "/snapshots/" + filename
 }
 
 // NewWebHandler erstellt einen neuen Web-Handler
@@ -257,6 +279,7 @@ func (h *WebHandler) loadTemplates() error {
 			}
 			return string(jsonBytes)
 		},
+		"imagePath": h.getImagePath, // Funktion zur korrekten Pfadbestimmung für Bilder
 	}
 
 	// Templates mit Funktionen parsen
@@ -374,9 +397,14 @@ func (h *WebHandler) renderTemplate(c *gin.Context, name string, data interface{
 
 // RegisterRoutes registriert alle Web-Routen
 func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
-	// Statische Dateien
+	// Statische Dateien und Router für Frontend-Komponenten
 	router.Static("/static", "./web/static")
-	router.Static("/snapshots", h.cfg.Server.SnapshotDir)
+	
+	// Einfache statische Route für Bilder - direkter Zugriff auf die Dateien
+	router.Static("/image", "./web/image")
+	
+	// Bereitstellung der Snapshot-Bilder aus dem Verzeichnis
+	router.Static("/snapshots", "/data/snapshots")
 	
 	// Hauptseiten
 	router.GET("/", h.handleIndex)
@@ -396,6 +424,9 @@ func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
 	
 	// API für die Weboberfläche
 	router.GET("/system/stats", h.handleSystemStats)
+	
+	// Alle anderen Pfade werden als statische HTML-Seiten behandelt
+	router.NoRoute(h.handleIndex)
 }
 
 // handleIndex zeigt die Hauptseite an mit integrierten Bildern und Filterfunktionen
@@ -984,6 +1015,7 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	
 	h.renderTemplate(c, "diagnostics.html", data)
 }
+
 
 // handleUpdateMatch verarbeitet die Aktualisierung eines Treffers mit einer neuen Identität
 func (h *WebHandler) handleUpdateMatch(c *gin.Context) {
