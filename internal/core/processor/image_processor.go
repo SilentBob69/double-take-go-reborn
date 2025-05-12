@@ -80,18 +80,9 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		return nil, fmt.Errorf("image file does not exist: %w", err)
 	}
 
-	// 2. Datei-Hash berechnen für Deduplizierung
-	hash, err := calculateFileHash(imagePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate file hash: %w", err)
-	}
-
-	// 3. Prüfen, ob Bild bereits verarbeitet wurde (Deduplizierung)
-	var existingImage models.Image
-	if result := p.db.Where("content_hash = ?", hash).First(&existingImage); result.Error == nil {
-		log.Infof("Bild mit Hash %s wurde bereits verarbeitet (ID: %d), überspringe", hash, existingImage.ID)
-		return &existingImage, nil
-	}
+	// Keine Deduplizierung oder Limitierung mehr anwenden
+	// Jedes Bild wird verarbeitet, unabhängig von Event-ID oder Zeitstempel
+	log.Debugf("Verarbeite Bild ohne Einschränkungen: %s", imagePath)
 
 	// 4. Bild in die Datenbank einfügen
 	filename := filepath.Base(imagePath)
@@ -99,9 +90,16 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 	// Relativen Pfad zum Snapshot-Verzeichnis ermitteln
 	var relPath string
 	if strings.HasPrefix(imagePath, p.cfg.Server.SnapshotDir) {
-		// Den vollständigen relativen Pfad innerhalb des Snapshot-Verzeichnisses extrahieren
-		relPath = strings.TrimPrefix(imagePath, p.cfg.Server.SnapshotDir)
-		relPath = strings.TrimPrefix(relPath, "/") // Führenden Slash entfernen, falls vorhanden
+		// KORREKTUR: Bei Frigate-Bildern MÜSSEN wir das frigate/-Präfix hinzufügen, um Konsistenz mit dem Dateisystem zu gewährleisten
+		if source == "frigate" {
+			// Wichtig: Für Frigate-Bilder verwenden wir 'frigate/dateiname.jpg' als relativen Pfad
+			// dadurch stimmt die URL '/image/frigate/dateiname.jpg' mit der Dateisystemstruktur überein
+			relPath = "frigate/" + filepath.Base(imagePath)
+		} else {
+			// Für alle anderen Quellen den vollständigen relativen Pfad extrahieren
+			relPath = strings.TrimPrefix(imagePath, p.cfg.Server.SnapshotDir)
+			relPath = strings.TrimPrefix(relPath, "/") // Führenden Slash entfernen, falls vorhanden
+		}
 	} else {
 		// Fallback: Nur Dateiname, wenn kein relativer Pfad erkannt wurde
 		relPath = filename
@@ -109,10 +107,25 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 	
 	log.Debugf("Using relative path for image: %s", relPath)
 	
+	// Bei Frigate-Bildern nutzen wir einen Standard-Hash, da wir die Hash-Berechnung einsparen
+	var contentHash string
+	if source == "frigate" {
+		// Für Frigate-Events generieren wir einen einfachen Hash aus dem Dateinamen
+		contentHash = fmt.Sprintf("frigate:%s", filepath.Base(imagePath))
+	} else {
+		// Für andere Quellen berechnen wir weiterhin den SHA-256 Hash
+		var err error
+		contentHash, err = calculateFileHash(imagePath)
+		if err != nil {
+			log.Warnf("Konnte Hash für %s nicht berechnen: %v, verwende Fallback", imagePath, err)
+			contentHash = fmt.Sprintf("fallback:%s:%d", filepath.Base(imagePath), time.Now().UnixNano())
+		}
+	}
+
 	image := models.Image{
 		FilePath:    relPath,
 		Timestamp:   time.Now(),
-		ContentHash: hash,
+		ContentHash: contentHash,
 		Source:      source,
 	}
 
@@ -161,17 +174,18 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 	if p.cfg.CompreFace.Enabled && p.compreface != nil {
 		// CompreFace-Verarbeitung durchführen
 		log.Infof("Processing image %s with CompreFace", imagePath)
-		allMatches, err = p.processWithCompreFace(ctx, imagePath, &image)
-		if err != nil {
-			log.Errorf("CompreFace processing failed: %v", err)
+		var processErr error // Lokale err-Variable für diesen Bereich
+		allMatches, processErr = p.processWithCompreFace(ctx, imagePath, &image)
+		if processErr != nil {
+			log.Errorf("CompreFace processing failed: %v", processErr)
 			// Wir fahren fort, auch wenn CompreFace fehlschlägt
 		}
 
 		// 6. SSE-Broadcast ERST NACH CompreFace-Verarbeitung durchführen
-		if p.sseHub != nil && (err == nil || !strings.Contains(err.Error(), "No face is found")) {
+		if p.sseHub != nil && (processErr == nil || !strings.Contains(processErr.Error(), "No face is found")) {
 			// Anzahl der Gesichter zählen für das Logging
 			var faceCount int64 = 0
-			if err == nil {
+			if processErr == nil {
 				// Gesichter in der Datenbank zählen
 				p.db.Model(&models.Face{}).Where("image_id = ?", image.ID).Count(&faceCount)
 				log.Infof("Gesichter in Bild ID %d erkannt: %d", image.ID, faceCount)
@@ -184,8 +198,8 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 
 		// Home Assistant Ergebnis veröffentlichen (wenn aktiviert)
 		if p.haPublisher != nil && p.cfg.MQTT.HomeAssistant.Enabled && p.cfg.MQTT.HomeAssistant.PublishResults {
-			if err := p.haPublisher.PublishCameraResult(&image, allMatches, time.Since(time.Now()).Seconds(), 1); err != nil {
-				log.Errorf("Failed to publish camera result to Home Assistant: %v", err)
+			if haErr := p.haPublisher.PublishCameraResult(&image, allMatches, time.Since(time.Now()).Seconds(), 1); haErr != nil {
+				log.Errorf("Failed to publish camera result to Home Assistant: %v", haErr)
 			}
 		}
 	} else {
@@ -428,13 +442,45 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 		}
 		filename := fmt.Sprintf("%s_seq%d%s", baseName, i, extension)
 		
+		// Explizit prüfen, ob die Dateiendung vorhanden ist
+		if !strings.HasSuffix(filename, ".jpg") {
+			filename = filename + ".jpg"
+		}
+		
+		// KORREKTUR: Der localPath MUSS ein "frigate/"-Präfix haben, damit der Browser die Bilder im richtigen Verzeichnis finden kann
+		// Die Dateien werden im Unterverzeichnis "frigate" gespeichert, also muss auch der Pfad in der Datenbank so sein
 		localPath := filepath.Join("frigate", filename)
-		fullPath := filepath.Join(p.cfg.Server.SnapshotDir, localPath)
+		fullPath := filepath.Join(p.cfg.Server.SnapshotDir, "frigate", filename)
 
-		// Snapshot herunterladen
-		if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
-			log.Warnf("Konnte Snapshot %d für Event %s nicht herunterladen: %v", i, eventData.ID, err)
-			continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
+		// Zuerst versuchen, Bilddaten direkt aus dem Event-Objekt zu extrahieren
+		var imageData []byte
+		var err error
+		
+		// Versuche Bilddaten direkt aus dem Event zu extrahieren
+		imageData, err = p.frigateClient.ExtractSnapshotFromEvent(eventData)
+		if err != nil {
+			log.Infof("Keine Bilddaten im MQTT-Payload gefunden, versuche API-Download: %v", err)
+			
+			// Fallback: Versuche Snapshot über API herunterzuladen
+			if err := p.frigateClient.DownloadSnapshot(snapshotPath, fullPath); err != nil {
+				log.Warnf("Konnte Snapshot %d für Event %s weder aus MQTT noch über API laden: %v", i, eventData.ID, err)
+				continue // Wir versuchen den nächsten Snapshot, falls einer fehlschlägt
+			}
+		} else {
+			// Bilddaten aus MQTT-Payload direkt in Datei schreiben
+			log.Infof("Speichere Bilddaten aus MQTT-Payload in %s", fullPath)
+			
+			// Verzeichnis erstellen, falls es nicht existiert
+			if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+				log.Warnf("Konnte Verzeichnis für Snapshot nicht erstellen: %v", err)
+				continue
+			}
+			
+			// Bild speichern
+			if err := os.WriteFile(fullPath, imageData, 0644); err != nil {
+				log.Warnf("Konnte Bilddaten nicht in Datei speichern: %v", err)
+				continue
+			}
 		}
 
 		// Zum aktuellen Bild spezifische Metadaten hinzufügen
@@ -451,7 +497,7 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 
 		// Bild zur Verarbeitung an den Worker-Pool übergeben
 		// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
-		_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+		_, err = p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
 			DetectFaces:    true,
 			RecognizeFaces: true,
 			Metadata:       imageMetadata,
@@ -502,11 +548,8 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 		log.Warnf("Fehler bei der Abfrage existierender Bilder für Event %s: %v", eventData.ID, err)
 	}
 
-	// Wenn wir schon viele Bilder für dieses Ereignis haben, überspringen wir dieses Update
-	if len(existingImages) >= 3 {
-		log.Debugf("Überspringe Update für Event %s: Bereits %d Bilder vorhanden", eventData.ID, len(existingImages))
-		return nil
-	}
+	// Früher: Limitierung auf max. 3 Bilder pro Event - jetzt entfernt
+	// Wir verarbeiten alle Updates, um mehr Bilder in der UI zu haben
 
 	// Metadaten für die Bildverarbeitung vorbereiten
 	metadata := map[string]interface{}{
@@ -523,7 +566,7 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 		"event_type":      "update",
 	}
 
-	// Lösche vorhandene Gesichter und Matches für aktuelle Ereignisse,
+	// Lösche vorhandene Bilder, Gesichter und Matches für aktuelle Ereignisse,
 	// um Duplikate zu vermeiden. Nur für Update-Events!
 	if len(existingImages) > 0 {
 		log.Infof("Lösche vorhandene Gesichter und Matches für Event %s vor der Neuverarbeitung", eventData.ID)
@@ -561,30 +604,67 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 				log.Infof("Vorhandene Gesichter für Event %s gelöscht", eventData.ID)
 			}
 		}
+		
+		// Wichtig: Jetzt auch die Bildeinträge selbst löschen
+		// Damit lösen wir das Problem des UNIQUE constraints bei file_path
+		if err := p.db.Where("id IN ?", imageIDs).Delete(&models.Image{}).Error; err != nil {
+			log.Warnf("Fehler beim Löschen vorhandener Bilder: %v", err)
+		} else {
+			log.Infof("Vorhandene Bilder für Event %s gelöscht (%d Stück)", eventData.ID, len(imageIDs))
+		}
 	}
 
 	// Dateiname für den Snapshot generieren
 	baseFilename := p.frigateClient.GenerateFilename(eventData)
 	filenameParts := strings.Split(baseFilename, ".")
 	baseName := filenameParts[0]
-	extension := ".jpg"
+	extension := ".jpg" // Immer .jpg als Standard-Erweiterung verwenden
 	if len(filenameParts) > 1 {
 		extension = "." + filenameParts[1]
 	}
-	// Sequenznummer basierend auf vorhandenen Bildern
+	// Sequenznummer basierend auf vorhandenen Bildern und sicherstellen, dass die Erweiterung vorhanden ist
 	filename := fmt.Sprintf("%s_update%d%s", baseName, len(existingImages), extension)
 	
+	// Explizit prüfen, ob die Dateiendung vorhanden ist
+	if !strings.HasSuffix(filename, ".jpg") {
+		filename = filename + ".jpg"
+	}
+	
+	// KORREKTUR: Der localPath MUSS ein "frigate/"-Präfix haben, damit der Browser die Bilder im richtigen Verzeichnis finden kann
+	// Die Dateien werden im Unterverzeichnis "frigate" gespeichert, also muss auch der Pfad in der Datenbank so sein
 	localPath := filepath.Join("frigate", filename)
-	fullPath := filepath.Join(p.cfg.Server.SnapshotDir, localPath)
+	fullPath := filepath.Join(p.cfg.Server.SnapshotDir, "frigate", filename)
 
-	// Snapshot herunterladen
-	if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
-		return fmt.Errorf("Fehler beim Herunterladen des Snapshots: %w", err)
+	// Zuerst versuchen, Bilddaten direkt aus dem Event-Objekt zu extrahieren
+	var imageData []byte
+	
+	// Versuche Bilddaten direkt aus dem Event zu extrahieren
+	imageData, err := p.frigateClient.ExtractSnapshotFromEvent(eventData)
+	if err != nil {
+		log.Infof("Keine Bilddaten im MQTT-Payload gefunden, versuche API-Download: %v", err)
+		
+		// Fallback: Versuche Snapshot über API herunterzuladen
+		if err := p.frigateClient.DownloadSnapshot(snapshotURL, fullPath); err != nil {
+			return fmt.Errorf("Fehler beim Herunterladen des Snapshots: %w", err)
+		}
+	} else {
+		// Bilddaten aus MQTT-Payload direkt in Datei schreiben
+		log.Infof("Speichere Bilddaten aus MQTT-Payload in %s", fullPath)
+		
+		// Verzeichnis erstellen, falls es nicht existiert
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+			return fmt.Errorf("Konnte Verzeichnis für Snapshot nicht erstellen: %v", err)
+		}
+		
+		// Bild speichern
+		if err := os.WriteFile(fullPath, imageData, 0644); err != nil {
+			return fmt.Errorf("Konnte Bilddaten nicht in Datei speichern: %v", err)
+		}
 	}
 
 	// Bild zur Verarbeitung an den Worker-Pool übergeben
 	// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
-	_, err := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+	_, err = p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
 		DetectFaces:    true,
 		RecognizeFaces: true,
 		Metadata:       metadata,
