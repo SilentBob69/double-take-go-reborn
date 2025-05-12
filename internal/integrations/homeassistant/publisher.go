@@ -3,6 +3,7 @@ package homeassistant
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"double-take-go-reborn/config"
@@ -63,6 +64,16 @@ type Match struct {
 	Duration   float64    `json:"duration"`
 	Detector   string     `json:"detector"`
 	Filename   string     `json:"filename"`
+}
+
+// PresenceInfo enthält die Informationen über die Anwesenheit einer Person
+type PresenceInfo struct {
+	CameraName       string    `json:"camera"`       // Name der Kamera
+	Confidence       float64   `json:"confidence"`   // Erkennungswahrscheinlichkeit
+	LastSeen         time.Time `json:"last_seen"`    // Zeitpunkt der letzten Erkennung
+	ImageID          uint      `json:"image_id"`     // ID des Bildes
+	ImagePath        string    `json:"image_path"`   // Pfad zum Bild
+	DetectionHistory []string  `json:"history"`      // Liste der letzten Erkennungsorte
 }
 
 // Box enthält die Koordinaten eines erkannten Gesichts
@@ -300,7 +311,7 @@ func (p *Publisher) PublishCameraResult(image *models.Image, matches []models.Ma
 		Counts:    counts,
 	}
 	
-	// Veröffentlichen
+	// Veröffentlichen des Kamera-Events
 	if err := p.mqttClient.Publish(topic, event); err != nil {
 		return fmt.Errorf("failed to publish camera result: %w", err)
 	}
@@ -308,12 +319,114 @@ func (p *Publisher) PublishCameraResult(image *models.Image, matches []models.Ma
 	// Personen-Zähler für diese Kamera aktualisieren
 	p.updatePersonCounter(image.Source)
 	
+	// Anwesenheitssensoren für erkannte Identitäten aktualisieren
+	publishedIdentities := make(map[string]bool)
+	
+	// Für jedes Match den entsprechenden Anwesenheitssensor aktualisieren
+	for _, match := range matchItems {
+		// Doppelte Erkennungen vermeiden
+		if _, exists := publishedIdentities[match.Name]; exists {
+			continue
+		}
+		
+		// Anwesenheitssensor aktualisieren
+		if err := p.UpdatePresenceSensor(match.Name, image.Source, match.Confidence, 
+			image.ID, image.FilePath); err != nil {
+			log.Warnf("Failed to update presence sensor for %s: %v", match.Name, err)
+		}
+		
+		// Identität als verarbeitet markieren
+		publishedIdentities[match.Name] = true
+	}
+	
+	// Falls unbekannte Gesichter vorhanden sind, auch deren Sensor aktualisieren
+	if len(unknownItems) > 0 {
+		if err := p.UpdateUnknownPresenceSensor(image.Source, image.ID, image.FilePath, 
+			len(unknownItems)); err != nil {
+			log.Warnf("Failed to update unknown presence sensor: %v", err)
+		}
+	}
+	
 	return nil
 }
 
 // PublishError veröffentlicht eine Fehlermeldung
 func (p *Publisher) PublishError(err error) error {
 	return p.mqttClient.Publish("double-take/errors", err.Error())
+}
+
+// UpdatePresenceSensor aktualisiert einen Anwesenheitssensor für eine identifizierte Person
+func (p *Publisher) UpdatePresenceSensor(identityName string, camera string, confidence float64, imageID uint, imagePath string) error {
+	// Namen für MQTT normalisieren
+	normalizedName := strings.ToLower(strings.ReplaceAll(identityName, " ", "_"))
+	
+	// 1. Den Anwesenheitssensor auf "on" setzen
+	presenceTopic := fmt.Sprintf("double-take/presence/%s", normalizedName)
+	if err := p.mqttClient.PublishRetain(presenceTopic, "on"); err != nil {
+		return fmt.Errorf("failed to publish presence state: %w", err)
+	}
+	
+	// 2. Detailierte Informationen für die Attribute
+	timestamp := time.Now()
+	presenceInfo := PresenceInfo{
+		CameraName: camera,
+		Confidence: confidence,
+		LastSeen:   timestamp,
+		ImageID:    imageID,
+		ImagePath:  imagePath,
+		// Historie könnte aus einer DB kommen, vereinfacht hier nur den aktuellsten Eintrag
+		DetectionHistory: []string{fmt.Sprintf("%s (%s)", camera, timestamp.Format("15:04:05"))},
+	}
+	
+	// Attribute veröffentlichen
+	attributesTopic := fmt.Sprintf("%s/attributes", presenceTopic)
+	if err := p.mqttClient.PublishRetain(attributesTopic, presenceInfo); err != nil {
+		return fmt.Errorf("failed to publish presence attributes: %w", err)
+	}
+	
+	// 3. Lokationsinformation aktualisieren
+	locationTopic := fmt.Sprintf("%s/location", presenceTopic)
+	locationText := fmt.Sprintf("Zuletzt gesehen: %s (%.1f%%)", camera, confidence*100)
+	if err := p.mqttClient.PublishRetain(locationTopic, locationText); err != nil {
+		return fmt.Errorf("failed to publish location info: %w", err)
+	}
+	
+	return nil
+}
+
+// UpdateUnknownPresenceSensor aktualisiert den Anwesenheitssensor für unbekannte Personen
+func (p *Publisher) UpdateUnknownPresenceSensor(camera string, imageID uint, imagePath string, count int) error {
+	// 1. Den Anwesenheitssensor für unbekannte Personen auf "on" setzen
+	presenceTopic := "double-take/presence/unknown"
+	if err := p.mqttClient.PublishRetain(presenceTopic, "on"); err != nil {
+		return fmt.Errorf("failed to publish unknown presence state: %w", err)
+	}
+	
+	// 2. Detailierte Informationen für die Attribute
+	timestamp := time.Now()
+	presenceInfo := PresenceInfo{
+		CameraName: camera,
+		Confidence: 0,
+		LastSeen:   timestamp,
+		ImageID:    imageID,
+		ImagePath:  imagePath,
+		DetectionHistory: []string{fmt.Sprintf("%s (%s)", camera, timestamp.Format("15:04:05"))},
+	}
+	
+	// Attribute veröffentlichen
+	attributesTopic := fmt.Sprintf("%s/attributes", presenceTopic)
+	if err := p.mqttClient.PublishRetain(attributesTopic, presenceInfo); err != nil {
+		return fmt.Errorf("failed to publish unknown presence attributes: %w", err)
+	}
+	
+	// 3. Lokationsinformation aktualisieren
+	locationTopic := fmt.Sprintf("%s/location", presenceTopic)
+	locationText := fmt.Sprintf("%d unbekannte Personen bei %s", count, camera)
+	if err := p.mqttClient.PublishRetain(locationTopic, locationText); err != nil {
+		return fmt.Errorf("failed to publish unknown location info: %w", err)
+	}
+	
+	return nil
 }
 
 // updatePersonCounter aktualisiert den Personenzähler für eine Kamera
