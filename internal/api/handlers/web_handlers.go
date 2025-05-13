@@ -605,7 +605,8 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	})
 	
 	// Anzahl der Datensätze für Paginierung ermitteln
-	total := int64(len(groupsList) + len(singleImages))
+	// Nur Gruppenkarten für die Hauptseite verwenden
+total := int64(len(groupsList))
 	
 	// Paginierung anwenden
 	allItems := make([]interface{}, 0)
@@ -615,10 +616,6 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 		allItems = append(allItems, group)
 	}
 	
-	// Dann einzelne Bilder hinzufügen
-	for _, img := range singleImages {
-		allItems = append(allItems, img)
-	}
 	
 	// Paginierte Teilmenge auswählen
 	start := offset
