@@ -29,6 +29,7 @@ type ProcessingOptions struct {
 	DetectFaces    bool
 	RecognizeFaces bool
 	Metadata       map[string]interface{} // Zusätzliche Metadaten
+	ExistingImageID uint                  // Falls gesetzt, wird dieses existierende Bild verwendet anstatt ein neues zu erstellen
 }
 
 // ImageProcessor verarbeitet Bilder, extrahiert Gesichter und identifiziert Personen
@@ -161,12 +162,21 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		}
 	}
 
-	// Speichern des Basis-Image-Eintrags in der Datenbank
-	if err := p.db.Create(&image).Error; err != nil {
-		return nil, fmt.Errorf("failed to create image record: %w", err)
+	// Prüfen, ob wir ein bestehendes Bild verwenden sollen oder ein neues erstellen
+	if options.ExistingImageID > 0 {
+		// Vorhandenes Bild verwenden - wir müssen es aus der Datenbank laden
+		log.Infof("Verwende existierendes Bild mit ID: %d", options.ExistingImageID)
+		if err := p.db.First(&image, options.ExistingImageID).Error; err != nil {
+			return nil, fmt.Errorf("failed to find existing image record: %w", err)
+		}
+		log.Infof("Bestehendes Bild mit ID %d geladen", image.ID)
+	} else {
+		// Neues Bild erstellen
+		if err := p.db.Create(&image).Error; err != nil {
+			return nil, fmt.Errorf("failed to create image record: %w", err)
+		}
+		log.Infof("Created new image record ID: %d", image.ID)
 	}
-
-	log.Infof("Created new image record ID: %d", image.ID)
 
 	// 5. CompreFace-Verarbeitung, falls aktiviert
 	var allMatches []models.Match

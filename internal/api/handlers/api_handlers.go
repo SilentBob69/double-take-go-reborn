@@ -70,7 +70,14 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	
 	// Test-Endpunkt, um zu überprüfen, ob Änderungen wirksam werden
 	router.GET("/test-update", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "Die Änderungen wurden erfolgreich übernommen! Zeitstempel: May 9, 2025 17:05"})
+		c.JSON(http.StatusOK, gin.H{"message": "Die Änderungen wurden erfolgreich übernommen! Zeitstempel: May 13, 2025 18:22"})
+	})
+	
+	// Einfacher Test-Endpunkt für die Neuverarbeitung von Bildern
+	router.POST("/test-recognize/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		log.Infof("Test-Erkennung für Bild-ID: %s", id)
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Test recognition endpoint reached", "id": id})
 	})
 }
 
@@ -455,33 +462,90 @@ func (h *APIHandler) SyncCompreFace(c *gin.Context) {
 
 // RecognizeImage verarbeitet ein Bild neu
 func (h *APIHandler) RecognizeImage(c *gin.Context) {
+	// Protokolliere den Aufruf
+	log.Info("RecognizeImage-Funktion aufgerufen")
+
 	id := c.Param("id")
+	log.Infof("Neuverarbeitung für Bild-ID: %s", id)
 	
 	var image models.Image
 	if err := h.db.First(&image, id).Error; err != nil {
+		log.Errorf("Bild mit ID %s nicht gefunden: %v", id, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 		return
 	}
 
+	log.Infof("Bild gefunden: %+v", image)
+
 	// Vollständigen Pfad zum Bild erstellen
 	imagePath := filepath.Join(h.cfg.Server.SnapshotDir, image.FilePath)
+	log.Infof("Vollständiger Pfad zum Bild: %s", imagePath)
+
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		log.Errorf("Bilddatei nicht gefunden: %s", imagePath)
 		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Image file not found at path: %s", image.FilePath)})
 		return
 	}
 
+	log.Info("Suche nach existierenden Gesichtern für dieses Bild...")
+	// Finde alle Gesichter für dieses Bild
+	var faces []models.Face
+	if err := h.db.Where("image_id = ?", image.ID).Find(&faces).Error; err != nil {
+		log.Errorf("Fehler beim Suchen von Gesichtern: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error finding faces: %v", err)})
+		return
+	}
+
+	log.Infof("Gefundene Gesichter: %d", len(faces))
+
+	// Sammle alle Face-IDs
+	var faceIDs []uint
+	for _, face := range faces {
+		faceIDs = append(faceIDs, face.ID)
+		log.Infof("Gesichts-ID hinzugefügt: %d", face.ID)
+	}
+
+	// Lösche alle Matches, die zu diesen Gesichtern gehören (falls vorhanden)
+	if len(faceIDs) > 0 {
+		log.Infof("Lösche Matches für %d Gesichter", len(faceIDs))
+		
+		result := h.db.Where("face_id IN (?)", faceIDs).Delete(&models.Match{})
+		if result.Error != nil {
+			log.Errorf("Fehler beim Löschen von Matches: %v", result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error deleting matches: %v", result.Error)})
+			return
+		}
+		log.Infof("Matches gelöscht: %d", result.RowsAffected)
+	}
+
+	// Lösche alle Gesichter für dieses Bild
+	log.Info("Lösche alle Gesichter für dieses Bild")
+	result := h.db.Where("image_id = ?", image.ID).Delete(&models.Face{})
+	if result.Error != nil {
+		log.Errorf("Fehler beim Löschen von Gesichtern: %v", result.Error)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error deleting faces: %v", result.Error)})
+		return
+	}
+	log.Infof("Gesichter gelöscht: %d", result.RowsAffected)
+
 	// Bild neu verarbeiten
+	log.Info("Starte Neuverarbeitung des Bildes")
 	ctx := c.Request.Context()
 	processingOptions := processor.ProcessingOptions{
 		DetectFaces:    true,
 		RecognizeFaces: true,
+		ExistingImageID: image.ID, // Verwende die vorhandene Bild-ID für die Neuverarbeitung
 	}
+	
+	log.Infof("Rufe ProcessImage für %s mit Quelle %s auf", imagePath, image.Source)
 	_, err := h.imageProcessor.ProcessImage(ctx, imagePath, image.Source, processingOptions)
 	if err != nil {
+		log.Errorf("Fehler bei der Bildverarbeitung: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Image processing failed: %v", err)})
 		return
 	}
 
+	log.Info("Bild erfolgreich neu verarbeitet")
 	c.JSON(http.StatusOK, gin.H{"message": "Image reprocessed successfully"})
 }
 
