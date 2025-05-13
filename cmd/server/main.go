@@ -242,6 +242,11 @@ func main() {
 	apiHandler := handlers.NewAPIHandler(db.DB, cfg, compreFaceClient, imageProcessor)
 	apiGroup := router.Group("/api")
 	apiHandler.RegisterRoutes(apiGroup)
+	
+	// Event-Handler
+	log.Info("Initializing event handler...")
+	eventHandler := handlers.NewEventHandler(db.DB, webHandler)
+	eventHandler.RegisterRoutes(router)
 
 	// 12. Server starten
 	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)

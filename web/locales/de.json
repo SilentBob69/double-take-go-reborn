@@ -164,6 +164,12 @@
     "Deaktiviert": "Deaktiviert",
     "Fehler": "Fehler"
   },
+  "events": {
+    "event_group": "Ereignisgruppe",
+    "images_count": "Anzahl Bilder",
+    "view_images": "Bilder anzeigen",
+    "tooltip_view": "Alle Bilder dieser Gruppe anzeigen"
+  },
   "footer": {
     "copyright": "Double-Take Go"
   }

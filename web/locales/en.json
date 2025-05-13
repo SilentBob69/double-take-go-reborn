@@ -164,6 +164,12 @@
     "Deaktiviert": "Disabled",
     "Fehler": "Error"
   },
+  "events": {
+    "event_group": "Event Group",
+    "images_count": "Image Count",
+    "view_images": "View Images",
+    "tooltip_view": "View all images in this group"
+  },
   "footer": {
     "copyright": "Double-Take Go"
   }

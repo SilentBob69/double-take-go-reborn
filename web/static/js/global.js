@@ -44,7 +44,7 @@ function initTooltips() {
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// DOM-Inhalt geladen Event: Tooltips initialisieren
+// DOM-Inhalt geladen Event: Tooltips initialisieren und Event-Listener registrieren
 document.addEventListener('DOMContentLoaded', function() {
     // Scrollposition wiederherstellen
     const scrollPosition = sessionStorage.getItem('scrollPosition');
@@ -60,6 +60,17 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         console.warn('Bootstrap ist nicht geladen, Tooltips werden nicht initialisiert');
     }
+    
+    // Event-Listener für Event-Gruppe anzeigen-Buttons
+    document.querySelectorAll('.view-event-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const eventId = this.getAttribute('data-event-id');
+            if (eventId) {
+                window.location.href = `/events/${eventId}`;
+            }
+        });
+    });
 });
 
 // Toast-Benachrichtigungsfunktion

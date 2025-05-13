@@ -124,6 +124,15 @@
                     <h5 class="card-title">{{ t "images.image_id" }}: {{.ID}}</h5>
                     <p class="card-text">
                         <small class="text-muted">{{ t "images.timestamp" }}: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
+                        {{if .SourceData}}
+                            <small class="text-muted">{{ t "images.source" }}: {{.Source}}</small><br>
+                        {{end}}
+                        {{if .Label}}
+                            <small class="text-muted">{{ t "images.label" }}: {{.Label}}</small><br>
+                        {{end}}
+                        {{if .Zone}}
+                            <small class="text-muted">{{ t "images.zone" }}: {{.Zone}}</small><br>
+                        {{end}}
                         {{if .Faces}}
                             {{ t "images.detected_faces" }}:
                             <ul>
@@ -131,16 +140,24 @@
                                     <li>
                                         {{if .Matches}}
                                             {{range .Matches}}
-                                                <strong>{{.Identity.Name}}</strong> ({{ t "images.confidence" }}: {{printf "%.2f" .Confidence}}%)
-                                                <button class="btn btn-link btn-sm p-0 ms-1 edit-match-btn" data-match-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "identities.correct_match" }}">
-                                                    <i class="bi bi-pencil-square"></i>
+                                                <span class="text-success">{{ t "common.match" }}!</span> 
+                                                {{if .Identity}}
+                                                    <span class="badge bg-primary">{{.Identity.Name}}</span>
+                                                    <span class="text-muted">({{printf "%.0f%%" .Confidence}})</span>
+                                                {{else}}
+                                                    <span class="badge bg-secondary">{{ t "common.unknown" }}</span>
+                                                {{end}}
+                                                <button class="btn btn-sm btn-outline-primary ms-1 assign-identity-btn" 
+                                                    data-object-type="match" 
+                                                    data-object-id="{{.ID}}"
+                                                    data-bs-toggle="tooltip" 
+                                                    data-bs-title="{{ t "identities.tooltip_assign" }}"
+                                                >
+                                                    <i class="bi bi-pencil"></i>
                                                 </button>
                                             {{end}}
                                         {{else}}
-                                            <em>{{ t "common.unknown" }}</em>
-                                            <button class="btn btn-link btn-sm p-0 ms-1 assign-face-btn" data-face-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "identities.assign_face" }}">
-                                                <i class="bi bi-pencil-square"></i>
-                                            </button>
+                                            <span class="text-warning">{{ t "images.no_face" }}</span>
                                         {{end}}
                                     </li>
                                 {{end}}
@@ -160,26 +177,52 @@
         </div>
         {{ end }}
 
-        {{if not (or .ImagesWithFaces .ImagesWithoutFaces)}}
+        {{ define "eventGroupCard" }}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card shadow-sm bg-body-tertiary" id="event-card-{{.EventID}}">
+                <img src="{{.ThumbnailURL}}" class="card-img-top" alt="Event {{.EventID}}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ t "events.event_group" }}</h5>
+                    <p class="card-text">
+                        <small class="text-muted">{{ t "images.timestamp" }}: {{.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
+                        {{if .Source}}
+                            <small class="text-muted">{{ t "images.source" }}: {{.Source}}</small><br>
+                        {{end}}
+                        {{if .Label}}
+                            <small class="text-muted">{{ t "images.label" }}: {{.Label}}</small><br>
+                        {{end}}
+                        {{if .Zone}}
+                            <small class="text-muted">{{ t "images.zone" }}: {{.Zone}}</small><br>
+                        {{end}}
+                        <small class="text-muted">{{ t "events.images_count" }}: {{.Count}}</small><br>
+                        {{if .HasFaces}}
+                            <span class="badge bg-success me-1">{{ t "common.faces" }}</span>
+                        {{end}}
+                        {{if .HasMatches}}
+                            <span class="badge bg-primary me-1">{{ t "common.matches" }}</span>
+                        {{end}}
+                    </p>
+                    <button class="btn btn-primary btn-sm view-event-btn" data-event-id="{{.EventID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "events.tooltip_view" }}">
+                        <i class="bi bi-images me-1"></i> {{ t "events.view_images" }}
+                    </button>
+                </div>
+            </div>
+        </div>
+        {{ end }}
+
+        {{if not .Items}}
             <p class="text-muted">{{ t "no_images_yet" }}</p>
         {{else}}
-            {{if .ImagesWithFaces}}
-                <h2>{{ t "images.title" }}</h2>
-                <div class="row" id="images-with-faces-container">
-                    {{range .ImagesWithFaces}}
+            <h2>{{ t "recent_activity" }}</h2>
+            <div class="row" id="items-container">
+                {{range .Items}}
+                    {{if .EventID}}
+                        {{ template "eventGroupCard" . }}
+                    {{else}}
                         {{ template "imageCard" . }}
                     {{end}}
-                </div>
-            {{end}}
-
-            {{if .ImagesWithoutFaces}}
-                <h2>{{ t "images.title_without_faces" }}</h2>
-                <div class="row" id="images-without-faces-container">
-                    {{range .ImagesWithoutFaces}}
-                        {{ template "imageCard" . }}
-                    {{end}}
-                </div>
-            {{end}}
+                {{end}}
+            </div>
         {{end}}
 
         <!-- Paginierung -->
