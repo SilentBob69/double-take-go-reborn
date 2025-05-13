@@ -526,10 +526,75 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 	}
 
 	// Überprüfen, ob wir für dieses Ereignis bereits Updates verarbeitet haben
-	// Wir wollen nicht jedes Update verarbeiten, sondern in regelmäßigen Abständen
 	var existingImages []models.Image
-	if err := p.db.Where("event_id = ?", eventData.ID).Find(&existingImages).Error; err != nil {
+	if err := p.db.Where("source = ? AND event_id = ?", "frigate", eventData.ID).Find(&existingImages).Error; err != nil {
 		log.Warnf("Fehler bei der Abfrage existierender Bilder für Event %s: %v", eventData.ID, err)
+	}
+
+	// Prüfen, ob das exakt gleiche Bild (mit gleichem Zeitstempel) bereits verarbeitet wurde
+	frameTime := eventData.GetCurrentTime().Unix()
+	for _, img := range existingImages {
+		imgTime := img.Timestamp.Unix()
+		// Wenn der Zeitstempel des Bildes und des Events übereinstimmen (mit 1 Sekunde Toleranz)
+		if imgTime == frameTime || imgTime == frameTime-1 || imgTime == frameTime+1 {
+			log.Infof("Bild mit dem gleichen Zeitstempel (%d) wurde bereits verarbeitet, überspringe", frameTime)
+			return nil
+		}
+	}
+	
+	// Wenn mehr als 5 Bilder für dieses Event existieren, nur die ältesten löschen, um Platz zu schaffen
+	if len(existingImages) >= 5 {
+		log.Infof("Für dieses Event existieren bereits %d Bilder. Begrenze auf maximal 5.", len(existingImages))
+		
+		// Bestimme, wie viele Bilder gelöscht werden müssen
+		excessCount := len(existingImages) - 4 // 5 - 1 für das neue Bild
+		if excessCount > 0 {
+			// Nimm die ältesten Bilder zum Löschen (die ersten 'excessCount' im Array)
+			var imagesToDelete []models.Image
+			var imageIDsToDelete []uint
+			
+			// Da wir keine Sortierung implementiert haben, nehmen wir einfach die ersten Einträge
+			// In einer vollständigen Implementierung würden wir nach Zeitstempel sortieren
+			for i := 0; i < excessCount; i++ {
+				imagesToDelete = append(imagesToDelete, existingImages[i])
+				imageIDsToDelete = append(imageIDsToDelete, existingImages[i].ID)
+			}
+			
+			// Finde alle Gesichter für diese zu löschenden Bilder
+			var faces []models.Face
+			if err := p.db.Where("image_id IN ?", imageIDsToDelete).Find(&faces).Error; err != nil {
+				log.Warnf("Fehler beim Laden zu löschender Gesichter: %v", err)
+			} else {
+				// Sammle alle Gesichts-IDs
+				var faceIDs []uint
+				for _, face := range faces {
+					faceIDs = append(faceIDs, face.ID)
+				}
+				
+				// Lösche alle Matches dieser Gesichter
+				if len(faceIDs) > 0 {
+					if err := p.db.Where("face_id IN ?", faceIDs).Delete(&models.Match{}).Error; err != nil {
+						log.Warnf("Fehler beim Löschen alter Matches: %v", err)
+					} else {
+						log.Infof("Alte Matches für %d Gesichter gelöscht", len(faceIDs))
+					}
+				}
+				
+				// Lösche die Gesichter der zu löschenden Bilder
+				if err := p.db.Where("image_id IN ?", imageIDsToDelete).Delete(&models.Face{}).Error; err != nil {
+					log.Warnf("Fehler beim Löschen alter Gesichter: %v", err)
+				} else {
+					log.Infof("Alte Gesichter für Event %s gelöscht", eventData.ID)
+				}
+			}
+			
+			// Lösche die überzähligen Bildeinträge
+			if err := p.db.Where("id IN ?", imageIDsToDelete).Delete(&models.Image{}).Error; err != nil {
+				log.Warnf("Fehler beim Löschen alter Bilder: %v", err)
+			} else {
+				log.Infof("Alte Bilder für Event %s gelöscht (%d Stück)", eventData.ID, len(imageIDsToDelete))
+			}
+		}
 	}
 
 	// Früher: Limitierung auf max. 3 Bilder pro Event - jetzt entfernt
@@ -548,54 +613,6 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 		"frame_time":      eventData.GetCurrentTime().Format(time.RFC3339),
 		"source":          "frigate",
 		"event_type":      "update",
-	}
-
-	// Lösche vorhandene Bilder, Gesichter und Matches für aktuelle Ereignisse,
-	// um Duplikate zu vermeiden. Nur für Update-Events!
-	if len(existingImages) > 0 {
-		log.Infof("Lösche vorhandene Gesichter und Matches für Event %s vor der Neuverarbeitung", eventData.ID)
-		
-		// Sammle alle Bild-IDs dieses Events
-		var imageIDs []uint
-		for _, img := range existingImages {
-			imageIDs = append(imageIDs, img.ID)
-		}
-		
-		// Finde alle Gesichter dieser Bilder
-		var faces []models.Face
-		if err := p.db.Where("image_id IN ?", imageIDs).Find(&faces).Error; err != nil {
-			log.Warnf("Fehler beim Finden vorhandener Gesichter: %v", err)
-		} else {
-			// Sammle alle Gesichts-IDs
-			var faceIDs []uint
-			for _, face := range faces {
-				faceIDs = append(faceIDs, face.ID)
-			}
-			
-			// Lösche alle Matches dieser Gesichter
-			if len(faceIDs) > 0 {
-				if err := p.db.Where("face_id IN ?", faceIDs).Delete(&models.Match{}).Error; err != nil {
-					log.Warnf("Fehler beim Löschen vorhandener Matches: %v", err)
-				} else {
-					log.Infof("Vorhandene Matches für %d Gesichter gelöscht", len(faceIDs))
-				}
-			}
-			
-			// Lösche alle Gesichter
-			if err := p.db.Where("image_id IN ?", imageIDs).Delete(&models.Face{}).Error; err != nil {
-				log.Warnf("Fehler beim Löschen vorhandener Gesichter: %v", err)
-			} else {
-				log.Infof("Vorhandene Gesichter für Event %s gelöscht", eventData.ID)
-			}
-		}
-		
-		// Wichtig: Jetzt auch die Bildeinträge selbst löschen
-		// Damit lösen wir das Problem des UNIQUE constraints bei file_path
-		if err := p.db.Where("id IN ?", imageIDs).Delete(&models.Image{}).Error; err != nil {
-			log.Warnf("Fehler beim Löschen vorhandener Bilder: %v", err)
-		} else {
-			log.Infof("Vorhandene Bilder für Event %s gelöscht (%d Stück)", eventData.ID, len(imageIDs))
-		}
 	}
 
 	// Dateiname für den Snapshot generieren

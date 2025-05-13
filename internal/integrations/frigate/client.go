@@ -88,7 +88,13 @@ func (d *FrigateEventData) GetSnapshotURL() string {
 		return ""
 	}
 	
-	// Extrahiere URL mit Kamera-Kontext
+	// Wenn wir eine ID haben, versuchen wir zuerst das neue Frigate API-Format
+	if d.ID != "" {
+		// Neues Frigate API-Format: /events/{id}/snapshot.jpg
+		return fmt.Sprintf("/events/%s/snapshot.jpg", d.ID)
+	}
+	
+	// Fallback: Extrahiere URL mit Kamera-Kontext aus dem Snapshot-Feld
 	return extractURLWithCamera(d.Snapshot, d.Camera)
 }
 
@@ -140,14 +146,22 @@ func extractURLWithCamera(value interface{}, camera string) string {
 				// Aktuelles Frigate v16 Snapshot-URL-Format
 				// Probiere verschiedene Formate aus, basierend auf der Dokumentation und üblichen Mustern
 				
-				// Format 1: /api/events/{id}/snapshot.jpg
+				// Wir benötigen die ID für den neuen Frigate API-Pfad
+				var eventID string
 				if v["id"] != nil {
 					if id, ok := v["id"].(string); ok {
-						return fmt.Sprintf("/api/events/%s/snapshot.jpg", id)
+						eventID = id
 					}
 				}
+
+				// Hier können wir nur die ID aus dem Snapshot-Objekt selbst verwenden
+
+				// Format 1: /events/{id}/snapshot.jpg (neues Frigate API-Format ohne /api/ Präfix)
+				if eventID != "" {
+					return fmt.Sprintf("/events/%s/snapshot.jpg", eventID)
+				}
 				
-				// Format 2: /api/snapshots/{camera}/{timestamp}.jpg
+				// Format 2: Fallback auf altes Format
 				return fmt.Sprintf("/api/snapshots/%s/%f.jpg", camera, frameTime)
 			}
 		}
@@ -326,11 +340,27 @@ func (c *FrigateClient) DownloadSnapshot(snapshotPath string, savePath string) e
 		}
 	}
 
+	// Stelle sicher, dass hostURL nicht mit einem Schrägstrich endet
+	if strings.HasSuffix(hostURL, "/") {
+		hostURL = hostURL[:len(hostURL)-1]
+	}
+
+	// Stelle sicher, dass snapshotPath mit einem Schrägstrich beginnt, wenn es kein vollständiges URL ist
+	if !strings.HasPrefix(snapshotPath, "http") && !strings.HasPrefix(snapshotPath, "/") {
+		snapshotPath = "/" + snapshotPath
+	}
+
 	// Wenn der Pfad bereits eine vollständige URL ist, diese direkt verwenden
 	url := snapshotPath
 	if !strings.HasPrefix(snapshotPath, "http") {
-		// Andernfalls den Host voranstellen
-		url = fmt.Sprintf("%s%s", hostURL, snapshotPath)
+		// Wenn es das neue API-Format ist (ohne /api/ Präfix), füge /api/ hinzu
+		if strings.HasPrefix(snapshotPath, "/events/") {
+			// Neues API-Format verwendet /api vor dem Pfad
+			url = fmt.Sprintf("%s/api%s", hostURL, snapshotPath)
+		} else {
+			// Andernfalls den Host voranstellen
+			url = fmt.Sprintf("%s%s", hostURL, snapshotPath)
+		}
 	}
 
 	log.Debugf("Downloading snapshot from: %s", url)
