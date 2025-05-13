@@ -67,10 +67,38 @@
                     <div class="col-md-3">
                         <label for="source" class="form-label">{{ t "filters.source" }}</label>
                         <select name="source" id="source" class="form-select">
-                            <option value="">Alle</option>
+                            <option value="">{{ t "common.all" }}</option>
                             {{range .Sources}}
                                 <option value="{{.}}" {{if eq $.Filter.Source .}}selected{{end}}>{{.}}</option>
                             {{end}}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="label" class="form-label">{{ t "images.label" }}</label>
+                        <select name="label" id="label" class="form-select">
+                            <option value="">{{ t "common.all" }}</option>
+                            {{range .Labels}}
+                                <option value="{{.}}" {{if eq $.Filter.Label .}}selected{{end}}>{{.}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="zone" class="form-label">{{ t "images.zones" }}</label>
+                        <select name="zone" id="zone" class="form-select">
+                            <option value="">{{ t "common.all" }}</option>
+                            {{range .Zones}}
+                                <option value="{{.}}" {{if eq $.Filter.Zone .}}selected{{end}}>{{.}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="daterange" class="form-label">{{ t "filters.date_range" }}</label>
+                        <select name="daterange" id="daterange" class="form-select">
+                            <option value="">{{ t "common.all" }}</option>
+                            <option value="today" {{if eq .Filter.DateRange "today"}}selected{{end}}>{{ t "filters.today" }}</option>
+                            <option value="yesterday" {{if eq .Filter.DateRange "yesterday"}}selected{{end}}>{{ t "filters.yesterday" }}</option>
+                            <option value="week" {{if eq .Filter.DateRange "week"}}selected{{end}}>{{ t "filters.last_week" }}</option>
+                            <option value="month" {{if eq .Filter.DateRange "month"}}selected{{end}}>{{ t "filters.last_month" }}</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -87,16 +115,6 @@
                             <option value="">{{ t "common.all" }}</option>
                             <option value="yes" {{if eq .Filter.HasMatches "yes"}}selected{{end}}>{{ t "filters.with_identities" }}</option>
                             <option value="no" {{if eq .Filter.HasMatches "no"}}selected{{end}}>{{ t "filters.without_identities" }}</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label for="daterange" class="form-label">{{ t "filters.date_range" }}</label>
-                        <select name="daterange" id="daterange" class="form-select">
-                            <option value="">{{ t "common.all" }}</option>
-                            <option value="today" {{if eq .Filter.DateRange "today"}}selected{{end}}>{{ t "filters.today" }}</option>
-                            <option value="yesterday" {{if eq .Filter.DateRange "yesterday"}}selected{{end}}>{{ t "filters.yesterday" }}</option>
-                            <option value="week" {{if eq .Filter.DateRange "week"}}selected{{end}}>{{ t "filters.last_week" }}</option>
-                            <option value="month" {{if eq .Filter.DateRange "month"}}selected{{end}}>{{ t "filters.last_month" }}</option>
                         </select>
                     </div>
                     <div class="col-12 d-flex justify-content-between align-items-center">
@@ -230,19 +248,19 @@
         <nav aria-label="Page navigation" class="mt-4">
             <ul class="pagination justify-content-center">
                 <li class="page-item {{ if eq .Pagination.Current 1 }}disabled{{ end }}">
-                    <a class="page-link" href="/?page={{ subtract .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Previous">
+                    <a class="page-link" href="/?page={{ subtract .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.Label }}&label={{ .Filter.Label }}{{ end }}{{ if .Filter.Zone }}&zone={{ .Filter.Zone }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Previous">
                         <span aria-hidden="true">&laquo; {{ t "pagination.previous" }}</span>
                     </a>
                 </li>
                 
                 {{ range $i := paginationRange .Pagination.Current .Pagination.TotalPages 5 }}
                 <li class="page-item {{ if eq $i $.Pagination.Current }}active{{ end }}">
-                    <a class="page-link" href="/?page={{ $i }}{{ if $.Filter.Source }}&source={{ $.Filter.Source }}{{ end }}{{ if $.Filter.HasFaces }}&hasfaces={{ $.Filter.HasFaces }}{{ end }}{{ if $.Filter.HasMatches }}&hasmatches={{ $.Filter.HasMatches }}{{ end }}{{ if $.Filter.DateRange }}&daterange={{ $.Filter.DateRange }}{{ end }}">{{ $i }}</a>
+                    <a class="page-link" href="/?page={{ $i }}{{ if $.Filter.Source }}&source={{ $.Filter.Source }}{{ end }}{{ if $.Filter.Label }}&label={{ $.Filter.Label }}{{ end }}{{ if $.Filter.Zone }}&zone={{ $.Filter.Zone }}{{ end }}{{ if $.Filter.HasFaces }}&hasfaces={{ $.Filter.HasFaces }}{{ end }}{{ if $.Filter.HasMatches }}&hasmatches={{ $.Filter.HasMatches }}{{ end }}{{ if $.Filter.DateRange }}&daterange={{ $.Filter.DateRange }}{{ end }}">{{ $i }}</a>
                 </li>
                 {{ end }}
                 
                 <li class="page-item {{ if eq .Pagination.Current .Pagination.TotalPages }}disabled{{ end }}">
-                    <a class="page-link" href="/?page={{ add .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Next">
+                    <a class="page-link" href="/?page={{ add .Pagination.Current 1 }}{{ if .Filter.Source }}&source={{ .Filter.Source }}{{ end }}{{ if .Filter.Label }}&label={{ .Filter.Label }}{{ end }}{{ if .Filter.Zone }}&zone={{ .Filter.Zone }}{{ end }}{{ if .Filter.HasFaces }}&hasfaces={{ .Filter.HasFaces }}{{ end }}{{ if .Filter.HasMatches }}&hasmatches={{ .Filter.HasMatches }}{{ end }}{{ if .Filter.DateRange }}&daterange={{ .Filter.DateRange }}{{ end }}" aria-label="Next">
                         <span aria-hidden="true">{{ t "pagination.next" }} &raquo;</span>
                     </a>
                 </li>

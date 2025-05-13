@@ -466,6 +466,8 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	
 	// Filteroptionen extrahieren
 	source := c.DefaultQuery("source", "")
+	label := c.DefaultQuery("label", "")
+	zone := c.DefaultQuery("zone", "")
 	hasfaces := c.DefaultQuery("hasfaces", "")
 	hasmatches := c.DefaultQuery("hasmatches", "")
 	daterange := c.DefaultQuery("daterange", "")
@@ -476,6 +478,16 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	// Filter anwenden
 	if source != "" {
 		db = db.Where("source = ?", source)
+	}
+	
+	// Filter für Label (Bezeichnung)
+	if label != "" {
+		db = db.Where("label = ?", label)
+	}
+	
+	// Filter für Zone
+	if zone != "" {
+		db = db.Where("zone LIKE ?", "%"+zone+"%")
 	}
 	
 	// Filter für Gesichter
@@ -635,6 +647,14 @@ total := int64(len(groupsList))
 	var sources []string
 	h.db.Model(&models.Image{}).Distinct().Pluck("source", &sources)
 	
+	// Verfügbare Labels für Filter-Dropdown abfragen
+	var labels []string
+	h.db.Model(&models.Image{}).Where("label != ''").Distinct().Pluck("label", &labels)
+	
+	// Verfügbare Zonen für Filter-Dropdown abfragen
+	var zones []string
+	h.db.Model(&models.Image{}).Where("zone != ''").Distinct().Pluck("zone", &zones)
+	
 	// Pagination-Informationen vorbereiten
 	totalPages := int(total) / pageSize
 	if int(total) % pageSize > 0 {
@@ -649,8 +669,12 @@ total := int64(len(groupsList))
 	data := gin.H{
 		"Items": paginatedItems, // Gemischte Liste aus Gruppen und einzelnen Bildern
 		"Sources": sources,
+		"Labels": labels,
+		"Zones": zones,
 		"Filter": gin.H{
 			"Source": source,
+			"Label": label,
+			"Zone": zone,
 			"HasFaces": hasfaces,
 			"HasMatches": hasmatches,
 			"DateRange": daterange,
