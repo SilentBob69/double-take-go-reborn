@@ -51,10 +51,11 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 	// Identitäts-Endpunkte
 	router.GET("/identities", h.ListIdentities)
-	router.POST("/identities", h.CreateIdentity)
 	router.GET("/identities/:id", h.GetIdentity)
+	router.POST("/identities", h.CreateIdentity)
 	router.PUT("/identities/:id", h.UpdateIdentity)
 	router.DELETE("/identities/:id", h.DeleteIdentity)
+	router.POST("/identities/:id/train", h.TrainIdentityWithImage)
 	router.POST("/identities/:id/examples", h.AddIdentityExample)
 	router.GET("/identities/:id/examples", h.GetIdentityExamples)
 	router.DELETE("/identities/:id/examples/:exampleId", h.DeleteIdentityExample)

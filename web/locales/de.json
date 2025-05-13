@@ -74,6 +74,7 @@
     "deleted_all": "Alle Bilder wurden gelöscht",
     "timestamp": "Zeitstempel",
     "image_id": "Bild-ID",
+    "event_id": "Ereignis-ID",
     "detected_faces": "Erkannte Gesichter",
     "no_face": "Kein Gesicht erkannt",
     "confidence": "Konfidenz",
@@ -89,7 +90,21 @@
     "tooltip_reprocess": "Gesichtserkennung für dieses Bild erneut durchführen",
     "tooltip_filter": "Bilder nach verschiedenen Kriterien filtern",
     "tooltip_reset": "Filter zurücksetzen",
-    "tooltip_delete_all": "Alle angezeigten Bilder unwiderruflich löschen"
+    "tooltip_delete_all": "Alle angezeigten Bilder unwiderruflich löschen",
+    "train_compreface": "CompreFace anlernen",
+    "tooltip_train_compreface": "Gesicht in CompreFace anlernen",
+    "modals": {
+      "train_compreface": {
+        "title": "CompreFace anlernen",
+        "select_identity": "Identität auswählen",
+        "please_select": "Bitte wählen Sie eine Identität",
+        "select_image": "Trainingsbild auswählen",
+        "help_text": "Für beste Ergebnisse wählen Sie ein Bild mit gut sichtbarem Gesicht. Unterstützte Formate: JPG, PNG.",
+        "error_no_identity": "Bitte wählen Sie eine Identität aus",
+        "error_upload": "Fehler beim Hochladen des Bildes",
+        "error_server": "Serverfehler beim Verarbeiten der Anfrage"
+      }
+    }
   },
   "identities": {
     "title": "Identitäten",

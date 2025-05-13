@@ -1,0 +1,127 @@
+{{ define "head" }}
+<style>
+    .form-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    .upload-preview {
+        max-width: 300px;
+        max-height: 300px;
+        margin-top: 10px;
+    }
+</style>
+{{ end }}
+
+{{ define "content" }}
+<div class="container mt-4">
+    <h1>CompreFace Training</h1>
+    
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i> Hier können Sie Bilder für Identitäten in CompreFace hochladen, um die Gesichtserkennung zu verbessern.
+    </div>
+    
+    <div class="form-container">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-cloud-upload"></i> Bild für Training hochladen</h5>
+            </div>
+            <div class="card-body">
+                <form id="compreFaceTrainForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="identity_select" class="form-label">Identität auswählen</label>
+                        <select class="form-select" id="identity_select" name="identity_id" required>
+                            <option value="" disabled selected>Bitte wählen...</option>
+                            {{ range $identity := .Identities }}
+                                <option value="{{ $identity.ID }}">{{ $identity.Name }}</option>
+                            {{ end }}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="training_image" class="form-label">Trainingsbild auswählen</label>
+                        <input type="file" class="form-control" id="training_image" name="image" accept="image/*" required onchange="previewImage(this)">
+                        <img id="imagePreview" class="upload-preview d-none" alt="Bildvorschau">
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-cloud-upload"></i> Für Training hochladen
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function previewImage(input) {
+    const preview = document.getElementById('imagePreview');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.remove('d-none');
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('compreFaceTrainForm');
+    
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const identityId = formData.get('identity_id');
+        
+        if (!identityId) {
+            alert('Bitte wählen Sie eine Identität aus.');
+            return;
+        }
+        
+        // Submit via AJAX
+        fetch(`/api/identities/${identityId}/train`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Erfolgsmeldung anzeigen
+                const toastEl = document.createElement('div');
+                toastEl.className = 'toast align-items-center text-white bg-success border-0';
+                toastEl.setAttribute('role', 'alert');
+                toastEl.setAttribute('aria-live', 'assertive');
+                toastEl.setAttribute('aria-atomic', 'true');
+                
+                toastEl.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi bi-check-circle me-2"></i> ${data.message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                `;
+                
+                document.body.appendChild(toastEl);
+                const toast = new bootstrap.Toast(toastEl);
+                toast.show();
+                
+                // Formular zurücksetzen
+                form.reset();
+                document.getElementById('imagePreview').classList.add('d-none');
+                
+            } else {
+                alert('Fehler beim Hochladen des Trainingsbilds: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Serverfehler beim Verarbeiten der Anfrage');
+        });
+    });
+});
+</script>
+{{ end }}

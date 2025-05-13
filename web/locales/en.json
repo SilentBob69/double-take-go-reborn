@@ -74,6 +74,7 @@
     "deleted_all": "All images have been deleted",
     "timestamp": "Timestamp",
     "image_id": "Image ID",
+    "event_id": "Event ID",
     "detected_faces": "Detected Faces",
     "no_face": "No face detected",
     "confidence": "Confidence",
@@ -89,7 +90,21 @@
     "tooltip_reprocess": "Run face recognition again for this image",
     "tooltip_filter": "Filter images by various criteria",
     "tooltip_reset": "Reset filters",
-    "tooltip_delete_all": "Permanently delete all displayed images"
+    "tooltip_delete_all": "Permanently delete all displayed images",
+    "train_compreface": "Train CompreFace",
+    "tooltip_train_compreface": "Train face in CompreFace",
+    "modals": {
+      "train_compreface": {
+        "title": "Train CompreFace",
+        "select_identity": "Select Identity",
+        "please_select": "Please select an identity",
+        "select_image": "Select Training Image",
+        "help_text": "For best results, choose an image with a clearly visible face. Supported formats: JPG, PNG.",
+        "error_no_identity": "Please select an identity",
+        "error_upload": "Error uploading image",
+        "error_server": "Server error processing request"
+      }
+    }
   },
   "identities": {
     "title": "Identities",

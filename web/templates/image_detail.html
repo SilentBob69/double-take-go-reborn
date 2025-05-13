@@ -38,6 +38,11 @@
         <a href="/images" class="btn btn-outline-secondary me-2">
             <i class="bi bi-arrow-left"></i> Zurück
         </a>
+        {{ if and .CompreFaceEnabled .Faces }}
+        <button type="button" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#compreFaceTrainModal" title="{{ t "images.tooltip_train_compreface" }}">
+            <i class="bi bi-cloud-upload"></i> {{ t "images.train_compreface" }}
+        </button>
+        {{ end }}
         <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteImageModal">
             <i class="bi bi-trash"></i> Löschen
         </button>
@@ -119,7 +124,7 @@
                         <div class="progress confidence-bar">
                             <div class="progress-bar bg-success" 
                                 role="progressbar" 
-                                style="width: {{ formatConfidence .BestMatch.Confidence }}%"
+                                style="width: {{ formatConfidence .BestMatch.Confidence }}%;"
                                 aria-valuenow="{{ .BestMatch.Confidence }}" 
                                 aria-valuemin="0" 
                                 aria-valuemax="100"></div>
@@ -196,6 +201,44 @@
 </div>
 {{ end }}
 
+<!-- Modal: CompreFace Training -->
+<div class="modal fade" id="compreFaceTrainModal" tabindex="-1" aria-labelledby="compreFaceTrainModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="compreFaceTrainModalLabel">{{ t "images.modals.train_compreface.title" }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="#" method="POST" id="compreFaceTrainForm" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="identity_select" class="form-label">{{ t "images.modals.train_compreface.select_identity" }}</label>
+                        <select class="form-select" id="identity_select" name="identity_id" required>
+                            <option value="" disabled selected>{{ t "images.modals.train_compreface.please_select" }}</option>
+                            {{ range $identity := .Identities }}
+                                <option value="{{ $identity.ID }}">{{ $identity.Name }}</option>
+                            {{ end }}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="training_image" class="form-label">{{ t "images.modals.train_compreface.select_image" }}</label>
+                        <input type="file" class="form-control" id="training_image" name="image" accept="image/*" required>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i> {{ t "images.modals.train_compreface.help_text" }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t "common.cancel" }}</button>
+                    <button type="submit" class="btn btn-primary" id="upload_training_image">
+                        <i class="bi bi-cloud-upload me-1"></i> {{ t "common.save" }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {{ define "scripts" }}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -208,6 +251,61 @@
                 const modalFaceIdInput = document.getElementById('modalFaceId')
                 modalFaceIdInput.value = faceId
             })
+        }
+
+        // CompreFace Training Form
+        const compreFaceTrainForm = document.getElementById('compreFaceTrainForm');
+        if (compreFaceTrainForm) {
+            compreFaceTrainForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(this);
+                const identityId = formData.get('identity_id');
+                
+                if (!identityId) {
+                    alert('{{ t "images.modals.train_compreface.error_no_identity" }}');
+                    return;
+                }
+                
+                // Submit via AJAX
+                fetch(`/api/identities/${identityId}/train`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Erfolgsmeldung anzeigen
+                        const toastEl = document.createElement('div');
+                        toastEl.className = 'toast align-items-center text-white bg-success border-0';
+                        toastEl.setAttribute('role', 'alert');
+                        toastEl.setAttribute('aria-live', 'assertive');
+                        toastEl.setAttribute('aria-atomic', 'true');
+                        
+                        toastEl.innerHTML = `
+                            <div class="d-flex">
+                                <div class="toast-body">
+                                    <i class="bi bi-check-circle me-2"></i> ${data.message}
+                                </div>
+                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                            </div>
+                        `;
+                        
+                        document.body.appendChild(toastEl);
+                        const toast = new bootstrap.Toast(toastEl);
+                        toast.show();
+                        
+                        // Modal schließen
+                        bootstrap.Modal.getInstance(document.getElementById('compreFaceTrainModal')).hide();
+                    } else {
+                        alert('{{ t "images.modals.train_compreface.error_upload" }}: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('{{ t "images.modals.train_compreface.error_server" }}');
+                });
+            });
         }
     });
 </script>
