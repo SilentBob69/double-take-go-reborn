@@ -243,8 +243,8 @@
             </div>
         {{end}}
 
-        <!-- Paginierung -->
-        {{ if gt .Pagination.TotalPages 1 }}
+        <!-- Paginierung - nur anzeigen, wenn keine Filter aktiv sind -->
+        {{ if and (not .FiltersActive) (gt .Pagination.TotalPages 1) }}
         <nav aria-label="Page navigation" class="mt-4">
             <ul class="pagination justify-content-center">
                 <li class="page-item {{ if eq .Pagination.Current 1 }}disabled{{ end }}">

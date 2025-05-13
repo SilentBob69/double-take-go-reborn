@@ -464,6 +464,9 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	pageSize := 18 // Gruppen pro Seite
 	offset := (page - 1) * pageSize
 	
+	// Prüfen, ob Filter aktiv sind
+	filtersActive := false
+	
 	// Filteroptionen extrahieren
 	source := c.DefaultQuery("source", "")
 	label := c.DefaultQuery("label", "")
@@ -471,6 +474,13 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	hasfaces := c.DefaultQuery("hasfaces", "")
 	hasmatches := c.DefaultQuery("hasmatches", "")
 	daterange := c.DefaultQuery("daterange", "")
+	
+	// Prüfen, welche Filter aktiv sind
+	if source != "" || label != "" || zone != "" || hasfaces != "" || hasmatches != "" || daterange != "" {
+		filtersActive = true
+		log.Infof("Filter sind aktiv: source=%s, label=%s, zone=%s, hasfaces=%s, hasmatches=%s, daterange=%s", 
+			source, label, zone, hasfaces, hasmatches, daterange)
+	}
 	
 	// Datenbankabfrage vorbereiten
 	db := h.db.Model(&models.Image{})
@@ -525,15 +535,30 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 		db = db.Where("timestamp >= ?", startDate)
 	}
 	
-	// Bilder abfragen ohne Paginierung für die Gruppierung
+	// Zunächst alle Bilderdaten ohne Limit abfragen, um die korrekte Filterung und Gruppierung zu ermöglichen
 	var images []models.Image
-	db = db.Order("timestamp DESC").Preload("Faces.Matches.Identity")
-	result := db.Find(&images)
+	dataQuery := db.Order("timestamp DESC").Preload("Faces.Matches.Identity")
+	
+	// Separate Zählabfrage für die Gesamtanzahl der passenden Datensätze
+	var totalFiltered int64
+	db.Count(&totalFiltered)
+	
+	// Nur zur Diagnose: Zähle auch, wie viele Bilder es insgesamt gibt
+	var totalUnfiltered int64
+	h.db.Model(&models.Image{}).Count(&totalUnfiltered)
+	
+	log.Infof("Filter-Diagnose: %d von %d Bildern entsprechen den Filterkriterien (%.1f%%)", 
+		totalFiltered, totalUnfiltered, float64(totalFiltered)/float64(totalUnfiltered)*100)
+	
+	// Alle gefilterten Daten abrufen
+	result := dataQuery.Find(&images)
 	
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Fehler beim Laden der Bilder"})
 		return
 	}
+	
+	log.Infof("Anzahl geladener Bilder: %d", len(images))
 	
 	// Bilder nach EventID gruppieren
 	eventGroups := make(map[string]*EventGroup)
@@ -616,32 +641,52 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 		return groupsList[i].Timestamp.After(groupsList[j].Timestamp)
 	})
 	
-	// Anzahl der Datensätze für Paginierung ermitteln
-	// Nur Gruppenkarten für die Hauptseite verwenden
-total := int64(len(groupsList))
+	// Anzahl der Gruppenkarten für Paginierung ermitteln
+	total := int64(len(groupsList))
+	log.Infof("Anzahl der Gruppenkarten nach Gruppierung: %d", total)
 	
-	// Paginierung anwenden
-	allItems := make([]interface{}, 0)
+	// Alle Items in eine gemeinsame Liste legen
+	allItems := make([]interface{}, 0, len(groupsList))
 	
-	// Zuerst EventGroups hinzufügen
+	// EventGroups hinzufügen
 	for _, group := range groupsList {
 		allItems = append(allItems, group)
 	}
 	
-	
-	// Paginierte Teilmenge auswählen
-	start := offset
-	end := offset + pageSize
-	
-	if start > len(allItems) {
-		start = len(allItems)
+	// Berechnen der korrekten Seitenzahl basierend auf der Gesamtzahl der Items
+	totalPages := int(math.Ceil(float64(total) / float64(pageSize)))
+	if totalPages == 0 {
+		totalPages = 1 // Mindestens eine Seite anzeigen
 	}
 	
-	if end > len(allItems) {
-		end = len(allItems)
+	// Korrigieren der aktuellen Seite, falls sie außerhalb des gültigen Bereichs liegt
+	if page > totalPages {
+		page = totalPages
 	}
 	
-	paginatedItems := allItems[start:end]
+	var itemsToShow []interface{}
+	
+	// Bei aktiven Filtern alle Ergebnisse anzeigen, sonst paginieren
+	if filtersActive {
+		// Alle gefilterten Ergebnisse anzeigen
+		itemsToShow = allItems
+		log.Infof("Filter aktiv: Zeige alle %d Ergebnisse ohne Paginierung", len(itemsToShow))
+	} else {
+		// Paginierte Teilmenge auswählen
+		start := offset
+		end := offset + pageSize
+		
+		if start > len(allItems) {
+			start = len(allItems)
+		}
+		
+		if end > len(allItems) {
+			end = len(allItems)
+		}
+		
+		itemsToShow = allItems[start:end]
+		log.Infof("Keine Filter aktiv: Zeige Elemente %d bis %d (Seite %d von %d)", start+1, end, page, totalPages)
+	}
 	
 	// Verfügbare Quellen für Filter-Dropdown abfragen
 	var sources []string
@@ -655,22 +700,15 @@ total := int64(len(groupsList))
 	var zones []string
 	h.db.Model(&models.Image{}).Where("zone != ''").Distinct().Pluck("zone", &zones)
 	
-	// Pagination-Informationen vorbereiten
-	totalPages := int(total) / pageSize
-	if int(total) % pageSize > 0 {
-		totalPages++
-	}
-	
-	if totalPages == 0 {
-		totalPages = 1 // Mindestens eine Seite anzeigen
-	}
+	// Pagination-Informationen bereits vorbereitet (siehe oben)
 	
 	// Daten an das Template übergeben
 	data := gin.H{
-		"Items": paginatedItems, // Gemischte Liste aus Gruppen und einzelnen Bildern
+		"Items": itemsToShow, // Gemischte Liste aus Gruppen und einzelnen Bildern
 		"Sources": sources,
 		"Labels": labels,
 		"Zones": zones,
+		"FiltersActive": filtersActive, // Flag für das Template, ob Filter aktiv sind
 		"Filter": gin.H{
 			"Source": source,
 			"Label": label,
@@ -687,6 +725,7 @@ total := int64(len(groupsList))
 			"PrevPage": page - 1,
 			"NextPage": page + 1,
 			"Total": total, // Gesamtzahl der Items
+			"PageSize": pageSize,
 		},
 	}
 	
