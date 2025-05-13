@@ -37,7 +37,7 @@ mqtt:
   username: "hans"
   password: "desert"
   client_id: "double-take-go"
-  topic: "frigate/#"
+  topic: "frigate/events"
   # Home Assistant Integration
   homeassistant:
     enabled: true
@@ -50,4 +50,4 @@ frigate:
   url: "http://192.168.0.55:5000"
 
 cleanup:
-  retention_days: 30
+  retention_days: 5

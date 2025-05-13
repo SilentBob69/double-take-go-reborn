@@ -129,7 +129,7 @@ func main() {
 		mqttClient = mqtt.NewClient(cfg.MQTT)
 		
 		// Einen Handler registrieren, der MQTT-Nachrichten an den Processor weiterleitet
-		mqttHandler := NewMQTTHandler(imageProcessor)
+		mqttHandler := NewMQTTHandler(imageProcessor, cfg)
 		mqttClient.RegisterHandler(mqttHandler)
 		
 		// MQTT-Client starten
@@ -291,11 +291,15 @@ func main() {
 // MQTTHandler implementiert das mqtt.MessageHandler-Interface
 type MQTTHandler struct {
 	processor *processor.ImageProcessor
+	cfg       *config.Config
 }
 
 // NewMQTTHandler erstellt einen neuen MQTT-Handler
-func NewMQTTHandler(processor *processor.ImageProcessor) *MQTTHandler {
-	return &MQTTHandler{processor: processor}
+func NewMQTTHandler(processor *processor.ImageProcessor, cfg *config.Config) *MQTTHandler {
+	return &MQTTHandler{
+		processor: processor,
+		cfg:       cfg,
+	}
 }
 
 // HandleMessage verarbeitet eine MQTT-Nachricht
@@ -304,7 +308,11 @@ func (h *MQTTHandler) HandleMessage(topic string, payload []byte) {
 	log.Debugf("Received MQTT message on topic: %s", topic)
 	
 	// Überprüfen, ob das Topic zu den relevanten Frigate-Topics gehört
-	if topic == "frigate/events" {
+	configTopic := h.cfg.MQTT.Topic
+
+	// Unterstütze sowohl exakte Übereinstimmung als auch Wildcard-Abonnements
+	if topic == configTopic || (strings.HasSuffix(configTopic, "/#") && 
+		strings.HasPrefix(topic, strings.TrimSuffix(configTopic, "/#")+"/")) {
 		// Standard Event in JSON-Format
 		log.Infof("Processing JSON event from topic: %s", topic)
 		if err := h.processor.ProcessFrigateEvent(ctx, payload); err != nil {
@@ -315,7 +323,7 @@ func (h *MQTTHandler) HandleMessage(topic string, payload []byte) {
 		log.Infof("Processing person snapshot from topic: %s", topic)
 		h.processPersonSnapshot(ctx, topic, payload)
 	} else {
-		log.Debugf("Ignoring MQTT message on topic: %s", topic)
+		log.Debugf("Ignoring MQTT message on topic: %s (expected: %s)", topic, configTopic)
 	}
 }
 
