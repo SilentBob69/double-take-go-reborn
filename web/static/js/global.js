@@ -8,11 +8,16 @@ function changeLanguage(lang) {
     const scrollPosition = window.pageYOffset || document.documentElement.scrollTop;
     sessionStorage.setItem('scrollPosition', scrollPosition);
     
+    // Sprache in Cookie speichern (30 Tage gültig)
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + 30);
+    document.cookie = `lang=${lang}; expires=${expirationDate.toUTCString()}; path=/; SameSite=Lax`;
+    
     // Aktuelle URL abrufen und Parameter hinzufügen oder aktualisieren
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.set('lang', lang);
     
-    // Zur neuen URL navigieren
+    // Zur neuen URL navigieren (mit vollständigem Neuladen)
     window.location.href = currentUrl.toString();
 }
 

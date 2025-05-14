@@ -52,6 +52,8 @@
     </style>
     <!-- Bootstrap JS (wichtig für Tooltips) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Globale Funktionen -->
+    <script src="/static/js/global.js"></script>
 </head>
 <body>
     {{template "_navbar.html" .}}
@@ -311,37 +313,18 @@
                 const imageId = $(this).data('image-id');
                 const btn = $(this);
                 
-                // Debug-Ausgabe für Fehlersuche
-                console.log(`DEBUG: Reprocess button clicked, image ID: ${imageId}`);
+                console.log(`Starte Neuverarbeitung für Bild ${imageId}...`);
                 showToast('Info', `Starte Neuverarbeitung für Bild ${imageId}...`, 'info');
                 
                 // Deaktiviere Button während der Verarbeitung
                 btn.prop('disabled', true).html('<i class="bi bi-hourglass-split"></i>');
                 
-                // Sende zuerst einen Test-Request, um die generelle Konnektivität zu prüfen
-                fetch(`/api/test-recognize/${imageId}`, {
+                // Direkter Aufruf des Neuverarbeitungs-Endpunkts
+                fetch(`/api/images/${imageId}/recognize`, {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => {
-                    console.log('DEBUG: Test API response:', response);
-                    if (response.ok) {
-                        console.log('DEBUG: Test API successful, now trying real endpoint');
-                        
-                        // Jetzt versuchen wir den eigentlichen Neuverarbeitungs-Endpunkt
-                        return fetch(`/api/images/${imageId}/recognize`, {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                    } else {
-                        console.error('DEBUG: Test API failed with status:', response.status);
-                        throw new Error(`Test API failed with status: ${response.status}`);
                     }
                 })
                 .then(response => {

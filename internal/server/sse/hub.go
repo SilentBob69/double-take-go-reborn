@@ -32,6 +32,23 @@ type Hub struct {
 	mu sync.Mutex
 }
 
+// SseEventType definiert die möglichen Ereignistypen für SSE-Nachrichten
+type SseEventType string
+
+const (
+	EventNewImage    SseEventType = "new_image"     // Einzelnes neues Bild
+	EventUpdateImage SseEventType = "update_image"  // Aktualisierung eines Bildes
+	EventNewGroup    SseEventType = "new_group"     // Neue Bildgruppe
+	EventDeleteImage SseEventType = "delete_image"  // Bild wurde gelöscht
+)
+
+// SseEvent ist die Basisstruktur für alle SSE-Ereignisse
+type SseEvent struct {
+	Type      SseEventType `json:"type"`
+	Timestamp time.Time    `json:"timestamp"`
+	Data      interface{}  `json:"data"`
+}
+
 // NewImageData definiert die Struktur der Daten, die über SSE gesendet werden
 type NewImageData struct {
 	ID         uint      `json:"id"`
@@ -47,6 +64,19 @@ type NewImageData struct {
 	Label      string    `json:"label,omitempty"`
 	Zone       string    `json:"zone,omitempty"`
 	EventType  string    `json:"event_type,omitempty"` // "new", "update", etc.
+}
+
+// NewGroupData definiert die Struktur für eine neue Bildgruppe
+type NewGroupData struct {
+	EventID    string    `json:"event_id"`
+	Source     string    `json:"source"`
+	Camera     string    `json:"camera,omitempty"`
+	Label      string    `json:"label,omitempty"`
+	Zone       string    `json:"zone,omitempty"`
+	Count      int       `json:"count"`
+	Timestamp  time.Time `json:"timestamp"`
+	Images     []uint    `json:"image_ids"`
+	ThumbnailURL string  `json:"thumbnail_url"`
 }
 
 // MatchData enthält vereinfachte Informationen über Matches für die SSE-Nachricht
@@ -144,7 +174,7 @@ func (h *Hub) BroadcastNewImage(image models.Image, snapshotURL string, matches 
 	}
 	
 	// Daten für die SSE-Nachricht aufbereiten
-	data := NewImageData{
+	imageData := NewImageData{
 		ID:         image.ID,
 		FilePath:   image.FilePath,
 		SnapshotURL: snapshotURL,
@@ -157,17 +187,17 @@ func (h *Hub) BroadcastNewImage(image models.Image, snapshotURL string, matches 
 	// Frigate-Metadaten extrahieren, falls vorhanden (z.B. EventID, camera, etc.)
 	if image.Source == "frigate" {
 		// EventID ist direkt im Image-Modell
-		data.EventID = image.EventID
+		imageData.EventID = image.EventID
 		// Zone ist direkt im Image-Modell
-		data.Zone = image.Zone
+		imageData.Zone = image.Zone
 		// Label ist direkt im Image-Modell
-		data.Label = image.Label
+		imageData.Label = image.Label
 		
 		// Event-Typ aus dem Dateinamen extrahieren
 		if strings.Contains(image.FilePath, "_seq") {
-			data.EventType = "new"
+			imageData.EventType = "new"
 		} else if strings.Contains(image.FilePath, "_update") {
-			data.EventType = "update"
+			imageData.EventType = "update"
 		}
 		
 		// Kamera aus den SourceData extrahieren, falls vorhanden
@@ -175,16 +205,82 @@ func (h *Hub) BroadcastNewImage(image models.Image, snapshotURL string, matches 
 			var sourceData map[string]interface{}
 			if err := json.Unmarshal(image.SourceData, &sourceData); err == nil {
 				if camera, ok := sourceData["camera"].(string); ok {
-					data.Camera = camera
+					imageData.Camera = camera
 				}
 			}
 		}
 	}
 	
+	// SSE-Event mit Typ erstellen
+	eventType := EventNewImage
+	if strings.Contains(image.FilePath, "_update") {
+		eventType = EventUpdateImage
+	}
+	
+	sseEvent := SseEvent{
+		Type:      eventType,
+		Timestamp: time.Now(),
+		Data:      imageData,
+	}
+	
 	// Daten als JSON serialisieren
-	jsonData, err := json.Marshal(data)
+	jsonData, err := json.Marshal(sseEvent)
 	if err != nil {
 		log.Errorf("Failed to marshal new image data for SSE: %v", err)
+		return
+	}
+	
+	// Daten broadcasten
+	h.Broadcast(jsonData)
+}
+
+// BroadcastNewGroup sendet Informationen über eine neue Bildgruppe an alle Clients
+func (h *Hub) BroadcastNewGroup(eventID, source, camera, label, zone string, images []models.Image, thumbnailURL string) {
+	if len(images) == 0 {
+		log.Warn("Attempting to broadcast empty image group, ignoring")
+		return
+	}
+	
+	log.Infof("Broadcasting new image group (EventID: %s) with %d images to SSE clients", eventID, len(images))
+	
+	// Bilder-IDs sammeln
+	imageIDs := make([]uint, 0, len(images))
+	for _, img := range images {
+		imageIDs = append(imageIDs, img.ID)
+	}
+	
+	// Zeitstempel ist der des neuesten Bildes
+	latestTimestamp := images[0].Timestamp
+	for _, img := range images {
+		if img.Timestamp.After(latestTimestamp) {
+			latestTimestamp = img.Timestamp
+		}
+	}
+	
+	// Daten für die SSE-Nachricht aufbereiten
+	groupData := NewGroupData{
+		EventID:     eventID,
+		Source:      source,
+		Camera:      camera,
+		Label:       label,
+		Zone:        zone,
+		Count:       len(images),
+		Timestamp:   latestTimestamp,
+		Images:      imageIDs,
+		ThumbnailURL: thumbnailURL,
+	}
+	
+	// SSE-Event erstellen
+	sseEvent := SseEvent{
+		Type:      EventNewGroup,
+		Timestamp: time.Now(),
+		Data:      groupData,
+	}
+	
+	// Daten als JSON serialisieren
+	jsonData, err := json.Marshal(sseEvent)
+	if err != nil {
+		log.Errorf("Failed to marshal new group data for SSE: %v", err)
 		return
 	}
 	

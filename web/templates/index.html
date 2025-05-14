@@ -421,49 +421,113 @@
 
             // --- SSE Setup ---
             const eventSource = new EventSource('/events');
-            // mainContainer wurde bereits in Zeile 303 definiert
+            // mainContainer wurde bereits definiert
 
             eventSource.onmessage = function(event) {
                 console.log('SSE Message received:', event.data);
                 try {
-                    const data = JSON.parse(event.data);
-                    console.log('Parsed SSE data:', data);
-
-                    // Check if card already exists
-                    const existingCardContainer = document.getElementById(`image-card-${data.id}`)?.closest('.col-md-6');
-                    if (existingCardContainer) {
-                        console.log(`Image card ${data.id} already exists, updating...`);
-                        
-                        // Create new card HTML
-                        const cardHTML = createImageCardHTML(data);
-                        const cardElement = document.createElement('div');
-                        cardElement.innerHTML = cardHTML.trim();
-                        const newCard = cardElement.firstChild;
-                        
-                        // Replace the existing card
-                        existingCardContainer.replaceWith(newCard.closest('.col-md-6'));
-                        showToast(translations.success, `{{ t "images.updated" }} ${data.id}`, 'info');
-                        return;
-                    }
-
-                    const cardHTML = createImageCardHTML(data);
-                    const cardElement = document.createElement('div'); // Create a temporary element to parse the HTML
-                    cardElement.innerHTML = cardHTML.trim();
-                    const newCard = cardElement.firstChild;
-
-                    // Add the new card to the main items container
-                    const itemsContainer = document.getElementById('items-container');
-                    if (itemsContainer) {
-                        itemsContainer.prepend(newCard);
-                        console.log(`Prepended card ${data.id} to items container.`);
-                    } else {
-                        console.error("Container 'items-container' not found for prepending!");
+                    const eventData = JSON.parse(event.data);
+                    console.log('Parsed SSE data:', eventData);
+                    
+                    // Prüfen, welcher Event-Typ empfangen wurde
+                    switch (eventData.type) {
+                        case 'new_image':
+                        case 'update_image':
+                            handleImageEvent(eventData.data, eventData.type === 'update_image');
+                            break;
+                        case 'new_group':
+                            handleGroupEvent(eventData.data);
+                            break;
+                        case 'delete_image':
+                            handleDeleteEvent(eventData.data);
+                            break;
+                        default:
+                            console.warn('Unbekannter SSE-Event-Typ:', eventData.type);
                     }
                 } catch (e) {
-                    console.error('Error parsing SSE message or adding card:', e);
+                    console.error('Error parsing SSE message:', e);
                     console.error('Original SSE data:', event.data);
                 }
             };
+            
+            // Verarbeitet ein Bild-Event (neu oder Update)
+            function handleImageEvent(data, isUpdate) {
+                // Check if card already exists
+                const existingCardContainer = document.getElementById(`image-card-${data.id}`)?.closest('.col-md-6');
+                if (existingCardContainer) {
+                    console.log(`Image card ${data.id} already exists, updating...`);
+                    
+                    // Create new card HTML
+                    const cardHTML = createImageCardHTML(data);
+                    const cardElement = document.createElement('div');
+                    cardElement.innerHTML = cardHTML.trim();
+                    const newCard = cardElement.firstChild;
+                    
+                    // Replace the existing card
+                    existingCardContainer.replaceWith(newCard.closest('.col-md-6'));
+                    showToast(translations.success, `{{ t "images.updated" }} ${data.id}`, 'info');
+                    return;
+                }
+
+                const cardHTML = createImageCardHTML(data);
+                const cardElement = document.createElement('div');
+                cardElement.innerHTML = cardHTML.trim();
+                const newCard = cardElement.firstChild;
+
+                // Add the new card to the main items container
+                const itemsContainer = document.getElementById('items-container');
+                if (itemsContainer) {
+                    itemsContainer.prepend(newCard);
+                    console.log(`Prepended card ${data.id} to items container.`);
+                } else {
+                    console.error("Container 'items-container' not found for prepending!");
+                }
+            }
+            
+            // Verarbeitet ein Gruppen-Event
+            function handleGroupEvent(data) {
+                console.log('Handling new group event:', data);
+                
+                // Prüfen, ob die Gruppe bereits existiert
+                const existingGroup = document.getElementById(`event-group-${data.event_id}`);
+                if (existingGroup) {
+                    console.log(`Group ${data.event_id} already exists, updating...`);
+                    // Hier könnte man die bestehende Gruppe aktualisieren
+                    return;
+                }
+                
+                // Neue Gruppe erstellen
+                // Hier müsste die Erstellung der Gruppe-HTML erfolgen - falls es eine Template-Funktion gibt
+                // Da wir keine direkte Event-Gruppen-Template-Funktion haben, leiten wir die Seite neu
+                // In einer Vollimplementierung würde man hier die Gruppe dynamisch hinzufügen
+                
+                // Benachrichtigung anzeigen
+                showToast('Neue Bildgruppe', 
+                    `Eine neue Gruppe mit ${data.count} Bildern wurde erkannt. Source: ${data.source}${data.camera ? ', Kamera: ' + data.camera : ''}`, 
+                    'info');
+                
+                // Optional: Automatisches Neuladen der Seite nach einer Verzögerung
+                // Dies ist nicht ideal, aber eine einfache Lösung ohne komplexe Client-seitige Templating
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000); // 3 Sekunden Verzögerung, damit der Benutzer die Benachrichtigung sehen kann
+            }
+            
+            // Verarbeitet ein Lösch-Event
+            function handleDeleteEvent(data) {
+                const imageId = data.id;
+                // Bild aus der DOM entfernen
+                const card = document.getElementById(`image-card-${imageId}`);
+                if (card) {
+                    const column = card.closest('.col-md-6');
+                    if (column) {
+                        column.remove();
+                    } else {
+                        card.remove();
+                    }
+                    showToast(translations.success, `{{ t "images.deleted_success_single" }} ${imageId}`, 'success');
+                }
+            }
 
             eventSource.onerror = function(err) {
                 console.error('EventSource failed:', err);

@@ -105,7 +105,7 @@
 {{ if .Faces }}
 <div class="row mb-4">
     <div class="col-12">
-        <h2>Erkannte Gesichter</h2>
+        <h2>Erkannte Gesichter {{ if gt (len .Faces) 0 }}({{ len .Faces }}){{ end }}</h2>
     </div>
     
     {{ range .Faces }}
