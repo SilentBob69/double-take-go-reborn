@@ -21,6 +21,14 @@
             object-fit: contain; /* Scale image nicely */
         }
         
+        /* Filter collapse styles */
+        .filter-toggle-icon {
+            transition: transform 0.3s;
+        }
+        .rotate-icon {
+            transform: rotate(-90deg);
+        }
+        
         /* Toast-Stile */
         .toast-container {
             position: fixed;
@@ -59,10 +67,14 @@
 
         <!-- Filter-Bereich -->
         <div class="card mb-4">
-            <div class="card-header bg-secondary">
+            <div class="card-header bg-secondary d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">{{ t "filters.title" }}</h5>
+                <button class="btn btn-sm btn-secondary" type="button" id="filterToggleBtn">
+                    <i class="bi bi-chevron-down filter-toggle-icon rotate-icon" id="filterIcon"></i>
+                </button>
             </div>
-            <div class="card-body">
+            <div id="filterCollapse" style="display: none;">
+                <div class="card-body">
                 <form method="GET" action="/" class="row g-3">
                     <div class="col-md-3">
                         <label for="source" class="form-label">{{ t "filters.source" }}</label>
@@ -131,6 +143,7 @@
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         </div>
 
@@ -273,6 +286,34 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Globale Funktionen -->
     <script src="/static/js/global.js"></script>
+    
+    <!-- Script für einklappbare Filter -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Filter Toggle Funktionalität
+            const filterToggleBtn = document.getElementById('filterToggleBtn');
+            const filterCollapse = document.getElementById('filterCollapse');
+            const filterIcon = document.getElementById('filterIcon');
+            
+            // Anfangszustand (eingeklappt)
+            let filterVisible = false;
+            
+            filterToggleBtn.addEventListener('click', function() {
+                console.log('Filter toggle button clicked');
+                
+                // Toggle Visibility
+                filterVisible = !filterVisible;
+                filterCollapse.style.display = filterVisible ? 'block' : 'none';
+                
+                // Toggle Icon Rotation
+                if (filterVisible) {
+                    filterIcon.classList.remove('rotate-icon');
+                } else {
+                    filterIcon.classList.add('rotate-icon');
+                }
+            });
+        });
+    </script>
 
     <script>
         // Übersetzungen für JavaScript
