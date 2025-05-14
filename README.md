@@ -138,6 +138,14 @@ Wir freuen uns über Ihr Interesse an Double-Take Go Reborn und laden Sie herzli
 
 Jedes Feedback ist wertvoll, unabhängig davon, ob Sie ein erfahrener Entwickler sind oder das Projekt einfach nur ausprobieren möchten.
 
+## Unterstützung
+
+Wenn Ihnen dieses Projekt gefällt und Sie seine Entwicklung unterstützen möchten:
+
+- **PayPal**: [Spendieren Sie mir ein Bier](https://www.paypal.com/donate/?hosted_button_id=6FTKYDXJ7R7ZL) über PayPal als Dankeschön.
+
+Jede Unterstützung, egal ob finanziell oder durch Beiträge zum Projekt, wird sehr geschätzt und hilft dabei, Double-Take Go Reborn weiterzuentwickeln und zu verbessern.
+
 ## Zukünftige Pläne
 
 - Verbesserung der Gesichtserkennungsgenauigkeit

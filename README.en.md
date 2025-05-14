@@ -123,6 +123,24 @@ Double-Take Go provides a comprehensive REST API that allows other applications 
 
 The API enables control of all key functions of the system, including image processing, identity management, and system functions.
 
+## Feedback Welcome!
+
+We appreciate your interest in Double-Take Go Reborn and warmly invite you to provide feedback, ask questions, or submit improvement suggestions. Your contributions help us continuously improve the project!
+
+- **Issues**: Found a bug or have an idea for a new feature? [Create an issue](https://github.com/SilentBob69/double-take-go-reborn/issues/new)!
+- **Discussions**: Questions about usage or general discussions take place in the [Discussions section](https://github.com/SilentBob69/double-take-go-reborn/discussions).
+- **Pull Requests**: Code contributions are very welcome! Check out our [contribution guidelines](CONTRIBUTING.md).
+
+Any feedback is valuable, regardless of whether you're an experienced developer or just want to try out the project.
+
+## Support
+
+If you like this project and want to support its development:
+
+- **PayPal**: [Buy me a beer](https://www.paypal.com/donate/?hosted_button_id=6FTKYDXJ7R7ZL) via PayPal as a thank you.
+
+Any support, whether financial or through contributions to the project, is greatly appreciated and helps to further develop and improve Double-Take Go Reborn.
+
 ## Future Plans
 
 - Improving facial recognition accuracy
