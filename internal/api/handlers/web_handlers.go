@@ -432,6 +432,9 @@ func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/settings", h.handleSettings)
 	router.GET("/diagnostics", h.handleDiagnostics)
 	
+	// CompreFace-Training
+	router.GET("/train-compreface/:id", h.handleTrainCompreFace)
+	
 	// Treffer/Matches
 	router.POST("/matches/:id/update", h.handleUpdateMatch)
 	
@@ -440,6 +443,54 @@ func (h *WebHandler) RegisterRoutes(router *gin.Engine) {
 	
 	// API für die Weboberfläche
 	router.GET("/system/stats", h.handleSystemStats)
+}
+
+// handleTrainCompreFace zeigt eine Seite an, um ein erkanntes Gesicht mit CompreFace zu trainieren
+func (h *WebHandler) handleTrainCompreFace(c *gin.Context) {
+	// Image-ID aus der URL extrahieren
+	imageIDStr := c.Param("id")
+	imageID, err := strconv.ParseUint(imageIDStr, 10, 64)
+	if err != nil {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"Title": "Fehler",
+			"Error": "Ungültige Bild-ID",
+			"StatusCode": http.StatusBadRequest,
+		})
+		return
+	}
+
+	// Bild mit der angegebenen ID abrufen
+	var image models.Image
+	if err := h.db.Preload("Faces.Matches.Identity").First(&image, imageID).Error; err != nil {
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"Title": "Fehler",
+			"Error": "Bild nicht gefunden",
+			"StatusCode": http.StatusNotFound,
+		})
+		return
+	}
+
+	// Alle verfügbaren Identitäten abrufen
+	var identities []models.Identity
+	if err := h.db.Order("name").Find(&identities).Error; err != nil {
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"Title": "Fehler",
+			"Error": "Fehler beim Abrufen der Identitäten",
+			"StatusCode": http.StatusInternalServerError,
+		})
+		return
+	}
+
+	// Template-Daten vorbereiten
+	templateData := gin.H{
+		"Title":       "CompreFace anlernen", // Wird im Template übersetzt
+		"Image":       image,
+		"Identities":  identities,
+		"CurrentYear": time.Now().Year(),
+	}
+
+	// Template rendern
+	h.renderTemplate(c, "train_compreface.html", templateData)
 }
 
 // EventGroup repräsentiert eine Gruppe von Bildern, die zum selben Event gehören

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="de" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Double Take Go</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- Eigene Styles -->
+    <link rel="stylesheet" href="/static/css/global.css">
+    <style>
+        .face-select-card {
+            border-radius: 0.25rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+    </style>
+</head>
+<body>
+    {{template "_navbar.html" .}}
+
+    <!-- Main Content -->
+    <main>
+        <div class="container mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>{{ t "compreface.train_title" }}</h1>
+                <a href="javascript:history.back()" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i> {{ t "common.back" }}
+                </a>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-4">
+                        <img src="/snapshots/{{.Image.FilePath}}" class="card-img-top" alt="Image {{.Image.ID}}">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ t "images.image_id" }}: {{.Image.ID}}</h5>
+                            <p class="card-text">
+                                <small class="text-muted">{{ t "images.timestamp" }}: {{.Image.Timestamp.Format "2006-01-02 15:04:05"}}</small><br>
+                                <small class="text-muted">{{ t "images.source" }}: {{.Image.Source}}</small>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">{{ t "compreface.select_face_and_identity" }}</h5>
+                        </div>
+                        <div class="card-body">
+                            {{if .Image.Faces}}
+                                <form id="trainCompreFaceForm" method="POST" action="/api/faces/train-compreface">
+                                    <input type="hidden" name="image_id" value="{{.Image.ID}}">
+                                    
+                                    <div class="mb-3">
+                                        <label for="face_select" class="form-label">{{ t "compreface.select_face" }}</label>
+                                        <select class="form-select" id="face_select" name="face_id" required>
+                                            <option value="" disabled selected>{{ t "compreface.please_select_face" }}</option>
+                                            {{range $index, $face := .Image.Faces}}
+                                                <option value="{{$face.ID}}">
+                                                    {{ t "compreface.face" }} {{add $index 1}}
+                                                    {{if $face.Matches}}
+                                                        {{with index $face.Matches 0}}
+                                                            ({{.Identity.Name}})
+                                                        {{end}}
+                                                    {{end}}
+                                                </option>
+                                            {{end}}
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="identity_select" class="form-label">{{ t "compreface.select_identity" }}</label>
+                                        <select class="form-select" id="identity_select" name="identity_id" required>
+                                            <option value="" disabled selected>{{ t "compreface.please_select_identity" }}</option>
+                                            {{range .Identities}}
+                                                <option value="{{.ID}}">{{.Name}}</option>
+                                            {{end}}
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-mortarboard me-1"></i> {{ t "compreface.train_button" }}
+                                        </button>
+                                    </div>
+                                </form>
+                            {{else}}
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle me-2"></i> {{ t "compreface.no_faces_detected" }}
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <a href="javascript:history.back()" class="btn btn-secondary">
+                                        <i class="bi bi-arrow-left me-1"></i> {{ t "common.back" }}
+                                    </a>
+                                </div>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto py-3 bg-dark text-center">
+        <div class="container">
+            <span class="text-muted">{{ t "footer.copyright" }} &copy; {{.CurrentYear}}</span>
+        </div>
+    </footer>
+
+    <!-- Toast Container -->
+    <div class="toast-container position-fixed top-0 end-0 p-3"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- JavaScript für Formular-Verarbeitung -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Formular-Handler
+        const form = document.getElementById('trainCompreFaceForm');
+        
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const faceId = document.getElementById('face_select').value;
+                const identityId = document.getElementById('identity_select').value;
+                const imageId = document.querySelector('input[name="image_id"]').value;
+                
+                if (!faceId) {
+                    showToast('{{ t "common.error" }}', '{{ t "compreface.please_select_face_error" }}', 'danger');
+                    return;
+                }
+                
+                if (!identityId) {
+                    showToast('{{ t "common.error" }}', '{{ t "compreface.please_select_identity_error" }}', 'danger');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/api/faces/${faceId}/train-compreface`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            identity_id: parseInt(identityId, 10),
+                            image_id: parseInt(imageId, 10)
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showToast('{{ t "common.success" }}', result.message || '{{ t "compreface.training_success" }}', 'success');
+                        // Nach kurzer Verzögerung zurück zur vorherigen Seite
+                        setTimeout(() => {
+                            window.location.href = document.referrer || '/';
+                        }, 2000);
+                    } else {
+                        showToast('{{ t "common.error" }}', result.error || '{{ t "compreface.training_error" }}', 'danger');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showToast('{{ t "common.error" }}', '{{ t "compreface.server_error" }}', 'danger');
+                }
+            });
+        }
+        
+        // Toast-Funktion für Benachrichtigungen
+        window.showToast = function(title, message, type) {
+            // Toast-Element erstellen
+            const toastElement = document.createElement('div');
+            toastElement.className = `toast align-items-center text-white bg-${type}`;
+            toastElement.setAttribute('role', 'alert');
+            toastElement.setAttribute('aria-live', 'assertive');
+            toastElement.setAttribute('aria-atomic', 'true');
+            
+            // Toast-Inhalt erstellen
+            toastElement.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <strong>${title}:</strong> ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            `;
+            
+            // Toast zum Container hinzufügen
+            document.querySelector('.toast-container').appendChild(toastElement);
+            
+            // Toast initialisieren und anzeigen
+            const toast = new bootstrap.Toast(toastElement, {
+                delay: 5000,
+                autohide: true
+            });
+            toast.show();
+            
+            // Toast nach dem Ausblenden entfernen
+            toastElement.addEventListener('hidden.bs.toast', function () {
+                this.remove();
+            });
+        }
+    });
+    </script>
+</body>
+</html>

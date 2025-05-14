@@ -391,6 +391,7 @@
                     const deleteAllButton = target.closest('#deleteAllButton'); // Handle delete all
                     const editMatchButton = target.closest('.edit-match-btn');
                     const assignFaceButton = target.closest('.assign-face-btn');
+                    const trainCompreFaceButton = target.closest('.dt-train-compreface, [data-action="train-compreface"]');
 
                     if (deleteButton) {
                         const imageId = deleteButton.dataset.imageId;
@@ -410,6 +411,10 @@
                     } else if (assignFaceButton) {
                         const faceId = assignFaceButton.dataset.faceId;
                         handleEditRequest('face', faceId);
+                    } else if (trainCompreFaceButton) {
+                        const imageId = trainCompreFaceButton.dataset.imageId;
+                        console.log('CompreFace-Anlernen-Button geklickt. Bild-ID:', imageId);
+                        trainCompreFaceWithImage(imageId);
                     }
                 });
             }
@@ -417,37 +422,6 @@
             // --- SSE Setup ---
             const eventSource = new EventSource('/events');
             // mainContainer wurde bereits in Zeile 303 definiert
-            let containerWithFaces = document.getElementById('images-with-faces-container');
-            let containerWithoutFaces = document.getElementById('images-without-faces-container');
-            // Make sure the containers exist, even if initially empty, or handle null case
-            if (!containerWithFaces && document.getElementById('images-with-faces-container') == null) { // Check if ID exists at all
-                // Inject container if needed, or handle differently
-                 console.warn("'images-with-faces-container' not found, creating...");
-                 // Example: Create and append the container dynamically if needed
-                 let h2 = document.createElement('h2');
-                 h2.className = 'mt-4';
-                 h2.textContent = '{{ t "images.title" }}';
-                 let newContainer = document.createElement('div');
-                 newContainer.className = 'row';
-                 newContainer.id = 'images-with-faces-container';
-                 mainContainer.appendChild(h2);
-                 mainContainer.appendChild(newContainer);
-                 // Re-assign containerWithFaces after creation
-                 containerWithFaces = newContainer;
-            }
-             if (!containerWithoutFaces && document.getElementById('images-without-faces-container') == null) {
-                 console.warn("'images-without-faces-container' not found, creating...");
-                 let h2 = document.createElement('h2');
-                 h2.className = 'mt-5';
-                 h2.textContent = '{{ t "images.title_without_faces" }}';
-                 let newContainer = document.createElement('div');
-                 newContainer.className = 'row';
-                 newContainer.id = 'images-without-faces-container';
-                 mainContainer.appendChild(h2);
-                 mainContainer.appendChild(newContainer);
-                 // Re-assign containerWithoutFaces after creation
-                 containerWithoutFaces = newContainer;
-             }
 
             eventSource.onmessage = function(event) {
                 console.log('SSE Message received:', event.data);
@@ -468,9 +442,6 @@
                         
                         // Replace the existing card
                         existingCardContainer.replaceWith(newCard.closest('.col-md-6'));
-                        
-                        // Determine if we need to move the card to a different container
-                        moveCardToCorrectContainer(newCard.closest('.col-md-6'), data);
                         showToast(translations.success, `{{ t "images.updated" }} ${data.id}`, 'info');
                         return;
                     }
@@ -480,21 +451,13 @@
                     cardElement.innerHTML = cardHTML.trim();
                     const newCard = cardElement.firstChild;
 
-                    // Determine the correct container
-                    if (data.faces && data.faces.length > 0) {
-                         if (containerWithFaces) {
-                            containerWithFaces.prepend(newCard);
-                            console.log(`Prepended card ${data.id} to container WITH faces.`);
-                        } else {
-                             console.error("Container 'images-with-faces-container' not found for prepending!");
-                         }
+                    // Add the new card to the main items container
+                    const itemsContainer = document.getElementById('items-container');
+                    if (itemsContainer) {
+                        itemsContainer.prepend(newCard);
+                        console.log(`Prepended card ${data.id} to items container.`);
                     } else {
-                        if (containerWithoutFaces) {
-                            containerWithoutFaces.prepend(newCard);
-                             console.log(`Prepended card ${data.id} to container WITHOUT faces.`);
-                        } else {
-                             console.error("Container 'images-without-faces-container' not found for prepending!");
-                         }
+                        console.error("Container 'items-container' not found for prepending!");
                     }
                 } catch (e) {
                     console.error('Error parsing SSE message or adding card:', e);
@@ -510,32 +473,6 @@
         });
 
         // --- Helper Functions ---
-        // Funktion zum Verschieben einer Karte in den richtigen Container basierend auf ihren Daten
-        function moveCardToCorrectContainer(cardElement, data) {
-            // Container referenzieren
-            const containerWithFaces = document.getElementById('images-with-faces-container');
-            const containerWithoutFaces = document.getElementById('images-without-faces-container');
-            
-            // Aktuelle Position der Karte bestimmen
-            const currentContainer = cardElement.parentElement;
-            
-            // Zielcontainer bestimmen
-            let targetContainer;
-            if (data.faces && data.faces.length > 0) {
-                targetContainer = containerWithFaces;
-            } else {
-                targetContainer = containerWithoutFaces;
-            }
-            
-            // Nichts tun, wenn die Karte bereits im richtigen Container ist
-            if (currentContainer === targetContainer) return;
-            
-            // Karte in den richtigen Container verschieben
-            if (targetContainer) {
-                console.log(`Moving card ${data.id} to ${data.faces && data.faces.length > 0 ? 'WITH' : 'WITHOUT'} faces container`);
-                targetContainer.prepend(cardElement);
-            }
-        }
         
         // --- Action Functions (delete, recognize, delete all) ---
         function deleteImage(imageId) {
@@ -777,6 +714,153 @@
             } catch (error) {
                 console.error('Error saving identity assignment:', error);
                 showToast(translations.error, `Fehler beim Speichern der Identität: ${error.message}`, 'error');
+            }
+        }
+
+        /**
+         * Startet den Prozess zum Anlernen von CompreFace mit einem erkannten Gesicht
+         * @param {string} imageId - ID des Bildes mit dem erkannten Gesicht
+         */
+        async function trainCompreFaceWithImage(imageId) {
+            console.log(`Starte CompreFace-Training mit Bild ${imageId}`);
+            
+            try {
+                // Prüfen, ob das Bild Gesichter enthält
+                const response = await fetch(`/api/images/${imageId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                const data = await response.json();
+                console.log('Bilddaten geladen:', data);
+                
+                if (!data.faces || data.faces.length === 0) {
+                    showToast(translations.warning || 'Hinweis', 'Dieses Bild enthält keine erkannten Gesichter für das Training', 'warning');
+                    return;
+                }
+                
+                // Lade die Liste der Identitäten für das Modal
+                const identitiesResponse = await fetch('/api/identities');
+                if (!identitiesResponse.ok) {
+                    throw new Error(`HTTP error! Status: ${identitiesResponse.status}`);
+                }
+                const identities = await identitiesResponse.json();
+                
+                // Modal vorbereiten und anzeigen
+                const modalHtml = `
+                    <div class="modal fade" id="compreFaceTrainImageModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">${document.documentElement.lang === 'de' ? 'CompreFace anlernen' : 'Train CompreFace'}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <img src="/snapshots/${data.filePath}" class="img-fluid img-thumbnail" alt="Trainingsbild">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <form id="trainCompreFaceForm">
+                                                <input type="hidden" name="image_id" value="${imageId}">
+                                                <div class="mb-3">
+                                                    <label for="identity_select" class="form-label">${document.documentElement.lang === 'de' ? 'Identität auswählen' : 'Select identity'}</label>
+                                                    <select class="form-select" id="identity_select" name="identity_id" required>
+                                                        <option value="" disabled selected>${document.documentElement.lang === 'de' ? 'Bitte wählen Sie eine Identität' : 'Please select an identity'}</option>
+                                                        ${identities.map(identity => `<option value="${identity.ID}">${identity.Name}</option>`).join('')}
+                                                    </select>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="face_select" class="form-label">${document.documentElement.lang === 'de' ? 'Gesicht auswählen' : 'Select face'}</label>
+                                                    <select class="form-select" id="face_select" name="face_id" required>
+                                                        <option value="" disabled selected>${document.documentElement.lang === 'de' ? 'Bitte wählen Sie ein Gesicht' : 'Please select a face'}</option>
+                                                        ${data.faces.map((face, index) => {
+                                                            let label = `Gesicht ${index + 1}`;
+                                                            if (face.matches && face.matches.length > 0) {
+                                                                label += ` (${face.matches[0].identity.name}, ${Math.round(face.matches[0].confidence * 100)}%)`;
+                                                            }
+                                                            return `<option value="${face.ID}">${label}</option>`;
+                                                        }).join('')}
+                                                    </select>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">${document.documentElement.lang === 'de' ? 'Abbrechen' : 'Cancel'}</button>
+                                    <button type="button" class="btn btn-primary" id="submitTrainCompreFace">
+                                        <i class="bi bi-mortarboard me-1"></i> ${document.documentElement.lang === 'de' ? 'Anlernen' : 'Train'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Existierendes Modal entfernen, falls vorhanden
+                const existingModal = document.getElementById('compreFaceTrainImageModal');
+                if (existingModal) {
+                    existingModal.remove();
+                }
+                
+                // Modal zum DOM hinzufügen
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+                // Modal initialisieren und anzeigen
+                const modalElement = document.getElementById('compreFaceTrainImageModal');
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+                
+                // Submit-Event für das Anlernen
+                document.getElementById('submitTrainCompreFace').addEventListener('click', async function() {
+                    const form = document.getElementById('trainCompreFaceForm');
+                    const identityId = form.querySelector('#identity_select').value;
+                    const faceId = form.querySelector('#face_select').value;
+                    
+                    if (!identityId) {
+                        showToast('Fehler', document.documentElement.lang === 'de' ? 'Bitte wählen Sie eine Identität aus' : 'Please select an identity', 'danger');
+                        return;
+                    }
+                    
+                    if (!faceId) {
+                        showToast('Fehler', document.documentElement.lang === 'de' ? 'Bitte wählen Sie ein Gesicht aus' : 'Please select a face', 'danger');
+                        return;
+                    }
+                    
+                    try {
+                        // Submit via AJAX
+                        const response = await fetch(`/api/faces/${faceId}/train-compreface`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                identity_id: identityId,
+                                image_id: imageId
+                            })
+                        });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        if (result.success) {
+                            // Erfolgsmeldung anzeigen
+                            showToast('Erfolg', result.message, 'success');
+                            // Modal schließen
+                            modal.hide();
+                        } else {
+                            showToast('Fehler', result.error || 'Unbekannter Fehler', 'danger');
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showToast('Fehler', document.documentElement.lang === 'de' ? 'Serverfehler beim Verarbeiten der Anfrage' : 'Server error processing the request', 'danger');
+                    }
+                });
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Fehler', 'Fehler beim Laden der Bilddaten', 'danger');
             }
         }
 

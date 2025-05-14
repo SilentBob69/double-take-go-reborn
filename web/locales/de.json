@@ -21,6 +21,7 @@
     "yes": "Ja",
     "no": "Nein",
     "save": "Speichern",
+    "back": "Zurück",
     "cancel": "Abbrechen",
     "abort": "Abbrechen",
     "delete": "Löschen",
@@ -63,8 +64,8 @@
     "last_month": "Letzter Monat"
   },
   "images": {
-    "title": "Bilder",
-    "title_without_faces": "Bilder ohne Gesichter",
+    "title": "Bilder mit erkannten Gesichtern",
+    "title_without_faces": "Bilder ohne erkannte Gesichter",
     "label": "Bezeichnung",
     "camera": "Kamera",
     "zone": "Zone",
@@ -147,6 +148,22 @@
   "show_all": "Alle anzeigen",
   "no_images_yet": "Noch keine Bilder vorhanden.",
   "detected_images": "Erkannte Bilder",
+  "compreface": {
+    "train_title": "CompreFace anlernen",
+    "select_face_and_identity": "Gesicht und Identität auswählen",
+    "select_face": "Gesicht auswählen",
+    "select_identity": "Identität auswählen",
+    "please_select_face": "Bitte wählen Sie ein Gesicht aus",
+    "please_select_identity": "Bitte wählen Sie eine Identität aus",
+    "face": "Gesicht",
+    "train_button": "Anlernen",
+    "no_faces_detected": "Keine Gesichter in diesem Bild erkannt",
+    "please_select_face_error": "Bitte wählen Sie ein Gesicht aus",
+    "please_select_identity_error": "Bitte wählen Sie eine Identität aus",
+    "training_success": "CompreFace wurde erfolgreich angelernt",
+    "training_error": "Fehler beim Anlernen von CompreFace",
+    "server_error": "Serverfehler beim Verarbeiten der Anfrage"
+  },
   "diagnostics": {
     "title": "Diagnose",
     "system_info": "Systeminformationen",

@@ -59,6 +59,9 @@
             <button class="btn btn-secondary btn-sm recognize-btn ms-1" data-image-id="{{.ID}}" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_reprocess" }}">
                 <i class="bi bi-arrow-repeat"></i>
             </button>
+            <a href="/train-compreface/{{.ID}}" class="btn btn-primary btn-sm ms-1" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_train_compreface" }}">
+                <i class="bi bi-mortarboard"></i> CF
+            </a>
         </div>
     </div>
 </div>

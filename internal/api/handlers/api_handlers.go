@@ -6,6 +6,7 @@ import (
 	"double-take-go-reborn/internal/core/processor"
 	"double-take-go-reborn/internal/integrations/compreface"
 
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,6 +64,9 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 
 	// Match-Endpunkte (Treffer)
 	router.PUT("/matches/:id", h.UpdateMatch)
+
+	// Gesichter-Endpunkte
+	router.POST("/faces/:id/train-compreface", h.TrainCompreFaceWithFace)
 
 	// System-Endpunkte
 	router.GET("/status", h.GetStatus)
@@ -777,5 +781,143 @@ func (h *APIHandler) UpdateMatch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Match updated successfully",
 		"match": match,
+	})
+}
+
+// TrainCompreFaceWithFace trainiert CompreFace mit einem erkannten Gesicht aus einem Bild
+func (h *APIHandler) TrainCompreFaceWithFace(c *gin.Context) {
+	// Prüfen, ob CompreFace aktiviert ist
+	if !h.cfg.CompreFace.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "CompreFace integration is not enabled"})
+		return
+	}
+
+	// Face-ID aus dem URL-Pfad abrufen
+	faceID := c.Param("id")
+	
+	// Request-Daten abrufen
+	var req struct {
+		IdentityID uint `json:"identity_id" binding:"required"`
+		ImageID   uint `json:"image_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	// Gesicht in der Datenbank finden
+	var face models.Face
+	if err := h.db.Preload("Image").First(&face, faceID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Face not found"})
+		return
+	}
+
+	// Prüfen, ob das Gesicht zum angegebenen Bild gehört
+	if face.ImageID != req.ImageID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Face does not belong to the specified image"})
+		return
+	}
+	
+	// Identität in der Datenbank finden
+	var identity models.Identity
+	if err := h.db.First(&identity, req.IdentityID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Identity not found"})
+		return
+	}
+
+	log.Infof("Training CompreFace with face ID %d from image ID %d for identity %s", face.ID, req.ImageID, identity.Name)
+	
+	// Face-Bounding-Box validieren
+	var boundingBox struct {
+		XMin int `json:"x_min"`
+		YMin int `json:"y_min"`
+		XMax int `json:"x_max"`
+		YMax int `json:"y_max"`
+	}
+	
+	if err := json.Unmarshal(face.BoundingBox, &boundingBox); err != nil {
+		log.WithError(err).Error("Failed to unmarshal face bounding box")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid face bounding box format"})
+		return
+	}
+	
+	// Prüfen, ob die Bounding-Box gültig ist
+	if boundingBox.XMin <= 0 || boundingBox.YMin <= 0 || boundingBox.XMax <= boundingBox.XMin || boundingBox.YMax <= boundingBox.YMin {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid face coordinates"})
+		return
+	}
+
+	// Bildpfad generieren
+	imageFilePath := filepath.Join(h.cfg.Server.SnapshotDir, face.Image.FilePath)
+	log.Debugf("Loading image from: %s", imageFilePath)
+	
+	// Bilddaten lesen
+	imageData, err := os.ReadFile(imageFilePath)
+	if err != nil {
+		log.WithError(err).Error("Failed to read image file")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read image file"})
+		return
+	}
+
+	// 1. Zuerst prüfen, ob die Identität in CompreFace existiert, und ggf. erstellen
+	ctx := c.Request.Context()
+	_, err = h.compreface.CreateSubject(ctx, identity.Name)
+	if err != nil {
+		log.WithError(err).Warn("Failed to create subject in CompreFace (might already exist)")
+		// Wir fahren trotzdem fort, da das Subjekt möglicherweise bereits existiert
+	}
+
+	// 2. Dateiname für CompreFace generieren (muss einzigartig sein)
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+	filename := fmt.Sprintf("face_%d_%d_%s.jpg", face.ID, timestamp, filepath.Base(imageFilePath))
+
+	// 3. Bild als Beispiel für die neue Identität zu CompreFace hinzufügen
+	result, err := h.compreface.AddSubjectExample(ctx, identity.Name, imageData, filename)
+	if err != nil {
+		log.WithError(err).Error("Failed to add example to CompreFace")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add example to CompreFace"})
+		return
+	}
+
+	log.Infof("Successfully added face %d as example to CompreFace identity '%s' (ID: %s)", face.ID, identity.Name, result.ImageID)
+	
+	// 4. Auch in der lokalen Datenbank einen Match erstellen oder aktualisieren
+	var existingMatch models.Match
+	result404 := h.db.Where("face_id = ?", face.ID).First(&existingMatch).Error
+
+	if result404 == nil {
+		// Match existiert bereits, aktualisieren
+		existingMatch.IdentityID = identity.ID
+		existingMatch.Confidence = 1.0 // 100% Konfidenz, da manuell gesetzt
+		
+		if err := h.db.Save(&existingMatch).Error; err != nil {
+			log.WithError(err).Error("Failed to update existing match")
+			// Wir geben trotzdem einen Erfolg zurück, da CompreFace erfolgreich aktualisiert wurde
+		} else {
+			log.Infof("Updated existing match %d to identity %s", existingMatch.ID, identity.Name)
+		}
+	} else {
+		// Neuen Match erstellen
+		newMatch := models.Match{
+			FaceID:     face.ID,
+			IdentityID: identity.ID,
+			Confidence: 1.0, // 100% Konfidenz, da manuell gesetzt
+		}
+		
+		if err := h.db.Create(&newMatch).Error; err != nil {
+			log.WithError(err).Error("Failed to create new match")
+			// Wir geben trotzdem einen Erfolg zurück, da CompreFace erfolgreich aktualisiert wurde
+		} else {
+			log.Infof("Created new match %d for face %d to identity %s", newMatch.ID, face.ID, identity.Name)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Gesicht erfolgreich zu CompreFace-Identität '%s' hinzugefügt", identity.Name),
+		"identity": identity,
+		"face_id": face.ID,
+		"compreface_image_id": result.ImageID,
 	})
 }

@@ -203,6 +203,13 @@
                                     data-bs-title="{{ t "images.tooltip_reprocess" }}">
                                     <i class="bi bi-arrow-repeat"></i>
                                 </button>
+                                <a 
+                                    href="/train-compreface/{{ .ID }}"
+                                    class="btn btn-sm btn-outline-success me-2" 
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-title="{{ t "images.tooltip_train_compreface" }}">
+                                    <i class="bi bi-mortarboard"></i> CF
+                                </a>
                                 <button 
                                     class="btn btn-sm btn-outline-danger" 
                                     data-image-id="{{ .ID }}"
