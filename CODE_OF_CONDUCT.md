@@ -1,4 +1,6 @@
-# Contributor Covenant Code of Conduct
+# Code of Conduct for Double-Take-Go-Reborn
+
+_English version followed by German translation / Deutsche Übersetzung folgt nach der englischen Version_
 
 ## Our Pledge
 
@@ -11,6 +13,17 @@ and orientation.
 
 We pledge to act and interact in ways that contribute to an open, welcoming,
 diverse, inclusive, and healthy community.
+
+## Ethical Use of Facial Recognition Technology
+
+As Double-Take-Go-Reborn is a facial recognition project, we have a special responsibility
+to ensure that this technology is used ethically and responsibly. We pledge to:
+
+* Respect privacy and only process facial data with appropriate consent
+* Be transparent about the capabilities and limitations of our technology
+* Design with privacy and data protection in mind (Privacy by Design)
+* Consider and mitigate potential harmful uses of the technology
+* Adhere to relevant data protection regulations, particularly the GDPR/DSGVO
 
 ## Our Standards
 
@@ -55,6 +68,10 @@ an individual is officially representing the community in public spaces.
 Examples of representing our community include using an official e-mail address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
+
+In addition, this Code of Conduct is governed by German law, as the project is maintained
+from Germany. Contributors should be aware that German law has specific provisions regarding
+hate speech, defamation, and data protection that may be stricter than in other jurisdictions.
 
 ## Enforcement
 
@@ -125,4 +142,148 @@ enforcement ladder](https://github.com/mozilla/diversity).
 
 For answers to common questions about this code of conduct, see the FAQ at
 https://www.contributor-covenant.org/faq. Translations are available at
+https://www.contributor-covenant.org/translations.
+
+---
+
+# Verhaltenskodex für Double-Take-Go-Reborn
+
+## Unsere Verpflichtung
+
+Wir als Mitglieder, Beitragende und Führungspersonen verpflichten uns, die Teilnahme an unserer
+Gemeinschaft für alle zu einer belästigungsfreien Erfahrung zu machen, unabhängig von Alter, Körpergröße,
+sichtbarer oder unsichtbarer Behinderung, ethnischer Herkunft, Geschlechtsmerkmalen, Geschlechtsidentität und -ausdruck,
+Erfahrungsniveau, Bildung, sozioökonomischem Status, Nationalität, persönlichem Erscheinungsbild, Rasse,
+Religion oder sexueller Identität und Orientierung.
+
+Wir verpflichten uns, in einer Weise zu handeln und zu interagieren, die zu einer offenen, einladenden,
+vielfältigen, inklusiven und gesunden Gemeinschaft beiträgt.
+
+## Ethische Nutzung der Gesichtserkennungstechnologie
+
+Da Double-Take-Go-Reborn ein Projekt zur Gesichtserkennung ist, tragen wir eine besondere Verantwortung
+dafür, dass diese Technologie ethisch und verantwortungsvoll eingesetzt wird. Wir verpflichten uns:
+
+* Die Privatsphäre zu respektieren und Gesichtsdaten nur mit angemessener Einwilligung zu verarbeiten
+* Transparent über die Möglichkeiten und Grenzen unserer Technologie zu informieren
+* Mit Datenschutz und Privatsphäre im Blick zu entwickeln (Privacy by Design)
+* Mögliche schädliche Verwendungen der Technologie zu berücksichtigen und zu minimieren
+* Die relevanten Datenschutzbestimmungen, insbesondere die DSGVO, einzuhalten
+
+## Unsere Standards
+
+Beispiele für Verhaltensweisen, die zu einem positiven Umfeld für unsere
+Gemeinschaft beitragen, sind:
+
+* Einfühlungsvermögen und Freundlichkeit gegenüber anderen Menschen zeigen
+* Unterschiedliche Meinungen, Standpunkte und Erfahrungen respektieren
+* Konstruktives Feedback geben und dankbar annehmen
+* Verantwortung übernehmen und uns bei denjenigen entschuldigen, die von unseren Fehlern betroffen sind,
+  und aus diesen Erfahrungen lernen
+* Uns auf das konzentrieren, was nicht nur für uns als Einzelpersonen, sondern für die
+  gesamte Gemeinschaft am besten ist
+
+Beispiele für inakzeptables Verhalten sind:
+
+* Verwendung sexualisierter Sprache oder Bilder und sexuelle Aufmerksamkeit oder
+  Annäherungsversuche jeglicher Art
+* Trolling, beleidigende oder abwertende Kommentare und persönliche oder politische Angriffe
+* Öffentliche oder private Belästigung
+* Veröffentlichung privater Informationen anderer Personen, wie z.B. einer physischen oder E-Mail-
+  Adresse, ohne deren ausdrückliche Erlaubnis
+* Anderes Verhalten, das in einem professionellen Umfeld vernünftigerweise als unangemessen
+  angesehen werden könnte
+
+## Durchsetzungsverantwortung
+
+Die Gemeinschaftsleitung ist dafür verantwortlich, unsere Standards für
+akzeptables Verhalten zu klären und zu durchzusetzen und wird angemessene und faire
+Korrektivmaßnahmen ergreifen, wenn Verhaltensweisen, die sie als unangemessen, bedrohlich,
+beleidigend oder schädlich erachtet, auftreten.
+
+Die Gemeinschaftsleitung hat das Recht und die Verantwortung, Kommentare, Commits, Code, Wiki-Bearbeitungen,
+Issues und andere Beiträge, die nicht mit diesem Verhaltenskodex übereinstimmen, zu entfernen, zu bearbeiten oder abzulehnen, und wird
+Gründe für Moderationsentscheidungen mitteilen, wenn dies angebracht ist.
+
+## Geltungsbereich
+
+Dieser Verhaltenskodex gilt in allen Gemeinschaftsräumen und gilt auch, wenn
+eine Person die Gemeinschaft offiziell in öffentlichen Räumen vertritt.
+Beispiele für die Vertretung unserer Gemeinschaft sind die Verwendung einer offiziellen E-Mail-Adresse,
+das Posten über ein offizielles Social-Media-Konto oder das Auftreten als ernannter
+Vertreter bei einer Online- oder Offline-Veranstaltung.
+
+Darüber hinaus unterliegt dieser Verhaltenskodex deutschem Recht, da das Projekt aus Deutschland 
+betreut wird. Mitwirkende sollten sich bewusst sein, dass das deutsche Recht spezifische Bestimmungen 
+bezüglich Hassrede, Verleumdung und Datenschutz enthält, die strenger sein können als in anderen Ländern.
+
+## Durchsetzung
+
+Fälle von missbräuchlichem, belästigendem oder anderweitig inakzeptablem Verhalten können
+den für die Durchsetzung zuständigen Gemeinschaftsleitern unter
+hrenz@me.com gemeldet werden.
+Alle Beschwerden werden umgehend und fair geprüft und untersucht.
+
+Alle Gemeinschaftsleiter sind verpflichtet, die Privatsphäre und Sicherheit derjenigen,
+die einen Vorfall melden, zu respektieren.
+
+## Durchsetzungsrichtlinien
+
+Die Gemeinschaftsleitung wird diesen Gemeinschaftsauswirkungsrichtlinien folgen, um die
+Konsequenzen für Handlungen zu bestimmen, die sie als Verstoß gegen diesen Verhaltenskodex erachten:
+
+### 1. Korrektur
+
+**Auswirkung auf die Gemeinschaft**: Verwendung unangemessener Sprache oder anderes Verhalten, das in
+der Gemeinschaft als unprofessionell oder unwillkommen angesehen wird.
+
+**Konsequenz**: Eine private, schriftliche Warnung von den Gemeinschaftsleitern, die
+Klarheit über die Art des Verstoßes und eine Erklärung bietet, warum das
+Verhalten unangemessen war. Es kann eine öffentliche Entschuldigung verlangt werden.
+
+### 2. Verwarnung
+
+**Auswirkung auf die Gemeinschaft**: Ein Verstoß durch einen einzelnen Vorfall oder eine
+Reihe von Handlungen.
+
+**Konsequenz**: Eine Verwarnung mit Konsequenzen für fortgesetztes Verhalten. Keine
+Interaktion mit den beteiligten Personen, einschließlich unaufgeforderter Interaktion mit
+denjenigen, die den Verhaltenskodex durchsetzen, für einen bestimmten Zeitraum. Dies
+beinhaltet die Vermeidung von Interaktionen in Gemeinschaftsräumen sowie externen Kanälen
+wie sozialen Medien. Die Verletzung dieser Bedingungen kann zu einem vorübergehenden oder
+permanenten Verbot führen.
+
+### 3. Vorübergehendes Verbot
+
+**Auswirkung auf die Gemeinschaft**: Ein schwerwiegender Verstoß gegen Gemeinschaftsstandards, einschließlich
+anhaltendem unangemessenen Verhalten.
+
+**Konsequenz**: Ein vorübergehendes Verbot jeglicher Art von Interaktion oder
+öffentlicher Kommunikation mit der Gemeinschaft für einen bestimmten Zeitraum. Während dieses
+Zeitraums ist keine öffentliche oder private Interaktion mit den beteiligten Personen erlaubt,
+einschließlich unaufgeforderter Interaktion mit denjenigen, die den Verhaltenskodex durchsetzen.
+Die Verletzung dieser Bedingungen kann zu einem permanenten Verbot führen.
+
+### 4. Permanentes Verbot
+
+**Auswirkung auf die Gemeinschaft**: Aufzeigen eines Musters von Verstößen gegen
+Gemeinschaftsstandards, einschließlich anhaltendem unangemessenen Verhalten, Belästigung eines
+Individuums oder Aggression gegenüber oder Herabsetzung von Gruppen von Individuen.
+
+**Konsequenz**: Ein permanentes Verbot jeglicher Art öffentlicher Interaktion innerhalb
+der Gemeinschaft.
+
+## Zuschreibung
+
+Dieser Verhaltenskodex ist eine Anpassung des [Contributor Covenant][homepage],
+Version 2.0, verfügbar unter
+https://www.contributor-covenant.org/version/2/0/code_of_conduct.html.
+
+Die Community Impact Guidelines wurden vom [Mozilla's code of conduct
+enforcement ladder](https://github.com/mozilla/diversity) inspiriert.
+
+[homepage]: https://www.contributor-covenant.org
+
+Für Antworten auf häufig gestellte Fragen zu diesem Verhaltenskodex, siehe FAQ unter
+https://www.contributor-covenant.org/faq. Übersetzungen sind verfügbar unter
 https://www.contributor-covenant.org/translations.
