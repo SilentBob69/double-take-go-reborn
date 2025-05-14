@@ -325,3 +325,34 @@ func (c *Client) PublishRetain(topic string, payload interface{}) error {
 func (c *Client) Publish(topic string, payload interface{}) error {
 	return c.PublishMessage(topic, payload, false)
 }
+
+// GetRetainedPayload ruft eine retained Nachricht von einem MQTT-Topic ab
+func (c *Client) GetRetainedPayload(topic string) (string, error) {
+	if !c.IsConnected() {
+		return "", fmt.Errorf("MQTT client is not connected")
+	}
+	
+	// Channel für die Antwort erstellen
+	respChan := make(chan string, 1)
+	
+	// Temporären Handler für das angegebene Topic registrieren
+	token := c.client.Subscribe(topic, 1, func(_ mqtt.Client, msg mqtt.Message) {
+		// Nachricht in den Channel schreiben und Subscription beenden
+		respChan <- string(msg.Payload())
+		c.client.Unsubscribe(topic)
+	})
+	
+	if token.Wait() && token.Error() != nil {
+		return "", fmt.Errorf("failed to subscribe to topic %s: %w", topic, token.Error())
+	}
+	
+	// Timeout für die Antwort setzen (2 Sekunden)
+	select {
+	case payload := <-respChan:
+		return payload, nil
+	case <-time.After(2 * time.Second):
+		// Subscription beenden, falls sie noch aktiv ist
+		c.client.Unsubscribe(topic)
+		return "", nil // Keine retained Nachricht gefunden ist kein Fehler
+	}
+}

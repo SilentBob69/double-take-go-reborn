@@ -1,8 +1,14 @@
 package homeassistant
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -27,6 +33,7 @@ type Publisher struct {
 	cfg              *config.Config
 	personCounters   map[string]int // Zähler für Personen pro Kamera
 	personLastUpdate map[string]time.Time // Zeitpunkt der letzten Aktualisierung
+	lastDetections   map[string]time.Time // Speichert die letzten Erkennungszeitpunkte pro Identität
 }
 
 // MatchEvent enthält die Daten eines Matches, die über MQTT veröffentlicht werden
@@ -73,7 +80,9 @@ type PresenceInfo struct {
 	LastSeen         time.Time `json:"last_seen"`    // Zeitpunkt der letzten Erkennung
 	ImageID          uint      `json:"image_id"`     // ID des Bildes
 	ImagePath        string    `json:"image_path"`   // Pfad zum Bild
+	ImageData        string    `json:"image_data"`   // Base64-kodiertes Bild für Home Assistant
 	DetectionHistory []string  `json:"history"`      // Liste der letzten Erkennungsorte
+	Zones            []string  `json:"zones"`        // Erkannte Zonen (falls vorhanden)
 }
 
 // Box enthält die Koordinaten eines erkannten Gesichts
@@ -99,6 +108,7 @@ func NewPublisher(mqttClient *mqtt.Client, cfg *config.Config) *Publisher {
 		cfg:              cfg,
 		personCounters:   make(map[string]int),
 		personLastUpdate: make(map[string]time.Time),
+		lastDetections:   make(map[string]time.Time),
 	}
 }
 
@@ -329,10 +339,14 @@ func (p *Publisher) PublishCameraResult(image *models.Image, matches []models.Ma
 			continue
 		}
 		
-		// Anwesenheitssensor aktualisieren
-		if err := p.UpdatePresenceSensor(match.Name, image.Source, match.Confidence, 
+		// WICHTIG: Debug-Information zur Fehlersuche
+		log.Infof("!!! ERKANNT: Person '%s' mit Konfidenz %.2f in Kamera '%s' !!!", 
+			match.Name, match.Confidence, image.Source)
+		
+		// Anwesenheitssensor aktualisieren - DIREKT die UpdateRecognizedPerson-Methode aufrufen
+		if err := p.UpdateRecognizedPerson(match.Name, image.Source, match.Confidence, 
 			image.ID, image.FilePath); err != nil {
-			log.Warnf("Failed to update presence sensor for %s: %v", match.Name, err)
+			log.Warnf("Failed to update person sensor for %s: %v", match.Name, err)
 		}
 		
 		// Identität als verarbeitet markieren
@@ -352,81 +366,234 @@ func (p *Publisher) PublishCameraResult(image *models.Image, matches []models.Ma
 
 // PublishError veröffentlicht eine Fehlermeldung
 func (p *Publisher) PublishError(err error) error {
-	return p.mqttClient.Publish("double-take/errors", err.Error())
+	return p.mqttClient.Publish("double-take/error", err.Error())
+}
+
+// UpdateRecognizedPerson aktualisiert die Entität mit der erkannten Person
+func (p *Publisher) UpdateRecognizedPerson(identityName string, camera string, confidence float64, imageID uint, imagePath string) error {
+	// 1. Aktualisiere den Wert des Haupt-Sensors mit Namen, Kamera und Zeitstempel
+	personTopic := "double-take/person"
+	
+	// Aktuelle Zeit für den Timestamp
+	timestamp := time.Now()
+	formattedTime := timestamp.Format("15:04")
+	
+	// Extrahiere sauberen Kameranamen - entferne Präfixe und Suffixe
+	cleanCamera := camera
+	
+	// Entferne "frigate_" oder "frigate/" Präfix
+	if strings.HasPrefix(cleanCamera, "frigate_") {
+		cleanCamera = strings.TrimPrefix(cleanCamera, "frigate_")
+	} else if strings.HasPrefix(cleanCamera, "frigate/") {
+		cleanCamera = strings.TrimPrefix(cleanCamera, "frigate/")
+	}
+	
+	// Entferne "_camera" Suffix
+	if strings.HasSuffix(cleanCamera, "_camera") {
+		cleanCamera = strings.TrimSuffix(cleanCamera, "_camera")
+	}
+	
+	// Auf jeden Fall den tatsächlichen Kameranamen beibehalten, keine generische Ersetzung
+	
+	// Kürzeres Format für den Sensorwert, nur mit Stunde:Minute
+	// Format: "Name (Kamera 15:04)"
+	personValue := fmt.Sprintf("%s (%s %s)", identityName, cleanCamera, formattedTime)
+	
+	// Debug-Logging vor dem Senden
+	log.Infof("Aktualisiere Person-Sensor mit Wert '%s' auf Topic '%s'", personValue, personTopic)
+	
+	if err := p.mqttClient.PublishRetain(personTopic, personValue); err != nil {
+		return fmt.Errorf("failed to publish person info: %w", err)
+	}
+	
+	// Direkter Zugriff auf den MQTT-Client für zusätzliche Debug-Informationen
+	log.Infof("Erfolgreich gesendet: Person='%s', Kamera='%s', ID=%d", identityName, camera, imageID)
+	
+	// 2. Detaillierte Attribute für die Erkennung
+	type PersonInfo struct {
+		Name            string   `json:"name"`            // Name der erkannten Person
+		Camera          string   `json:"camera"`           // Kamera, die die Erkennung gemacht hat
+		Confidence      float64  `json:"confidence"`       // Erkennungswahrscheinlichkeit
+		Timestamp       string   `json:"timestamp"`        // Zeitstempel im lesbaren Format
+		RecentDetections []string `json:"recent_detections"` // Liste der letzten 5 Erkennungen
+		ImageID         uint     `json:"image_id"`         // ID des Bildes
+	}
+	
+	// Attribute aktualisieren
+	attributesTopic := fmt.Sprintf("%s/attributes", personTopic)
+	
+	// Versuche, existierende Attribute zu laden
+	var personInfo PersonInfo
+	existingAttributes, err := p.mqttClient.GetRetainedPayload(attributesTopic)
+	if err == nil && existingAttributes != "" {
+		if err := json.Unmarshal([]byte(existingAttributes), &personInfo); err == nil {
+			log.Debugf("Loaded existing person info")
+		}
+	}
+	
+	// Aktualisiere die letzten Erkennungen
+	var recentDetections []string
+	if len(personInfo.RecentDetections) > 0 {
+		recentDetections = personInfo.RecentDetections
+	}
+	
+	// Füge neue Erkennung zur Liste hinzu
+	newDetection := fmt.Sprintf("%s (%s, %.0f%%, %s)", 
+		identityName, 
+		camera, 
+		confidence * 100, 
+		timestamp.Format("15:04:05"))
+	
+	// Begrenze Liste auf 5 Einträge
+	recentDetections = append(recentDetections, newDetection)
+	if len(recentDetections) > 5 {
+		recentDetections = recentDetections[len(recentDetections)-5:]
+	}
+	
+	// Aktualisierte Informationen zusammenstellen
+	personInfo = PersonInfo{
+		Name:            identityName,
+		Camera:          camera,
+		Confidence:      confidence,
+		Timestamp:       timestamp.Format("2006-01-02 15:04:05"),
+		RecentDetections: recentDetections,
+		ImageID:         imageID,
+	}
+	
+	// Veröffentliche aktualisierte Attribute - JSON serialisieren
+	attributesJSON, err := json.Marshal(personInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal person attributes: %w", err)
+	}
+	if err := p.mqttClient.PublishRetain(attributesTopic, string(attributesJSON)); err != nil {
+		return fmt.Errorf("failed to publish person attributes: %w", err)
+	}
+
+	// 3. Aktualisiere das Kamera-Bild - mit Zeitstempel, um Caching zu verhindern
+	timestampStr := fmt.Sprintf("%d", time.Now().UnixNano()/int64(time.Millisecond))
+	imageTopic := fmt.Sprintf("%s/image", personTopic)
+	
+	// Zusätzlich ein Topic mit Zeitstempel, das Home Assistant zwingt, das Vorschaubild zu aktualisieren
+	imageTopicWithTimestamp := fmt.Sprintf("%s/image/%s", personTopic, timestampStr)
+	fullImagePath := filepath.Join(p.cfg.Server.SnapshotDir, imagePath)
+	
+	// Detailed debugging to track image issues
+	log.Infof("Attempting to update camera image. Image path: %s, Full path: %s", imagePath, fullImagePath)
+	
+	// Check if file exists before reading
+	if _, fileErr := os.Stat(fullImagePath); os.IsNotExist(fileErr) {
+		log.Warnf("Image file does not exist: %s", fullImagePath)
+		// Try with alternative path patterns
+		alternativePath := filepath.Join(p.cfg.Server.SnapshotDir, "frigate", filepath.Base(imagePath))
+		log.Infof("Trying alternative path: %s", alternativePath)
+		
+		if _, altErr := os.Stat(alternativePath); os.IsNotExist(altErr) {
+			log.Warnf("Alternative image path also does not exist: %s", alternativePath)
+		} else {
+			fullImagePath = alternativePath
+			log.Infof("Using alternative path for image: %s", fullImagePath)
+		}
+	}
+	
+	if imageBytes, err := os.ReadFile(fullImagePath); err == nil {
+		size := len(imageBytes)
+		log.Infof("Successfully read image file. Size: %d bytes", size)
+		
+		// Maximale Größe für MQTT-Payload in Bytes (50KB)
+		maxSize := 50 * 1024
+		processedImageBytes := imageBytes
+		
+		// Wenn das Bild zu groß ist, verwenden wir eine höhere JPEG-Kompression
+		if size > maxSize {
+			log.Infof("Image too large for MQTT payload, compressing it: %d bytes", size)
+			
+			// Bild dekodieren
+			img, _, decErr := image.Decode(bytes.NewReader(imageBytes))
+			if decErr != nil {
+				log.Warnf("Failed to decode image for compression: %v", decErr)
+			} else {
+				// Stark komprimiertes JPEG erzeugen
+				buf := new(bytes.Buffer)
+				
+				// Qualität schrittweise reduzieren bis das Bild klein genug ist
+				qualityLevels := []int{70, 50, 30, 15, 10}
+				successful := false
+				
+				for _, quality := range qualityLevels {
+					buf.Reset() // Buffer zurücksetzen für jeden Versuch
+					encErr := jpeg.Encode(buf, img, &jpeg.Options{Quality: quality})
+					
+					if encErr != nil {
+						log.Warnf("Failed to encode image at quality %d: %v", quality, encErr)
+						continue
+					}
+					
+					// Prüfen, ob das Bild jetzt klein genug ist
+					compressedSize := buf.Len()
+					if compressedSize <= maxSize {
+						log.Infof("Successfully compressed image to %d bytes using quality level %d", compressedSize, quality)
+						processedImageBytes = buf.Bytes()
+						successful = true
+						break
+					}
+				}
+				
+				if !successful {
+					log.Warnf("Could not compress image to required size even with lowest quality")
+				}
+			}
+		}
+		
+		// Endgültige Größe prüfen
+		finalSize := len(processedImageBytes)
+		if finalSize > maxSize {
+			log.Warnf("Image still too large after processing: %d bytes. Cannot send to MQTT.", finalSize)
+		} else {
+			// Das Bild ohne Base64-Präfix veröffentlichen (Home Assistant erwartet reines Base64)
+			rawImageData := base64.StdEncoding.EncodeToString(processedImageBytes)
+			log.Infof("Publishing image data (length: %d) to topics: %s and %s", len(rawImageData), imageTopic, imageTopicWithTimestamp)
+			
+			// Senden an das Standard-Topic (für bestehende Konfigurationen)
+			if err := p.mqttClient.PublishRetain(imageTopic, rawImageData); err != nil {
+				log.Warnf("Failed to publish image data to standard topic: %v", err)
+			}
+			
+			// Senden an das Zeitstempel-Topic (um Caching zu verhindern)
+			if err := p.mqttClient.Publish(imageTopicWithTimestamp, rawImageData); err != nil {
+				log.Warnf("Failed to publish image data to timestamped topic: %v", err)
+				// Wir brechen nicht ab, falls das Bildupload fehlschlägt
+			} else {
+				log.Infof("Successfully published image data to MQTT for camera entity")
+			}
+		}
+	} else {
+		// Bei Fehler eine Warnung ausgeben
+		log.Warnf("Failed to read image file: %v", err)
+	}
+	
+	// Aktualisiere den Zeitpunkt der letzten Erkennung
+	p.lastDetections[identityName] = timestamp
+	
+	return nil
 }
 
 // UpdatePresenceSensor aktualisiert einen Anwesenheitssensor für eine identifizierte Person
+// Diese Methode verwendet jetzt das vereinfachte Entity-Modell mit nur zwei Entitäten
 func (p *Publisher) UpdatePresenceSensor(identityName string, camera string, confidence float64, imageID uint, imagePath string) error {
-	// Namen für MQTT normalisieren
-	normalizedName := strings.ToLower(strings.ReplaceAll(identityName, " ", "_"))
-	
-	// 1. Den Anwesenheitssensor auf "on" setzen
-	presenceTopic := fmt.Sprintf("double-take/presence/%s", normalizedName)
-	if err := p.mqttClient.PublishRetain(presenceTopic, "on"); err != nil {
-		return fmt.Errorf("failed to publish presence state: %w", err)
-	}
-	
-	// 2. Detailierte Informationen für die Attribute
-	timestamp := time.Now()
-	presenceInfo := PresenceInfo{
-		CameraName: camera,
-		Confidence: confidence,
-		LastSeen:   timestamp,
-		ImageID:    imageID,
-		ImagePath:  imagePath,
-		// Historie könnte aus einer DB kommen, vereinfacht hier nur den aktuellsten Eintrag
-		DetectionHistory: []string{fmt.Sprintf("%s (%s)", camera, timestamp.Format("15:04:05"))},
-	}
-	
-	// Attribute veröffentlichen
-	attributesTopic := fmt.Sprintf("%s/attributes", presenceTopic)
-	if err := p.mqttClient.PublishRetain(attributesTopic, presenceInfo); err != nil {
-		return fmt.Errorf("failed to publish presence attributes: %w", err)
-	}
-	
-	// 3. Lokationsinformation aktualisieren
-	locationTopic := fmt.Sprintf("%s/location", presenceTopic)
-	locationText := fmt.Sprintf("Zuletzt gesehen: %s (%.1f%%)", camera, confidence*100)
-	if err := p.mqttClient.PublishRetain(locationTopic, locationText); err != nil {
-		return fmt.Errorf("failed to publish location info: %w", err)
-	}
-	
-	return nil
+	// Wir verwenden jetzt nur noch die vereinfachte UpdateRecognizedPerson-Methode
+	return p.UpdateRecognizedPerson(identityName, camera, confidence, imageID, imagePath)
 }
 
 // UpdateUnknownPresenceSensor aktualisiert den Anwesenheitssensor für unbekannte Personen
 func (p *Publisher) UpdateUnknownPresenceSensor(camera string, imageID uint, imagePath string, count int) error {
-	// 1. Den Anwesenheitssensor für unbekannte Personen auf "on" setzen
-	presenceTopic := "double-take/presence/unknown"
-	if err := p.mqttClient.PublishRetain(presenceTopic, "on"); err != nil {
-		return fmt.Errorf("failed to publish unknown presence state: %w", err)
+	// Erstelle einen Identitätsnamen für Unbekannte basierend auf der Anzahl
+	identityName := "Unbekannt"
+	if count > 1 {
+		identityName = fmt.Sprintf("%d Unbekannte", count)
 	}
 	
-	// 2. Detailierte Informationen für die Attribute
-	timestamp := time.Now()
-	presenceInfo := PresenceInfo{
-		CameraName: camera,
-		Confidence: 0,
-		LastSeen:   timestamp,
-		ImageID:    imageID,
-		ImagePath:  imagePath,
-		DetectionHistory: []string{fmt.Sprintf("%s (%s)", camera, timestamp.Format("15:04:05"))},
-	}
-	
-	// Attribute veröffentlichen
-	attributesTopic := fmt.Sprintf("%s/attributes", presenceTopic)
-	if err := p.mqttClient.PublishRetain(attributesTopic, presenceInfo); err != nil {
-		return fmt.Errorf("failed to publish unknown presence attributes: %w", err)
-	}
-	
-	// 3. Lokationsinformation aktualisieren
-	locationTopic := fmt.Sprintf("%s/location", presenceTopic)
-	locationText := fmt.Sprintf("%d unbekannte Personen bei %s", count, camera)
-	if err := p.mqttClient.PublishRetain(locationTopic, locationText); err != nil {
-		return fmt.Errorf("failed to publish unknown location info: %w", err)
-	}
-	
-	return nil
+	// Verwende die vereinfachte UpdateRecognizedPerson-Methode mit einer Vertrauenswürdigkeit von 0
+	return p.UpdateRecognizedPerson(identityName, camera, 0, imageID, imagePath)
 }
 
 // updatePersonCounter aktualisiert den Personenzähler für eine Kamera

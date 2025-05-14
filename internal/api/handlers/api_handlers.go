@@ -73,17 +73,8 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.POST("/sync/compreface", h.SyncCompreFace)
 	router.DELETE("/training/all", h.DeleteAllTraining)
 	
-	// Test-Endpunkt, um zu überprüfen, ob Änderungen wirksam werden
-	router.GET("/test-update", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "Die Änderungen wurden erfolgreich übernommen! Zeitstempel: May 13, 2025 18:22"})
-	})
-	
-	// Einfacher Test-Endpunkt für die Neuverarbeitung von Bildern
-	router.POST("/test-recognize/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		log.Infof("Test-Erkennung für Bild-ID: %s", id)
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Test recognition endpoint reached", "id": id})
-	})
+
+
 }
 
 // ProcessImage verarbeitet ein hochgeladenes Bild

@@ -208,7 +208,43 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 
 		// Home Assistant Ergebnis veröffentlichen (wenn aktiviert)
 		if p.haPublisher != nil && p.cfg.MQTT.HomeAssistant.Enabled && p.cfg.MQTT.HomeAssistant.PublishResults {
-			if haErr := p.haPublisher.PublishCameraResult(&image, allMatches, time.Since(time.Now()).Seconds(), 1); haErr != nil {
+			// Korrektur: Berechnung der Verarbeitungszeit mit positivem Wert (Zeitdauer in Sekunden)
+			processDuration := 1.0 // Standardwert, falls keine echte Zeit gemessen wurde
+			
+			// DETAILLIERTE Debug-Information zu den erkannten Personen
+			if len(allMatches) > 0 {
+				log.Infof("====== Erkannte Personen (insg. %d) =======", len(allMatches))
+				for i, match := range allMatches {
+					log.Infof("  [%d] ID: %d, Name: %s, Confidence: %.2f, Face-ID: %d", 
+						i+1, match.ID, match.Identity.Name, match.Confidence, match.FaceID)
+					
+					// DIREKTER AUFRUF der UpdateRecognizedPerson-Methode für jede erkannte Person
+					// Ermittle den besten verfügbaren Kameranamen
+					cameraName := image.Source // Fallback: Standardmäßig die Quelle (typischerweise "frigate")
+					
+					// Wenn Metadaten vorhanden sind, den tatsächlichen Kameranamen verwenden
+					if image.SourceData != nil {
+						var metadata map[string]interface{}
+						if err := json.Unmarshal(image.SourceData, &metadata); err == nil {
+							// Priorität: Kameraname aus Metadaten oder Fallback auf Quelle
+							if camName, ok := metadata["camera"]; ok && camName != nil {
+								cameraName = fmt.Sprintf("%v", camName)
+							}
+						}
+					}
+					
+					if err := p.haPublisher.UpdateRecognizedPerson(match.Identity.Name, cameraName, 
+						match.Confidence, image.ID, image.FilePath); err != nil {
+						log.Errorf("Direkter Aufruf für Person '%s' fehlgeschlagen: %v", match.Identity.Name, err)
+					}
+				}
+			} else {
+				log.Warnf("Keine Personen erkannt, keine Aktualisierung des Sensors")
+			}
+			
+			// Auch weiterhin den normalen Weg aufrufen
+			log.Infof("Sending recognition results to Home Assistant: %d matches found", len(allMatches))
+			if haErr := p.haPublisher.PublishCameraResult(&image, allMatches, processDuration, 1); haErr != nil {
 				log.Errorf("Failed to publish camera result to Home Assistant: %v", haErr)
 			}
 		}
@@ -685,6 +721,11 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 // SetHomeAssistantPublisher setzt den Home Assistant Publisher für den ImageProcessor
 func (p *ImageProcessor) SetHomeAssistantPublisher(publisher *homeassistant.Publisher) {
 	p.haPublisher = publisher
+}
+
+// GetHomeAssistantPublisher gibt den Home Assistant Publisher zurück
+func (p *ImageProcessor) GetHomeAssistantPublisher() *homeassistant.Publisher {
+	return p.haPublisher
 }
 
 // calculateFileHash berechnet einen SHA-256-Hash für eine Datei
