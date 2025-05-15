@@ -151,6 +151,50 @@ Die Hauptkonfigurationsdatei ist `config.yaml`. Wichtige Einstellungen sind:
 - `frigate`: Konfiguration für die Verbindung zu Frigate NVR
 - `cleanup`: Einstellungen zur automatischen Datenlöschung
 
+### Beispielkonfiguration
+
+```yaml
+# config.yaml Beispiel
+server:
+  host: "0.0.0.0"           # Alle Interfaces binden
+  port: 3000                # Web-UI Port
+  snapshot_dir: "/data/snapshots"  # Wo Snapshots gespeichert werden
+  snapshot_url: "/snapshots"      # URL-Pfad für Snapshots
+
+log:
+  level: "info"             # Log-Level (debug, info, warn, error)
+  file: "/data/logs/double-take.log"  # Log-Datei
+
+db:
+  file: "/data/double-take.db"  # SQLite-Datenbank Pfad
+
+compreface:
+  enabled: true
+  url: "http://10.100.0.3:8100"  # URL zur CompreFace-API
+  recognition_api_key: "your_recognition_api_key"  # Von CompreFace generierter API-Key
+  detection_api_key: "your_detection_api_key"      # Von CompreFace generierter API-Key
+  det_prob_threshold: 0.8    # Erkennungsschwellenwert (0.0-1.0)
+  sync_interval_minutes: 15   # Synchronisierungsintervall
+
+mqtt:
+  enabled: true              # MQTT aktivieren/deaktivieren
+  broker: "192.168.0.55"     # MQTT-Broker Hostname/IP
+  port: 1883                 # MQTT-Broker Port
+  username: ""               # Optional: MQTT-Benutzername
+  password: ""               # Optional: MQTT-Passwort
+  client_id: "double-take-go"  # Client-ID für MQTT
+  topic: "frigate/events"    # Topic für Frigate-Events
+
+frigate:
+  api_url: "http://192.168.0.55:5000"  # Frigate API URL
+  url: "http://192.168.0.55:5000"      # Frigate Web-UI URL
+
+cleanup:
+  retention_days: 30         # Aufbewahrungsdauer für Bilder in Tagen
+```
+
+Kopieren Sie die Beispielkonfiguration in eine Datei namens `config.yaml` im `/config`-Verzeichnis und passen Sie sie an Ihre Bedürfnisse an.
+
 ## Neue Funktionen und Verbesserungen
 
 - **Periodische CompreFace-Synchronisation**: Die Anwendung synchronisiert jetzt automatisch die Daten zwischen CompreFace und der lokalen Datenbank.
