@@ -1,9 +1,40 @@
-# Ignore build artifacts and local dependencies
+# Build artifacts and local dependencies
 .git/
+/bin
+/dist
 *.log
 vendor/
-config/config.yaml # Don't copy local config into image
 
-# Ignore IDE/editor specific files
+# Generated and sensitive data
+/data/*
+!/data/.gitkeep
+/logs
+
+# Explizit alle Bilder und Snapshots ausschließen
+/data/snapshots/
+data/snapshots/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+
+# Config files (excluding example config)
+/config/config.yaml
+/config/config.local.yaml
+/config/config.production.yaml
+
+# IDE/editor specific files
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Sensitive or environment-specific files
+*.env
+*.pem
+*.key

@@ -533,25 +533,33 @@
                 const existingGroup = document.getElementById(`event-group-${data.event_id}`);
                 if (existingGroup) {
                     console.log(`Group ${data.event_id} already exists, updating...`);
-                    // Hier könnte man die bestehende Gruppe aktualisieren
                     return;
                 }
                 
-                // Neue Gruppe erstellen
-                // Hier müsste die Erstellung der Gruppe-HTML erfolgen - falls es eine Template-Funktion gibt
-                // Da wir keine direkte Event-Gruppen-Template-Funktion haben, leiten wir die Seite neu
-                // In einer Vollimplementierung würde man hier die Gruppe dynamisch hinzufügen
+                // Erstellt eine neue Gruppe dynamisch und fügt sie in die DOM ein
+                const groupHTML = createEventGroupHTML(data);
+                const tempContainer = document.createElement('div');
+                tempContainer.innerHTML = groupHTML.trim();
                 
-                // Benachrichtigung anzeigen
-                showToast('Neue Bildgruppe', 
-                    `Eine neue Gruppe mit ${data.count} Bildern wurde erkannt. Source: ${data.source}${data.camera ? ', Kamera: ' + data.camera : ''}`, 
-                    'info');
-                
-                // Optional: Automatisches Neuladen der Seite nach einer Verzögerung
-                // Dies ist nicht ideal, aber eine einfache Lösung ohne komplexe Client-seitige Templating
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000); // 3 Sekunden Verzögerung, damit der Benutzer die Benachrichtigung sehen kann
+                // Gruppe als erstes Element im Container einfügen
+                const itemsContainer = document.getElementById('items-container');
+                if (itemsContainer && tempContainer.firstChild) {
+                    itemsContainer.insertBefore(tempContainer.firstChild, itemsContainer.firstChild);
+                    console.log(`Group ${data.event_id} added to DOM`);
+                    
+                    // Bildgruppe ist anfänglich leer, wir zeigen einen Ladehinweis an
+                    showToast('Neue Bildgruppe', 
+                        `Eine neue Gruppe mit ${data.count} Bildern wurde erkannt: ${data.source}${data.camera ? ', Kamera: ' + data.camera : ''}`, 
+                        'info');
+                    
+                    // Tooltip-Initialisierung für die neuen Elemente
+                    const tooltips = tempContainer.querySelectorAll('[data-bs-toggle="tooltip"]');
+                    tooltips.forEach(el => {
+                        new bootstrap.Tooltip(el);
+                    });
+                } else {
+                    console.error("Container 'items-container' not found or empty template!");
+                }
             }
             
             // Verarbeitet ein Lösch-Event
@@ -576,6 +584,68 @@
                 // Optional: Add logic to attempt reconnection after a delay
             };
         });
+        
+        // Hilfsfunktion zum Erstellen einer Ereignisgruppen-HTML
+        function createEventGroupHTML(data) {
+            // Gruppen-Titel erstellen
+            const groupTitle = `${data.source} ${data.camera ? `- ${data.camera}` : ''}`;
+            const subTitle = `${data.label ? data.label : ''} ${data.zone ? `(${data.zone})` : ''}`;
+            
+            // Formatierter Zeitstempel
+            const timestamp = new Date(data.timestamp).toLocaleString();
+            
+            // Übersetzungen für die UI-Elemente
+            const imageText = document.documentElement.lang === 'de' ? 'Bilder' : 'Images';
+            const detailsText = document.documentElement.lang === 'de' ? 'Details' : 'Details';
+            const timestampText = document.documentElement.lang === 'de' ? 'Zeitstempel' : 'Timestamp';
+            const loadingText = document.documentElement.lang === 'de' ? 'Bilder werden geladen...' : 'Loading images...';
+            const viewDetailsText = document.documentElement.lang === 'de' ? 'Details anzeigen' : 'View Details';
+            
+            // Basis-HTML für die Gruppe
+            let html = `
+            <div class="row mb-4 event-group" id="event-group-${data.event_id}">
+                <div class="col-12">
+                    <div class="card bg-dark">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h4>${groupTitle}</h4>
+                            <span class="badge bg-info">${data.count} ${imageText}</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 mb-2">
+                                    <div class="text-center">
+                                        <img src="${data.thumbnail_url || '/static/img/placeholder.png'}" 
+                                            class="img-fluid rounded" style="max-height: 150px;" 
+                                            alt="Thumbnail">
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <p class="mb-1"><strong>${detailsText}</strong></p>
+                                    <ul class="list-unstyled">
+                                        <li><small class="text-muted">ID: ${data.event_id}</small></li>
+                                        <li><small class="text-muted">${timestampText}: ${timestamp}</small></li>
+                                        ${subTitle ? `<li><small class="text-muted">${subTitle}</small></li>` : ''}
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="text-center mt-2" id="group-content-${data.event_id}">
+                                <div class="spinner-border text-light" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">${loadingText}</p>
+                            </div>
+                        </div>
+                        <div class="card-footer text-center">
+                            <a href="/events/${data.event_id}" class="btn btn-primary btn-sm">
+                                <i class="bi bi-search"></i> ${viewDetailsText}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+            
+            return html;
+        }
 
         // --- Helper Functions ---
         

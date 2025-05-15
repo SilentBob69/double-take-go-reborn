@@ -475,6 +475,9 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 		"start_time":      eventData.GetStartTime().Format(time.RFC3339),
 		"source":          "frigate",
 	}
+	
+	// Liste der verarbeiteten Bilder für das spätere SSE-Event
+	var processedImages []models.Image
 
 	// Für jeden Snapshot-Pfad ein Bild verarbeiten
 	for i, snapshotPath := range snapshotPaths {
@@ -527,7 +530,7 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 
 		// Bild zur Verarbeitung an den Worker-Pool übergeben
 		// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
-		_, processErr := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+		image, processErr := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
 			DetectFaces:    true,
 			RecognizeFaces: true,
 			Metadata:       imageMetadata,
@@ -535,8 +538,34 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 		if processErr != nil {
 			log.Warnf("Fehler bei der Verarbeitung des Bildes %s: %v", fullPath, processErr)
 		} else {
+			// Das verarbeitete Bild zur Liste hinzufügen für das spätere SSE-Event
+			processedImages = append(processedImages, *image)
 			log.Infof("Frigate-Event-Bild %d von %d verarbeitet: %s", i+1, len(snapshotPaths), localPath)
 		}
+	}
+
+	// Abschließend ein Event für die neue Bildgruppe senden, wenn der SSE-Hub verfügbar ist
+	if p.sseHub != nil && len(processedImages) > 0 {
+		eventData := p.frigateClient.GetEventData(event)
+		
+		// Event-Datendetails extrahieren
+		camera := eventData.Camera
+		label := eventData.Label
+		zoneName := ""
+		if len(eventData.CurrentZones) > 0 {
+			zoneName = eventData.CurrentZones[0]
+		} else if len(eventData.EnteredZones) > 0 {
+			zoneName = eventData.EnteredZones[0]
+		}
+		
+		// Thumbnail-URL bestimmen (für die erste Bildvorschau)
+		thumbnailURL := ""
+		if len(processedImages) > 0 {
+			thumbnailURL = p.cfg.Server.SnapshotURL + "/" + processedImages[0].FilePath
+		}
+		
+		log.Infof("Sende BroadcastNewGroup-Event für Event-ID %s mit %d Bildern", eventData.ID, len(processedImages))
+		p.sseHub.BroadcastNewGroup(eventData.ID, "frigate", camera, label, zoneName, processedImages, thumbnailURL)
 	}
 
 	return nil
