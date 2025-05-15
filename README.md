@@ -67,6 +67,48 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 5. Die Anwendung ist nun erreichbar unter:
    - Double-Take UI: http://localhost:3000
 
+## Docker Hub
+
+Double-Take-Go-Reborn ist auch als fertiges Docker-Image auf Docker Hub verfügbar:
+
+```bash
+# Standard (latest)
+docker pull silentbob69/double-take-go-reborn
+
+# Mit explizitem latest Tag
+docker pull silentbob69/double-take-go-reborn:latest
+```
+
+### Docker-Konfiguration
+
+Die Anwendung kann mit dem Image von Docker Hub wie folgt gestartet werden:
+
+```yaml
+# docker-compose.yml Beispiel mit Docker Hub-Image
+services:
+  double-take:
+    image: silentbob69/double-take-go-reborn:latest
+    restart: unless-stopped
+    volumes:
+      - ./config:/config  # Konfigurationsdateien
+      - ./data:/data      # Persistente Daten und Snapshots
+    ports:
+      - "3000:3000"       # Web-UI Port
+    environment:
+      - TZ=Europe/Berlin  # Zeitzone anpassen
+```
+
+### Volumes und Ports
+
+Das Docker-Image verwendet folgende Volumes und Ports:
+
+- **Volumes**:
+  - `/config`: Enthält die Konfigurationsdateien (`config.yaml`)
+  - `/data`: Speicherort für die Datenbank und Snapshot-Bilder
+  
+- **Ports**:
+  - `3000`: Web-Benutzeroberfläche
+
 ## Entwicklungsumgebung
 
 Für die Entwicklung stellen wir eine spezielle Docker-Umgebung bereit:

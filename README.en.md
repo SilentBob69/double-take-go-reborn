@@ -65,6 +65,48 @@ If you're looking for a proven and complete solution, we recommend using the ori
 5. The application is now accessible at:
    - Double-Take UI: http://localhost:3000
 
+## Docker Hub
+
+Double-Take-Go-Reborn is also available as a ready-to-use Docker image on Docker Hub:
+
+```bash
+# Standard (latest)
+docker pull silentbob69/double-take-go-reborn
+
+# With explicit latest tag
+docker pull silentbob69/double-take-go-reborn:latest
+```
+
+### Docker Configuration
+
+The application can be started with the image from Docker Hub as follows:
+
+```yaml
+# docker-compose.yml example with Docker Hub image
+services:
+  double-take:
+    image: silentbob69/double-take-go-reborn:latest
+    restart: unless-stopped
+    volumes:
+      - ./config:/config  # Configuration files
+      - ./data:/data      # Persistent data and snapshots
+    ports:
+      - "3000:3000"       # Web UI port
+    environment:
+      - TZ=Europe/Berlin  # Adjust timezone
+```
+
+### Volumes and Ports
+
+The Docker image uses the following volumes and ports:
+
+- **Volumes**:
+  - `/config`: Contains the configuration files (`config.yaml`)
+  - `/data`: Storage location for the database and snapshot images
+  
+- **Ports**:
+  - `3000`: Web user interface
+
 ## Development Environment
 
 For development, we provide a special Docker environment:
