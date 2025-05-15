@@ -170,7 +170,7 @@ db:
 
 compreface:
   enabled: true
-  url: "http://10.100.0.3:8100"  # URL zur CompreFace-API
+  url: "http://compreface-api:8000"  # URL zur CompreFace-API
   recognition_api_key: "your_recognition_api_key"  # Von CompreFace generierter API-Key
   detection_api_key: "your_detection_api_key"      # Von CompreFace generierter API-Key
   det_prob_threshold: 0.8    # Erkennungsschwellenwert (0.0-1.0)
@@ -178,7 +178,7 @@ compreface:
 
 mqtt:
   enabled: true              # MQTT aktivieren/deaktivieren
-  broker: "192.168.0.55"     # MQTT-Broker Hostname/IP
+  broker: "mosquitto"        # MQTT-Broker Hostname/IP
   port: 1883                 # MQTT-Broker Port
   username: ""               # Optional: MQTT-Benutzername
   password: ""               # Optional: MQTT-Passwort
@@ -186,8 +186,8 @@ mqtt:
   topic: "frigate/events"    # Topic für Frigate-Events
 
 frigate:
-  api_url: "http://192.168.0.55:5000"  # Frigate API URL
-  url: "http://192.168.0.55:5000"      # Frigate Web-UI URL
+  api_url: "http://frigate:5000"  # Frigate API URL
+  url: "http://frigate:5000"      # Frigate Web-UI URL
 
 cleanup:
   retention_days: 30         # Aufbewahrungsdauer für Bilder in Tagen
