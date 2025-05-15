@@ -482,6 +482,9 @@
                         case 'delete_image':
                             handleDeleteEvent(eventData.data);
                             break;
+                        case 'delete_all':
+                            handleDeleteAllEvent(eventData.data);
+                            break;
                         default:
                             console.warn('Unbekannter SSE-Event-Typ:', eventData.type);
                     }
@@ -576,6 +579,42 @@
                     }
                     showToast(translations.success, `{{ t "images.deleted_success_single" }} ${imageId}`, 'success');
                 }
+            }
+            
+            // Verarbeitet ein Lösch-Alle-Event
+            function handleDeleteAllEvent(data) {
+                // Alle Bilder und Gruppen aus dem Container entfernen
+                const itemsContainer = document.getElementById('items-container');
+                if (itemsContainer) {
+                    itemsContainer.innerHTML = '';
+                }
+                
+                // Zusätzlich alle Eventgruppen entfernen
+                const eventGroups = document.querySelectorAll('.event-group');
+                eventGroups.forEach(group => {
+                    group.remove();
+                });
+                
+                // Nachricht anzeigen, dass keine Bilder vorhanden sind
+                const mainContent = document.querySelector('.container-fluid > .row');
+                if (mainContent) {
+                    // Überschrift entfernen, falls vorhanden
+                    const heading = mainContent.querySelector('h2');
+                    if (heading) {
+                        heading.remove();
+                    }
+                    
+                    // Nachricht hinzufügen
+                    if (!document.querySelector('.text-muted')) {
+                        const noImagesMsg = document.createElement('p');
+                        noImagesMsg.className = 'text-muted';
+                        noImagesMsg.textContent = '{{ t "no_images_yet" }}';
+                        mainContent.appendChild(noImagesMsg);
+                    }
+                }
+                
+                // Erfolgsmeldung anzeigen
+                showToast(translations.success, `{{ t "images.deleted_all" }} (${data.count})`, 'success');
             }
 
             eventSource.onerror = function(err) {
@@ -711,11 +750,19 @@
                     if (response.ok) {
                         console.log('All images deleted successfully.');
                         showToast(translations.success, '{{ t "images.deleted_all" }}', 'success');
-                        // Remove all cards from both containers
-                        const containerWithFaces = document.getElementById('images-with-faces-container');
-                        const containerWithoutFaces = document.getElementById('images-without-faces-container');
-                        if(containerWithFaces) containerWithFaces.innerHTML = '';
-                        if(containerWithoutFaces) containerWithoutFaces.innerHTML = '';
+                        // Remove all cards from the items container
+                        const itemsContainer = document.getElementById('items-container');
+                        if(itemsContainer) {
+                            itemsContainer.innerHTML = '';
+                            // Show the 'no images' message
+                            const mainContainer = document.querySelector('.container-fluid');
+                            if (mainContainer) {
+                                const noImagesMsg = document.createElement('p');
+                                noImagesMsg.className = 'text-muted';
+                                noImagesMsg.textContent = '{{ t "no_images_yet" }}';
+                                mainContainer.appendChild(noImagesMsg);
+                            }
+                        }
                     } else {
                          response.json().then(data => {
                              console.error('Failed to delete all images:', response.status, data.error);

@@ -48,6 +48,7 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/images", h.ListImages)
 	router.GET("/images/:id", h.GetImage)
 	router.DELETE("/images/:id", h.DeleteImage)
+	router.DELETE("/images/all", h.DeleteAllImages)
 	router.POST("/images/:id/recognize", h.RecognizeImage)
 
 	// Identitäts-Endpunkte
@@ -245,6 +246,46 @@ func (h *APIHandler) DeleteImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Image deleted successfully"})
+}
+
+// DeleteAllImages löscht alle Bilder aus der Datenbank und dem Dateisystem
+func (h *APIHandler) DeleteAllImages(c *gin.Context) {
+	// Alle Bilder aus der Datenbank abrufen
+	var images []models.Image
+	if err := h.db.Find(&images).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to fetch images: %v", err)})
+		return
+	}
+
+	// Zähler für erfolgreich gelöschte Bilder
+	deleted := 0
+
+	// Alle Bilder durchlaufen und Dateien löschen
+	for _, image := range images {
+		if image.FilePath != "" {
+			filePath := filepath.Join(h.cfg.Server.SnapshotDir, image.FilePath)
+			if err := os.Remove(filePath); err != nil {
+				log.Warnf("Failed to delete image file %s: %v", filePath, err)
+				// Fehler beim Löschen von Dateien werden nur geloggt, nicht blockierend
+			}
+		}
+		deleted++
+	}
+
+	// Alle Bilder aus der Datenbank löschen (cascaded zu Faces und Matches)
+	// TRUNCATE-ähnliche Operation für maximale Effizienz
+	if err := h.db.Exec("DELETE FROM images").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete all images: %v", err)})
+		return
+	}
+
+	// SSE-Funktion ist hier nicht verfügbar, Client muss die UI selbst aktualisieren
+	log.Infof("Deleted all images: %d", deleted)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "All images deleted successfully",
+		"count":   deleted,
+	})
 }
 
 // ListIdentities gibt eine Liste aller Identitäten zurück
