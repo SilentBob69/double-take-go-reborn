@@ -205,7 +205,9 @@
     "Verbunden": "Connected",
     "Aktiviert": "Enabled",
     "Deaktiviert": "Disabled",
-    "Fehler": "Error"
+    "Fehler": "Error",
+    "parameter": "Parameter",
+    "value": "Value"
   },
   "events": {
     "event_group": "Event Group",

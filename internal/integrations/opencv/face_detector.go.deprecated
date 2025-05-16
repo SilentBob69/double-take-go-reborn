@@ -1,0 +1,189 @@
+package opencv
+
+import (
+	"fmt"
+	"image"
+	"path/filepath"
+
+	"double-take-go-reborn/config"
+
+	"gocv.io/x/gocv"
+	log "github.com/sirupsen/logrus"
+)
+
+// Detektionstypen für Personenerkennung
+const (
+	HOGDetector = "hog"      // Histogram of Oriented Gradients Detektor (CPU)
+	DNNDetector = "dnn"      // DNN basierter Personen-Detektor (genauer, kann GPU nutzen)
+)
+
+// PersonDetector bietet Personenerkennungsfunktionen mit OpenCV
+type PersonDetector struct {
+	cfg             config.OpenCVConfig
+	hogDescriptor   gocv.HOGDescriptor    // HOG-Detektor für CPU
+	dnnNet          gocv.Net              // DNN-Detektor für mehr Genauigkeit/GPU
+	detectorType    string                // Welcher Detektor wird verwendet
+	initialized     bool                  // Status der Initialisierung
+}
+
+// DetectedPerson repräsentiert eine erkannte Person mit Position und Konfidenz
+type DetectedPerson struct {
+	Rectangle image.Rectangle // Position und Größe der Person
+	Confidence float64        // Konfidenzwert der Erkennung
+}
+
+// NewPersonDetector erstellt eine neue Instanz des Personendetektors
+func NewPersonDetector(cfg config.OpenCVConfig) (*PersonDetector, error) {
+	detector := &PersonDetector{
+		cfg:          cfg,
+		detectorType: HOGDetector, // Standardmäßig HOG verwenden (zuverlässiger)
+		initialized:  false,
+	}
+
+	// Initialisieren
+	return detector, detector.initialize()
+}
+
+// initialize lädt die benötigten Modelle und konfiguriert den Detektor
+func (pd *PersonDetector) initialize() error {
+	if !pd.cfg.Enabled {
+		log.Info("OpenCV Personenerkennung ist deaktiviert")
+		return nil
+	}
+
+	log.Infof("Initialisiere OpenCV Personenerkennung (GPU: %v)", pd.cfg.UseGPU)
+
+	// HOG-Detektor für Personen initialisieren
+	pd.hogDescriptor = gocv.NewHOGDescriptor()
+	pd.hogDescriptor.SetSVMDetector(gocv.HOGDefaultPeopleDetector())
+	
+	log.Info("HOG-Personen-Detektor erfolgreich initialisiert")
+	
+	// Optional: DNN-basierte Personenerkennung initialisieren
+	// Dies könnte in einer erweiterten Version implementiert werden
+	// Standardmodelle wären z.B. SSD oder YOLO Modelle
+	
+	pd.initialized = true
+	return nil
+}
+
+// DetectPersons erkennt Personen in einem Bild
+func (pd *PersonDetector) DetectPersons(imgPath string) ([]DetectedPerson, error) {
+	if !pd.cfg.Enabled || !pd.initialized {
+		log.Debug("OpenCV Personenerkennung ist deaktiviert oder nicht initialisiert")
+		return nil, nil
+	}
+
+	// Bild laden
+	img := gocv.IMRead(imgPath, gocv.IMReadColor)
+	if img.Empty() {
+		return nil, fmt.Errorf("konnte Bild nicht laden: %s", imgPath)
+	}
+	defer img.Close()
+
+	var persons []DetectedPerson
+
+	// Bild für Geschwindigkeit verkleinern, wenn es zu groß ist
+	var processImg gocv.Mat
+	defer func() {
+		if !processImg.Empty() {
+			processImg.Close()
+		}
+	}()
+
+	imgWidth := img.Cols()
+	imgHeight := img.Rows()
+	const maxDimension = 800 // Maximum für schnellere Verarbeitung (kleiner als bei Gesichtserkennung)
+
+	if imgWidth > maxDimension || imgHeight > maxDimension {
+		// Berechne den Skalierungsfaktor
+		scale := float64(maxDimension) / float64(max(imgWidth, imgHeight))
+		newWidth := int(float64(imgWidth) * scale)
+		newHeight := int(float64(imgHeight) * scale)
+		
+		processImg = gocv.NewMat()
+		gocv.Resize(img, &processImg, image.Point{X: newWidth, Y: newHeight}, 0, 0, gocv.InterpolationLinear)
+	} else {
+		processImg = img.Clone()
+	}
+
+	// GPU-Unterstützung für Bildverarbeitung (falls konfiguriert)
+	if pd.cfg.UseGPU {
+		// GPU-Unterstützung für HOG ist begrenzt, für volle GPU-Unterstützung
+		// müsste ein DNN-basierter Detektor verwendet werden
+		log.Debug("HOG-Detektor nutzt primär CPU, für volle GPU-Unterstützung wäre DNN nötig")
+	}
+
+	// Personen mit HOG-Descriptor erkennen
+	rects, weights := pd.hogDescriptor.DetectMultiScaleWithParams(
+		processImg,
+		1.05,                 // Skalierungsfaktor
+		2,                    // MinNeighbors
+		image.Point{},        // Min size
+		image.Point{},        // Max size
+		1.2,                 // Hit threshold
+		image.Point{8, 8},    // Win stride
+		image.Point{16, 16}, // Padding
+		1.05,                // Scale
+		2.0,                 // Final threshold
+		false,                // Use mean shift grouping
+	)
+
+	// Skalierung zurück, wenn Bild verkleinert wurde
+	scaleX := float64(imgWidth) / float64(processImg.Cols())
+	scaleY := float64(imgHeight) / float64(processImg.Rows())
+
+	// Alle gefundenen Personen in die Ergebnisliste einfügen
+	for i, r := range rects {
+		// Bei verkleinertem Bild die Koordinaten zurückskalieren
+		if scaleX != 1.0 || scaleY != 1.0 {
+			r = image.Rect(
+				int(float64(r.Min.X)*scaleX),
+				int(float64(r.Min.Y)*scaleY),
+				int(float64(r.Max.X)*scaleX),
+				int(float64(r.Max.Y)*scaleY),
+			)
+		}
+
+		// Konfidenzwert aus HOG-Detektor verwenden
+		confidence := 0.6 // Standardwert
+		if i < len(weights) {
+			confidence = weights[i]
+		}
+
+		person := DetectedPerson{
+			Rectangle:  r,
+			Confidence: confidence,
+		}
+		persons = append(persons, person)
+	}
+
+	log.Debugf("OpenCV: %d Personen in %s erkannt", len(persons), filepath.Base(imgPath))
+	return persons, nil
+}
+
+// Close gibt Ressourcen frei
+func (pd *PersonDetector) Close() error {
+	if pd.initialized {
+		if pd.dnnNet.IsEmpty() {
+			pd.dnnNet.Close()
+		}
+		// HOGDescriptor benötigt keinen expliziten Close-Aufruf
+		pd.initialized = false
+	}
+	return nil
+}
+
+// Hilfsfunktion zur Überprüfung, ob eine Datei existiert
+func fileExists(path string) bool {
+	_, err := gocv.IMRead(path, gocv.IMReadUnchanged)
+	return err == nil
+}
+
+// Hilfsfunktion für max von zwei int-Werten
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

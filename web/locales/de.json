@@ -200,12 +200,17 @@
     "compreface_subjects": "CompreFace Identitäten",
     "trained_persons": "Trainierte Personen",
     "no_trained_persons": "Keine trainierten Personen in CompreFace gefunden",
+    "no_subjects": "Keine Subjekte gefunden",
+    "recognized_subjects": "Erkannte Subjekte",
     "enabled": "Aktiviert",
     "disabled": "Deaktiviert",
-    "Verbunden": "Verbunden",
     "Aktiviert": "Aktiviert",
     "Deaktiviert": "Deaktiviert",
-    "Fehler": "Fehler"
+    "Verbunden": "Verbunden",
+    "Unbekannt": "Unbekannt",
+    "Fehler": "Fehler",
+    "parameter": "Parameter",
+    "value": "Wert"
   },
   "events": {
     "event_group": "Ereignisgruppe",

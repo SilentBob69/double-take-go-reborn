@@ -1205,6 +1205,26 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		mqttStatus = "Deaktiviert"
 	}
 	
+	// OpenCV-Status und Informationen
+	opencvStatus := "Unbekannt"
+	opencvDetailedConfig := make(map[string]interface{})
+	
+	if h.cfg.OpenCV.Enabled {
+		opencvStatus = "Aktiviert"
+		
+		// Detaillierte Konfigurationsinformationen sammeln
+		opencvDetailedConfig["Methode"] = h.cfg.OpenCV.PersonDetection.Method
+		opencvDetailedConfig["GPU"] = h.cfg.OpenCV.UseGPU
+		opencvDetailedConfig["Konfidenz-Schwellenwert"] = h.cfg.OpenCV.PersonDetection.ConfidenceThreshold
+		opencvDetailedConfig["Skalierungsfaktor"] = h.cfg.OpenCV.PersonDetection.ScaleFactor
+		opencvDetailedConfig["Min. Nachbarn"] = h.cfg.OpenCV.PersonDetection.MinNeighbors
+		opencvDetailedConfig["Min. Größe (B x H)"] = fmt.Sprintf("%d x %d", 
+			h.cfg.OpenCV.PersonDetection.MinSizeWidth, 
+			h.cfg.OpenCV.PersonDetection.MinSizeHeight)
+	} else {
+		opencvStatus = "Deaktiviert"
+	}
+	
 	// System-Statistiken abrufen
 	systemStats := utils.GetSystemStats(h.workerPool)
 	
@@ -1222,14 +1242,23 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	}
 	
 	// Template-Daten
+	// Debug-Ausgabe zur Fehlersuche
+	log.Infof("OpenCV Status: %s", opencvStatus)
+	log.Infof("OpenCV Config Map Größe: %d", len(opencvDetailedConfig))
+	for k, v := range opencvDetailedConfig {
+		log.Infof("OpenCV Config: %s = %v", k, v)
+	}
+	
 	data := gin.H{
 		"DBStats": dbStats,
 		"Services": gin.H{
 			"CompreFace": compreFaceStatus,
 			"MQTT": mqttStatus,
+			"OpenCV": opencvStatus,
 		},
 		"Config": configData,
 		"CompreFaceSubjects": compreFaceSubjects,
+		"OpenCVConfig": opencvDetailedConfig,
 		"SystemStats": gin.H{
 			"CPUs":             systemStats.NumCPU,
 			"GoRoutines":       systemStats.GoRoutines,

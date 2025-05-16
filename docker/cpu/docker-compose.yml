@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  # CPU Version (funktioniert auf allen Plattformen)
+  double-take:
+    build:
+      context: ../..
+      dockerfile: docker/cpu/Dockerfile
+    container_name: double-take
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../config:/config
+      - double-take-data:/data
+    environment:
+      - TZ=Europe/Berlin
+    # Hinweis: CompreFace und MQTT sind externe Dienste
+
+  # HINWEIS: CompreFace und MQTT werden als externe Dienste verwendet
+  # und sind nicht Teil dieser docker-compose Konfiguration.
+  # Bitte stellen Sie sicher, dass diese Dienste auf ihren externen
+  # Servern verfügbar sind und in config.yaml richtig konfiguriert sind.
+
+volumes:
+  # Nur das Double-Take-Volume wird benötigt
+  double-take-data:

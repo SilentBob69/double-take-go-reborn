@@ -193,6 +193,12 @@
                                 {{ t (printf "diagnostics.%s" .Services.MQTT) }}
                             </span>
                         </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            OpenCV
+                            <span class="badge {{if eq .Services.OpenCV "Aktiviert"}}bg-success{{else if eq .Services.OpenCV "Deaktiviert"}}bg-secondary{{else}}bg-warning{{end}}">
+                                {{ t (printf "diagnostics.%s" .Services.OpenCV) }}
+                            </span>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -228,6 +234,46 @@
             </div>
         </div>
         {{end}}
+
+
+
+        <!-- OpenCV Konfigurationsdetails -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card mt-4 shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>OpenCV Konfigurationsdetails</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            {{if gt (len .OpenCVConfig) 0}}
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>{{ t "diagnostics.parameter" }}</th>
+                                        <th>{{ t "diagnostics.value" }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{range $key, $value := .OpenCVConfig}}
+                                    <tr>
+                                        <td>{{$key}}</td>
+                                        <td>{{$value}}</td>
+                                    </tr>
+                                    {{end}}
+                                </tbody>
+                            </table>
+                            {{else}}
+                            <div class="alert alert-warning">
+                                Keine OpenCV-Konfigurationsdetails verfügbar. OpenCV ist möglicherweise deaktiviert.
+                            </div>
+                            {{end}}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Bootstrap Bundle with Popper -->

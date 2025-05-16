@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Apple Silicon Version (M1/M2/M3)
+  double-take:
+    build:
+      context: ../..
+      dockerfile: docker/apple-silicon/Dockerfile
+    container_name: double-take
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../config:/config
+      - double-take-data:/data
+    environment:
+      - TZ=Europe/Berlin
+    platform: linux/arm64
+      
+  # ========================================================================
+  # OPTIONAL: CompreFace-Services für Gesichtserkennung
+  # Entkommentiere diese Blöcke, wenn du die Gesichtserkennung nutzen möchtest
+  # Hinweis: Die OpenCV-Integration funktioniert auch ohne CompreFace!
+  # ========================================================================
+  
+  # compreface-postgres:
+  #   image: postgres:13.4
+  #   container_name: compreface-postgres
+  #   restart: always
+  #   environment:
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=frs
+  #   volumes:
+  #     - compreface-db:/var/lib/postgresql/data
+
+  # compreface-api:
+  #   image: exadel/compreface-api:latest
+  #   container_name: compreface-api
+  #   restart: always
+  #   depends_on:
+  #     - compreface-postgres
+  #   environment:
+  #     - SPRING_DATASOURCE_URL=jdbc:postgresql://compreface-postgres:5432/frs
+  #     - SPRING_DATASOURCE_USERNAME=postgres
+  #     - SPRING_DATASOURCE_PASSWORD=postgres
+  #     - SPRING_PROFILES_ACTIVE=dev
+  #   volumes:
+  #     - compreface-data:/root/.frs
+
+  # compreface-ui:
+  #   image: exadel/compreface-fe:latest
+  #   container_name: compreface-ui
+  #   restart: always
+  #   ports:
+  #     - "8000:80"
+  #   depends_on:
+  #     - compreface-api
+  
+  # Wenn du CompreFace aktivierst, füge diese Abhängigkeit zum double-take Service hinzu:
+  # depends_on:
+  #   - compreface-api
+
+volumes:
+  # Aktiviere diese Volumes, wenn du CompreFace verwendest
+  # compreface-db:
+  # compreface-data:
+  double-take-data:

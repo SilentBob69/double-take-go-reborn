@@ -1,0 +1,67 @@
+# Double-Take-Go-Reborn Configuration for Apple Silicon (M-series) with OpenCV
+# Diese Konfiguration ist optimiert für Apple M1/M2/M3 Prozessoren
+# HINWEIS: OpenCV kann unabhängig von CompreFace verwendet werden
+
+log:
+  level: "info"
+  format: "text"
+  timestamp: true
+
+server:
+  port: 3000
+  host: "0.0.0.0"
+  base_url: "http://localhost:3000"
+  metrics_enabled: true
+
+mqtt:
+  enabled: false
+  broker: "tcp://localhost:1883"
+  username: ""
+  password: ""
+  client_id: "double-take-go"
+  topic_prefix: "double-take"
+
+storage:
+  path: "/data"
+  snapshots_path: "/data/snapshots"
+  processed_path: "/data/processed"
+  training_path: "/data/training"
+
+opencv:
+  enabled: true
+  use_gpu: true
+  person_detection:
+    method: "dnn"  # DNN method is optimized for Apple Neural Engine
+    model: "ssd_mobilenet"  # Better performance on Apple Silicon
+    confidence_threshold: 0.6
+    scale_factor: 1.03
+    min_neighbors: 3
+    min_size_width: 64
+    min_size_height: 128
+    # Apple Silicon optimizations
+    backend: "default"  # Use the default backend which is optimized for ARM
+    target: "cpu"       # Target compute device is CPU with NEON instructions
+
+# =========================================================================
+# OPTIONAL: CompreFace-Integration für Gesichtserkennung
+# Wenn du nur OpenCV für Personenerkennung nutzen möchtest und keine
+# Gesichtserkennung benötigst, kannst du diesen Abschnitt auskommentieren
+# oder 'enabled: false' setzen.
+# =========================================================================
+compreface:
+  enabled: false  # Auf 'true' setzen, wenn CompreFace verwendet werden soll
+  subjects_api_url: "http://compreface:8000/api/v1/recognition/subjects"
+  detection_api_url: "http://compreface:8000/api/v1/detection/detect"
+  recognition_api_url: "http://compreface:8000/api/v1/recognition/recognize"
+  verification_api_url: "http://compreface:8000/api/v1/verification/verify"
+  api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
+  detection_threshold: 0.7
+  recognition_threshold: 0.7
+  limit: 0
+  status_check_interval: 1
+  status_check_timeout: 30
+
+processor:
+  image_processing_interval: 5
+  max_workers: 8  # Optimized for Apple Silicon cores
+  max_processing_time: 30

@@ -1,0 +1,66 @@
+# Double-Take-Go-Reborn OpenCV Integration Example Configuration
+# Dies ist eine Beispielkonfiguration für die OpenCV-Personenerkennungsfunktion
+# HINWEIS: OpenCV kann unabhängig von CompreFace verwendet werden
+
+log:
+  level: "info"
+  format: "text"
+  timestamp: true
+
+server:
+  port: 3000
+  host: "0.0.0.0"
+  base_url: "http://localhost:3000"
+  metrics_enabled: true
+
+mqtt:
+  enabled: false
+  broker: "tcp://mosquitto:1883"
+  username: ""
+  password: ""
+  client_id: "double-take-go"
+  topic_prefix: "double-take"
+
+storage:
+  path: "/data"
+  snapshots_path: "/data/snapshots"
+  processed_path: "/data/processed"
+  training_path: "/data/training"
+
+opencv:
+  enabled: true
+  use_gpu: false  # Set to true if hardware acceleration is available
+  person_detection:
+    method: "hog"  # Options: "hog" (CPU-optimized), "dnn" (for GPU acceleration)
+    confidence_threshold: 0.5
+    scale_factor: 1.05
+    min_neighbors: 2
+    min_size_width: 64
+    min_size_height: 128
+    # GPU-specific parameters (only used when use_gpu is true and method is "dnn")
+    backend: "default"  # Options: "default", "cuda" (NVIDIA), "opencl" (AMD)
+    target: "cpu"       # Options: "cpu", "cuda", "opencl"
+
+# =========================================================================
+# OPTIONAL: CompreFace-Integration für Gesichtserkennung
+# Wenn du nur OpenCV für Personenerkennung nutzen möchtest und keine
+# Gesichtserkennung benötigst, kannst du diesen Abschnitt auskommentieren
+# oder 'enabled: false' setzen.
+# =========================================================================
+compreface:
+  enabled: false  # Auf 'true' setzen, wenn CompreFace verwendet werden soll
+  subjects_api_url: "http://compreface:8000/api/v1/recognition/subjects"
+  detection_api_url: "http://compreface:8000/api/v1/detection/detect"
+  recognition_api_url: "http://compreface:8000/api/v1/recognition/recognize"
+  verification_api_url: "http://compreface:8000/api/v1/verification/verify"
+  api_key: "your-recognition-api-key-here"  # Replace with your actual API key
+  detection_threshold: 0.7
+  recognition_threshold: 0.7
+  limit: 0
+  status_check_interval: 1
+  status_check_timeout: 30
+
+processor:
+  image_processing_interval: 5
+  max_workers: 4  # Increase for more powerful hardware
+  max_processing_time: 30
