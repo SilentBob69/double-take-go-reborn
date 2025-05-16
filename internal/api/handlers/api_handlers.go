@@ -73,6 +73,7 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	router.GET("/status", h.GetStatus)
 	router.POST("/sync/compreface", h.SyncCompreFace)
 	router.DELETE("/training/all", h.DeleteAllTraining)
+	router.POST("/system/restart", h.RestartContainer)
 }
 
 // ProcessImage verarbeitet ein hochgeladenes Bild

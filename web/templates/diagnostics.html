@@ -22,7 +22,12 @@
             {{/* Configuration Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
-                    <div class="card-header">{{ t "diagnostics.system_info" }}</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>{{ t "diagnostics.system_info" }}</span>
+                        <button class="btn btn-sm btn-warning" id="restartContainer" data-bs-toggle="tooltip" data-bs-title="{{ t "diagnostics.restart_container" }}">
+                            <i class="bi bi-arrow-repeat"></i> {{ t "diagnostics.restart_container" }}
+                        </button>
+                    </div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             {{ t "diagnostics.frigate" }} URL
@@ -231,13 +236,54 @@
     <script src="/static/js/global.js"></script>
     
     <script>
-        // JavaScript für die Aktualisierung der Systemstatistiken
+        // JavaScript für die Aktualisierung der Systemstatistiken und Container-Neustart
         document.addEventListener('DOMContentLoaded', function() {
             const refreshBtn = document.getElementById('refreshSystemStats');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', function() {
                     // Seite neu laden, um aktuelle Daten zu erhalten
                     location.reload();
+                });
+            }
+            
+            // Container-Neustart-Funktionalität
+            const restartBtn = document.getElementById('restartContainer');
+            if (restartBtn) {
+                restartBtn.addEventListener('click', function() {
+                    if (confirm("{{ t "diagnostics.restart_confirm" }}")) {
+                        // API-Aufruf zum Neustarten des Containers
+                        fetch('/api/system/restart', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Erfolgstoast anzeigen
+                                showToast("{{ t "diagnostics.restart_success" }}", 'success');
+                                
+                                // Nach kurzer Verzögerung eine Meldung anzeigen, dass die Seite neu geladen wird
+                                setTimeout(function() {
+                                    // Anzeigetext aktualisieren
+                                    restartBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + "{{ t "common.loading" }}";
+                                    restartBtn.disabled = true;
+                                    
+                                    // Nach 10 Sekunden Seite neu laden, um zu prüfen, ob der Container wieder verfügbar ist
+                                    setTimeout(function() {
+                                        location.reload();
+                                    }, 10000);
+                                }, 2000);
+                            } else {
+                                showToast("{{ t "diagnostics.restart_error" }}", 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            showToast("{{ t "diagnostics.restart_error" }}", 'error');
+                        });
+                    }
                 });
             }
         });
