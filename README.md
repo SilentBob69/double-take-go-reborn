@@ -59,16 +59,14 @@ Jede Plattform bietet optimierte OpenCV-Integration für die jeweilige Hardware 
 
 - 🇩🇪 **Deutsch**
   - [Installation](docs/INSTALLATION.md)
-  - [Konfiguration](docs/CONFIGURATION.md)
   - [Hardware-Plattformen](docs/PLATFORMS.md)
-  - [Fehlersuche](docs/TROUBLESHOOTING.md)
+  - [Migration](docs/MIGRATION.md)
   - [API-Dokumentation](docs/API.md)
+  - [OpenCV-Integration](docs/opencv-integration.md)
   
 - 🇬🇧 **English**
-  - [Installation](docs/INSTALLATION.en.md)
-  - [Configuration](docs/CONFIGURATION.en.md)
   - [Hardware Platforms](docs/PLATFORMS.en.md)
-  - [Troubleshooting](docs/TROUBLESHOOTING.en.md) 
+  - [Migration](docs/MIGRATION.en.md)
   - [API Documentation](docs/API.en.md)
 
 ### Funktionen
