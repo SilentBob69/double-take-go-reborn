@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -945,24 +946,60 @@ func (h *WebHandler) handleSSE(c *gin.Context) {
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Client-Kanal erstellen
-	client := make(sse.Client, 10) // Puffer für 10 Nachrichten
+	// Flush-Header, um sicherzustellen, dass Header sofort gesendet werden
+	c.Writer.Flush()
+
+	// Client-Kanal erstellen mit größerem Puffer
+	client := make(sse.Client, 20) // Puffer für 20 Nachrichten
+
+	// Timeout für Verbindungsabbrüche
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
 
 	// Client beim Hub registrieren
 	h.sseHub.Register(client)
-	defer h.sseHub.Unregister(client)
+	
+	// WICHTIG: Unregister wird bei Verbindungsabbruch ausgeführt
+	defer func() {
+		h.sseHub.Unregister(client)
+		log.Debug("SSE client connection closed and unregistered")
+	}()
+
+	// Ping-Nachrichten senden, um Verbindung aktiv zu halten
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				// Kommentar-Nachricht senden, die als Ping dient
+				// und vom Browser ignoriert wird
+				if _, err := fmt.Fprintf(c.Writer, ": ping %v\n\n", time.Now().Unix()); err != nil {
+					cancel()
+					return
+				}
+				c.Writer.Flush()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	// Client-Verbindung überwachen
 	c.Stream(func(w io.Writer) bool {
-		// Auf die nächste Nachricht warten
-		msg, ok := <-client
-		if !ok {
-			return false // Kanal geschlossen, Stream beenden
+		select {
+		case msg, ok := <-client:
+			if !ok {
+				return false // Kanal geschlossen, Stream beenden
+			}
+			// Nachricht im SSE-Format senden
+			c.SSEvent("message", string(msg))
+			return true
+		case <-ctx.Done():
+			// Kontext wurde abgebrochen
+			return false
 		}
-
-		// Nachricht im SSE-Format senden
-		c.SSEvent("message", string(msg))
-		return true
 	})
 }
 

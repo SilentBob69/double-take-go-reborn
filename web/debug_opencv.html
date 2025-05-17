@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenCV Debug Stream</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
+        h1 { color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .image-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+        .image-card { background: white; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); overflow: hidden; width: 300px; }
+        .image-card img { width: 100%; height: auto; max-height: 300px; object-fit: contain; }
+        .image-info { padding: 10px; border-top: 1px solid #eee; }
+        .controls { margin: 20px 0; }
+        button { padding: 8px 15px; background: #2c3e50; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #34495e; }
+        .refresh-timer { display: inline-block; margin-left: 15px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OpenCV Debug-Stream</h1>
+        <p>Diese Seite zeigt die OpenCV-Personenerkennung in Echtzeit an.</p>
+        
+        <div class="controls">
+            <button id="refresh-button">Jetzt aktualisieren</button>
+            <span class="refresh-timer">Automatische Aktualisierung in <span id="countdown">10</span>s</span>
+            <label style="margin-left: 20px">
+                <input type="checkbox" id="auto-refresh" checked> Auto-Aktualisierung
+            </label>
+        </div>
+        
+        <div class="image-container" id="image-container">
+            <p>Lade Bilder...</p>
+        </div>
+    </div>
+
+    <script>
+        // Variablen
+        let countdown = 10;
+        let timer = null;
+        let autoRefresh = true;
+        
+        // DOM-Elemente
+        const imageContainer = document.getElementById('image-container');
+        const refreshButton = document.getElementById('refresh-button');
+        const countdownElement = document.getElementById('countdown');
+        const autoRefreshCheckbox = document.getElementById('auto-refresh');
+        
+        // Event-Listener
+        refreshButton.addEventListener('click', fetchImages);
+        autoRefreshCheckbox.addEventListener('change', function(e) {
+            autoRefresh = e.target.checked;
+            if (autoRefresh) {
+                startCountdown();
+            } else {
+                clearTimeout(timer);
+                countdownElement.textContent = '—';
+            }
+        });
+        
+        // Bilder vom Server laden
+        function fetchImages() {
+            fetch('/api/debug/opencv?count=20')
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.count === 0) {
+                        imageContainer.innerHTML = '<p>Keine Bilder vorhanden. Warten auf neue Erkennungen...</p>';
+                        return;
+                    }
+                    
+                    imageContainer.innerHTML = '';
+                    data.images.sort(function(a, b) { 
+                        return new Date(b.timestamp) - new Date(a.timestamp);
+                    });
+                    
+                    data.images.forEach(function(image) {
+                        const card = document.createElement('div');
+                        card.className = 'image-card';
+                        
+                        const img = document.createElement('img');
+                        img.src = image.url + '?t=' + new Date().getTime(); // Cache-Busting
+                        img.alt = 'Debug-Bild';
+                        img.loading = 'lazy';
+                        
+                        const info = document.createElement('div');
+                        info.className = 'image-info';
+                        const time = new Date(image.timestamp).toLocaleTimeString();
+                        info.innerHTML = 
+                            "<div><b>Personen erkannt:</b> " + image.persons + "</div>" +
+                            "<div><b>Zeit:</b> " + time + "</div>" +
+                            "<div><b>Bild:</b> " + image.imagePath.split('/').pop() + "</div>";
+                        
+                        card.appendChild(img);
+                        card.appendChild(info);
+                        imageContainer.appendChild(card);
+                    });
+                })
+                .catch(function(error) {
+                    console.error('Fehler beim Laden der Bilder:', error);
+                    imageContainer.innerHTML = '<p>Fehler beim Laden der Bilder. Bitte versuche es erneut.</p>';
+                })
+                .finally(function() {
+                    if (autoRefresh) {
+                        countdown = 10;
+                        startCountdown();
+                    }
+                });
+        }
+        
+        // Countdown für die nächste Auto-Aktualisierung
+        function startCountdown() {
+            clearTimeout(timer);
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                fetchImages();
+                return;
+            }
+            
+            timer = setTimeout(function() {
+                countdown--;
+                startCountdown();
+            }, 1000);
+        }
+        
+        // Initialisierung
+        fetchImages();
+    </script>
+</body>
+</html>

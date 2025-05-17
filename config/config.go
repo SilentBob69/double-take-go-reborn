@@ -16,6 +16,7 @@ type Config struct {
 	Log        LogConfig        `mapstructure:"log"`
 	DB         DBConfig         `mapstructure:"db"`
 	CompreFace CompreFaceConfig `mapstructure:"compreface"`
+	OpenCV     OpenCVConfig     `mapstructure:"opencv"`
 	MQTT       MQTTConfig       `mapstructure:"mqtt"`
 	Frigate    FrigateConfig    `mapstructure:"frigate"`
 	Cleanup    CleanupConfig    `mapstructure:"cleanup"`
@@ -103,6 +104,35 @@ type NotificationsConfig struct {
 	KnownFaces bool `mapstructure:"known_faces"`
 }
 
+// PersonDetectionConfig enthält Konfigurationsoptionen für die OpenCV-Personenerkennung
+type PersonDetectionConfig struct {
+	Method              string  `mapstructure:"method"`               // Detektionsmethode: "hog" oder "dnn"
+	Model               string  `mapstructure:"model"`                // Für DNN: "ssd_mobilenet" oder "yolov4"
+	ConfidenceThreshold float64 `mapstructure:"confidence_threshold"` // Schwellenwert für die Erkennungskonfidenz
+	ScaleFactor         float64 `mapstructure:"scale_factor"`         // Skalierungsfaktor für Multi-Scale-Detektion
+	MinNeighbors        int     `mapstructure:"min_neighbors"`        // Minimum benachbarter Erkennungen für Bestätigung
+	MinSizeWidth        int     `mapstructure:"min_size_width"`       // Minimale Breite einer Person in Pixeln
+	MinSizeHeight       int     `mapstructure:"min_size_height"`      // Minimale Höhe einer Person in Pixeln
+	Backend             string  `mapstructure:"backend"`              // DNN-Backend: "default", "cuda", "opencl"
+	Target              string  `mapstructure:"target"`               // DNN-Target: "cpu", "cuda", "opencl"
+	ModelPath           string  `mapstructure:"model_path"`           // Pfad zur DNN-Modelldatei
+	ConfigPath          string  `mapstructure:"config_path"`          // Pfad zur DNN-Konfigurationsdatei
+}
+
+// OpenCVConfig enthält Einstellungen für die OpenCV-Integration
+type OpenCVConfig struct {
+	Enabled         bool                 `mapstructure:"enabled"`
+	UseGPU          bool                 `mapstructure:"use_gpu"`
+	// Bisherige Parameter für Abwärtskompatibilität
+	DetProbThreshold float64             `mapstructure:"det_prob_threshold"` // Schwellenwert für die Gesichtserkennung
+	ScaleFactor     float64             `mapstructure:"scale_factor"`       // Skalierungsfaktor für Bildverkleinerung
+	MinNeighbors    int                 `mapstructure:"min_neighbors"`     // Minimum benachbarter Erkennungen für Bestätigung
+	MinSizeWidth    int                 `mapstructure:"min_size_width"`    // Minimale Breite eines Gesichts in Pixeln
+	MinSizeHeight   int                 `mapstructure:"min_size_height"`   // Minimale Höhe eines Gesichts in Pixeln
+	// Neue verschachtelte Konfiguration für erweiterte Personenerkennung
+	PersonDetection PersonDetectionConfig `mapstructure:"person_detection"`
+}
+
 // Load lädt die Konfiguration aus Datei, Umgebungsvariablen und Standardwerten
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
@@ -169,6 +199,27 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("compreface.enable_recognition", true)
 	v.SetDefault("compreface.sync_interval_minutes", 15)
 	v.SetDefault("compreface.service_id", "")
+	
+	// OpenCV-Standardwerte
+	v.SetDefault("opencv.enabled", true)
+	v.SetDefault("opencv.use_gpu", false)
+	// Legacy-Parameter für Abwärtskompatibilität
+	v.SetDefault("opencv.det_prob_threshold", 0.7)
+	v.SetDefault("opencv.scale_factor", 1.1)
+	v.SetDefault("opencv.min_neighbors", 3)
+	v.SetDefault("opencv.min_size_width", 60)
+	v.SetDefault("opencv.min_size_height", 60)
+	
+	// Person Detection Standardwerte
+	v.SetDefault("opencv.person_detection.method", "hog")          // HOG ist der Standard-Algorithmus
+	v.SetDefault("opencv.person_detection.model", "ssd_mobilenet") // Standard für DNN
+	v.SetDefault("opencv.person_detection.confidence_threshold", 0.5)
+	v.SetDefault("opencv.person_detection.scale_factor", 1.05)
+	v.SetDefault("opencv.person_detection.min_neighbors", 2)
+	v.SetDefault("opencv.person_detection.min_size_width", 64)   // Typische Minimalbreite für Personen
+	v.SetDefault("opencv.person_detection.min_size_height", 128) // Typisches Seitenverhältnis für Personen
+	v.SetDefault("opencv.person_detection.backend", "default")
+	v.SetDefault("opencv.person_detection.target", "cpu")
 	
 	// MQTT-Standardwerte
 	v.SetDefault("mqtt.enabled", false)

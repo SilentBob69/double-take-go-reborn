@@ -1,26 +1,34 @@
 version: '3.8'
 
 services:
-  # NVIDIA GPU Version (benötigt nvidia-docker)
+  # NVIDIA GPU Version (benötigt NVIDIA Docker Support)
   double-take:
     build:
       context: ../..
       dockerfile: docker/nvidia/Dockerfile
+      # Plattform explizit setzen für bessere Kompatibilität
+      # amd64 = Standard Intel/AMD 64-bit Prozessoren
+      args:
+        - BUILDPLATFORM=linux/amd64
+        - TARGETPLATFORM=linux/amd64
     container_name: double-take
     restart: always
+    # Standard-Port für Double-Take UI
     ports:
       - "3000:3000"
     volumes:
-      - ../../config:/config
-      - double-take-data:/data
+      - ../../config:/config  # Konfigurationsdateien
+      - double-take-data:/data  # Persistente Daten
     environment:
-      - TZ=Europe/Berlin
+      - TZ=Europe/Berlin  # Zeitzone anpassen falls nötig
+    platform: linux/amd64  # Explizite Plattformdefinition
+    # NVIDIA GPU Zugriff konfigurieren
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              count: 1
+            - driver: nvidia  # Erfordert nvidia-docker oder Docker mit GPU-Support
+              count: 1       # Anzahl der GPUs
               capabilities: [gpu]
       
   # ========================================================================

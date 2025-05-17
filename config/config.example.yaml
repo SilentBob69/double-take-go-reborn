@@ -29,6 +29,15 @@ compreface:
   det_prob_threshold: 0.8
   sync_interval_minutes: 15
 
+opencv:
+  enabled: true
+  use_gpu: false
+  det_prob_threshold: 0.7
+  scale_factor: 1.1
+  min_neighbors: 3
+  min_size_width: 60
+  min_size_height: 60
+
 mqtt:
   enabled: false
   broker: "mosquitto"

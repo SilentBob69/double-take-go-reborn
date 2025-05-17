@@ -22,6 +22,10 @@ If you're looking for a proven and complete solution, we recommend using the ori
 - Integration with CompreFace for facial recognition
   - Periodic synchronization of CompreFace subjects (every 15 minutes)
   - Automatic updating of local database with CompreFace data
+- OpenCV integration for efficient person detection
+  - Pre-filtering of images to reduce unnecessary API calls to CompreFace
+  - GPU acceleration on supported hardware (NVIDIA, AMD, Apple Silicon)
+  - Configurable parameters for optimal detection performance
 - MQTT integration for receiving events from Frigate NVR
 - Home Assistant integration via MQTT for automatic device discovery and status updates
 - Real-time notifications via Server-Sent Events (SSE)
@@ -226,6 +230,66 @@ If you like this project and want to support its development:
 - **PayPal**: [Buy me a beer](https://www.paypal.com/donate/?hosted_button_id=6FTKYDXJ7R7ZL) via PayPal as a thank you.
 
 Any support, whether financial or through contributions to the project, is greatly appreciated and helps to further develop and improve Double-Take Go Reborn.
+
+## OpenCV Integration for Person Detection
+
+Double-Take-Go-Reborn integrates OpenCV for person detection to improve the efficiency and accuracy of facial recognition by only forwarding relevant images to CompreFace.
+
+### Platform Support
+
+Depending on your hardware, different optimized Docker images are provided:
+
+- **CPU Version**: Works on all platforms, lowest system requirements
+- **NVIDIA GPU Version**: Optimized performance through CUDA acceleration for NVIDIA graphics cards
+- **AMD GPU Version**: OpenCL-accelerated variant for AMD graphics cards
+- **Apple Silicon Version**: Specially optimized for M1/M2/M3 processors
+
+### Installation
+
+1. Choose the Docker image suitable for your hardware:
+   ```bash
+   # In docker-compose.yml, select the appropriate version (example):
+   services:
+     double-take:
+       build:
+         context: .
+         dockerfile: Dockerfile.opencv        # Standard CPU version
+         # dockerfile: Dockerfile.opencv-cuda  # NVIDIA GPU version
+         # dockerfile: Dockerfile.opencv-opencl # AMD GPU version
+         # dockerfile: Dockerfile.opencv-arm64 # Apple Silicon
+   ```
+
+2. Use the appropriate configuration template:
+   ```bash
+   # For standard version (CPU)
+   cp config/platforms/config-cpu.yaml config/config.yaml
+   # For specific hardware platforms
+   cp config/platforms/config-nvidia-gpu.yaml config/config.yaml  # NVIDIA
+   cp config/platforms/config-amd-gpu.yaml config/config.yaml     # AMD
+   cp config/platforms/config-apple-silicon.yaml config/config.yaml  # Apple Silicon
+   ```
+
+3. Adjust the API key for CompreFace in the `config.yaml`.
+
+4. Build and start the container:
+   ```bash
+   docker-compose up -d --build
+   ```
+
+### Configuration Options
+
+The main OpenCV settings in the configuration file:
+
+```yaml
+opencv:
+  enabled: true              # Enable/disable OpenCV integration
+  use_gpu: false             # Use GPU acceleration (if available)
+  person_detection:          # Parameters for person detection
+    method: "hog"           # "hog" (CPU) or "dnn" (GPU)
+    confidence_threshold: 0.5 # Detection threshold
+```
+
+For more detailed documentation, see [OpenCV Integration](docs/opencv-integration.md).
 
 ## Future Plans
 

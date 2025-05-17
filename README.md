@@ -1,4 +1,4 @@
-# Double-Take Go
+# Double-Take Go Reborn
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.24-blue.svg)](https://golang.org)
@@ -19,11 +19,67 @@ Dieses Projekt ist eine Neuimplementierung in Go und wurde stark inspiriert durc
 
 Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir das Original-Projekt zu verwenden.
 
-## Funktionen
+## 📘 Für Benutzer
+
+### Schnellstart
+
+```bash
+# 1. Repository klonen
+git clone https://github.com/SilentBob69/double-take-go-reborn.git
+cd double-take-go-reborn
+
+# 2. Wähle die passende Version für deine Hardware:
+#    - CPU: Standard für Intel/AMD Prozessoren ohne GPU-Beschleunigung
+#    - NVIDIA: Für NVIDIA GPU-Beschleunigung (erfordert nvidia-docker)
+#    - AMD: Für AMD GPU-Beschleunigung mit OpenCL (erfordert ROCm)
+#    - Apple-Silicon: Für M1/M2/M3 Chips
+cd docker/cpu            # oder: nvidia, amd, apple-silicon
+
+# 3. Starte den Container
+docker compose up -d
+```
+
+Die Anwendung ist nun erreichbar unter:
+- Double-Take UI: http://localhost:3000
+
+### Hardware-Unterstützung
+
+Double-Take Go Reborn unterstützt folgende Hardwarekonfigurationen:
+
+| Plattform | Verzeichnis | Beschreibung | Anforderungen |
+|-----------|-------------|--------------|---------------|
+| CPU | `docker/cpu/` | Standard x86_64 Prozessoren | Docker |
+| NVIDIA GPU | `docker/nvidia/` | CUDA-Beschleunigung | Docker mit NVIDIA Support |
+| AMD GPU | `docker/amd/` | OpenCL-Beschleunigung | Docker mit ROCm Support |
+| Apple Silicon | `docker/apple-silicon/` | Metal-Optimierung für M1/M2/M3 | Docker für ARM64 |
+
+Jede Plattform bietet optimierte OpenCV-Integration für die jeweilige Hardware und ist mit einer passenden `docker-compose.yml` konfiguriert. Die Dateien enthalten ausführliche Kommentare zur Konfiguration.
+
+### Dokumentation
+
+- 🇩🇪 **Deutsch**
+  - [Installation](docs/INSTALLATION.md)
+  - [Konfiguration](docs/CONFIGURATION.md)
+  - [Hardware-Plattformen](docs/PLATFORMS.md)
+  - [Fehlersuche](docs/TROUBLESHOOTING.md)
+  - [API-Dokumentation](docs/API.md)
+  
+- 🇬🇧 **English**
+  - [Installation](docs/INSTALLATION.en.md)
+  - [Configuration](docs/CONFIGURATION.en.md)
+  - [Hardware Platforms](docs/PLATFORMS.en.md)
+  - [Troubleshooting](docs/TROUBLESHOOTING.en.md) 
+  - [API Documentation](docs/API.en.md)
+
+### Funktionen
 
 - Integration mit CompreFace für die Gesichtserkennung
   - Periodische Synchronisation der CompreFace-Subjekte (alle 15 Minuten)
   - Automatische Aktualisierung der lokalen Datenbank mit CompreFace-Daten
+- OpenCV-Integration für effiziente Personenerkennung
+  - Vorfilterung von Bildern zur Reduzierung unnötiger API-Aufrufe an CompreFace
+  - GPU-Beschleunigung auf unterstützter Hardware (NVIDIA, AMD, Apple Silicon)
+  - Konfigurierbare Parameter für optimale Erkennungsleistung
 - MQTT-Integration für den Empfang von Ereignissen von Frigate NVR
 - Home Assistant-Integration über MQTT für automatische Geräteerkennung und Statusaktualisierungen
 - Echtzeit-Benachrichtigungen über Server-Sent Events (SSE)
@@ -32,187 +88,70 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 - Automatische Bereinigung älterer Daten
 - RESTful API für Integrationen mit anderen Systemen
 - Detaillierte Diagnoseseite mit System- und Datenbankstatistiken
+- Vollständige Mehrsprachigkeit (Deutsch und Englisch)
 
-## Anforderungen
+### Unterstützte Plattformen
 
-- Docker und Docker Compose für die einfache Installation
-- CompreFace-Instanz (als externer Dienst erreichbar unter der in der Konfiguration angegebenen URL)
-- Optional: MQTT-Broker (als externer Dienst für die Integration mit Frigate und Home Assistant)
-- Optional: Frigate NVR (als externer Dienst zur Bereitstellung von Kamera-Events)
-- Optional: Home Assistant (für die automatische Integration der Erkennungsergebnisse)
+- **CPU-Version**: Funktioniert auf allen Plattformen, geringste Systemanforderungen
+- **NVIDIA GPU-Version**: Optimierte Performance durch CUDA-Beschleunigung
+- **AMD GPU-Version**: OpenCL-beschleunigte Variante
+- **Apple Silicon-Version**: Speziell optimiert für M1/M2/M3-Prozessoren
 
-## Installation
+## 🛠 Für Entwickler
 
-1. Repository klonen:
-   ```bash
-   git clone https://github.com/SilentBob69/double-take-go-reborn.git
-   cd double-take-go-reborn
-   ```
+### Dokumentation
 
-2. Die Konfigurationsdatei erstellen:
-   ```bash
-   cp config/config.example.yaml config/config.yaml
-   ```
+- 🇩🇪 **Deutsch**
+  - [Entwicklungsumgebung](docs/DEVELOPMENT.md)
+  - [Architektur](docs/ARCHITECTURE.md)
+  - [Testen](docs/TESTING.md)
+  - [Beitragsrichtlinien](CONTRIBUTING.md)
+  
+- 🇬🇧 **English**
+  - [Development Environment](docs/DEVELOPMENT.en.md)
+  - [Architecture](docs/ARCHITECTURE.en.md)
+  - [Testing](docs/TESTING.en.md)
+  - [Contribution Guidelines](CONTRIBUTING.en.md)
 
-3. Konfigurationsdatei anpassen (IP-Adressen, API-Schlüssel usw.):
-   ```bash
-   nano config/config.yaml
-   ```
+### Projektstruktur
 
-4. Starten der Anwendung mit Docker Compose:
-   ```bash
-   docker-compose up -d
-   ```
+Die neue Projektstruktur ist so organisiert:
 
-5. Die Anwendung ist nun erreichbar unter:
-   - Double-Take UI: http://localhost:3000
+```
+/
+├── docker/                   # Docker-Konfigurationen für alle Plattformen
+│   ├── cpu/                  # CPU-Version
+│   │   ├── Dockerfile        # Dockerfile für CPU-Version
+│   │   └── docker-compose.yml # Docker Compose für CPU-Version
+│   ├── nvidia/               # NVIDIA GPU-Version
+│   ├── amd/                  # AMD GPU-Version 
+│   └── apple-silicon/        # Apple Silicon-Version
+├── config/                   # Konfigurationsdateien
+│   ├── config.yaml           # Hauptkonfiguration
+│   ├── config.example.yaml   # Beispielkonfiguration (ohne sensible Daten)
+│   ├── platforms/            # Plattformspezifische Konfigurationen (aktiv genutzte)
+│   │   ├── config-cpu.yaml              # Konfiguration für CPU
+│   │   ├── config-nvidia-gpu.yaml       # Konfiguration für NVIDIA
+│   │   ├── config-amd-gpu.yaml          # Konfiguration für AMD
+│   │   └── config-apple-silicon.yaml    # Konfiguration für Apple Silicon
+│   └── examples/             # Beispielkonfigurationen (ohne sensible Daten)
+│       └── platforms/        # Plattformspezifische Beispielkonfigurationen
+│           ├── config-cpu.example.yaml          # Beispiel für CPU
+│           ├── config-nvidia-gpu.example.yaml   # Beispiel für NVIDIA
+│           ├── config-amd-gpu.example.yaml      # Beispiel für AMD
+│           └── config-apple-silicon.example.yaml # Beispiel für Apple Silicon
+└── docs/                     # Dokumentation
+    ├── INSTALLATION.md       # Deutsche Installationsanleitung
+    ├── INSTALLATION.en.md    # Englische Installationsanleitung
+    └── ...                   # Weitere Dokumentationsdateien
+```
 
-## Docker Hub
-
-Double-Take-Go-Reborn ist auch als fertiges Docker-Image auf Docker Hub verfügbar:
+### Docker-Entwicklungsumgebung
 
 ```bash
-# Standard (latest)
-docker pull silentbob69/double-take-go-reborn
-
-# Mit explizitem latest Tag
-docker pull silentbob69/double-take-go-reborn:latest
+# Entwicklungsumgebung starten
+docker-compose -f docker-compose.yml up -d
 ```
-
-### Docker-Konfiguration
-
-Die Anwendung kann mit dem Image von Docker Hub wie folgt gestartet werden:
-
-```yaml
-# docker-compose.yml Beispiel mit Docker Hub-Image
-services:
-  double-take:
-    image: silentbob69/double-take-go-reborn:latest
-    restart: unless-stopped
-    volumes:
-      - ./config:/config  # Konfigurationsdateien
-      - ./data:/data      # Persistente Daten und Snapshots
-    ports:
-      - "3000:3000"       # Web-UI Port
-    environment:
-      - TZ=Europe/Berlin  # Zeitzone anpassen
-```
-
-### Volumes und Ports
-
-Das Docker-Image verwendet folgende Volumes und Ports:
-
-- **Volumes**:
-  - `/config`: Enthält die Konfigurationsdateien (`config.yaml`)
-  - `/data`: Speicherort für die Datenbank und Snapshot-Bilder
-  
-- **Ports**:
-  - `3000`: Web-Benutzeroberfläche
-
-## Entwicklungsumgebung
-
-Für die Entwicklung stellen wir eine spezielle Docker-Umgebung bereit:
-
-1. Entwicklungsumgebung starten:
-   ```bash
-   docker-compose -f docker-compose.dev.yml up -d
-   ```
-
-2. In den Container einsteigen:
-   ```bash
-   docker exec -it double-take-go-reborn-go-dev-1 /bin/bash
-   ```
-
-3. Anwendung im Container bauen:
-   ```bash
-   go build -o /app/bin/double-take /app/cmd/server/main.go
-   ```
-
-4. Anwendung im Container starten:
-   ```bash
-   /app/bin/double-take /app/config/config.yaml
-   ```
-
-5. Oder die Hilfsskripte verwenden:
-   ```bash
-   ./build.sh dev  # Startet die Entwicklungsumgebung
-   ./build.sh run  # Startet die Produktionsumgebung
-   ```
-
-## Konfiguration
-
-Die Hauptkonfigurationsdatei ist `config.yaml`. Wichtige Einstellungen sind:
-
-- `server`: Hostnamen und Ports für den Server
-- `compreface`: Verbindungsdetails für die externe CompreFace-Instanz
-  - `sync_interval_minutes`: Intervall in Minuten für die periodische CompreFace-Synchronisation (Standard: 15)
-- `mqtt`: MQTT-Broker-Konfiguration für die Frigate-Integration
-  - `homeassistant`: Einstellungen für die Home Assistant-Integration
-- `frigate`: Konfiguration für die Verbindung zu Frigate NVR
-- `cleanup`: Einstellungen zur automatischen Datenlöschung
-
-### Beispielkonfiguration
-
-```yaml
-# config.yaml Beispiel
-server:
-  host: "0.0.0.0"           # Alle Interfaces binden
-  port: 3000                # Web-UI Port
-  snapshot_dir: "/data/snapshots"  # Wo Snapshots gespeichert werden
-  snapshot_url: "/snapshots"      # URL-Pfad für Snapshots
-
-log:
-  level: "info"             # Log-Level (debug, info, warn, error)
-  file: "/data/logs/double-take.log"  # Log-Datei
-
-db:
-  file: "/data/double-take.db"  # SQLite-Datenbank Pfad
-
-compreface:
-  enabled: true
-  url: "http://compreface-api:8000"  # URL zur CompreFace-API
-  recognition_api_key: "your_recognition_api_key"  # Von CompreFace generierter API-Key
-  detection_api_key: "your_detection_api_key"      # Von CompreFace generierter API-Key
-  det_prob_threshold: 0.8    # Erkennungsschwellenwert (0.0-1.0)
-  sync_interval_minutes: 15   # Synchronisierungsintervall
-
-mqtt:
-  enabled: true              # MQTT aktivieren/deaktivieren
-  broker: "mosquitto"        # MQTT-Broker Hostname/IP
-  port: 1883                 # MQTT-Broker Port
-  username: ""               # Optional: MQTT-Benutzername
-  password: ""               # Optional: MQTT-Passwort
-  client_id: "double-take-go"  # Client-ID für MQTT
-  topic: "frigate/events"    # Topic für Frigate-Events
-
-frigate:
-  api_url: "http://frigate:5000"  # Frigate API URL
-  url: "http://frigate:5000"      # Frigate Web-UI URL
-
-cleanup:
-  retention_days: 30         # Aufbewahrungsdauer für Bilder in Tagen
-```
-
-Kopieren Sie die Beispielkonfiguration in eine Datei namens `config.yaml` im `/config`-Verzeichnis und passen Sie sie an Ihre Bedürfnisse an.
-
-## Neue Funktionen und Verbesserungen
-
-- **Periodische CompreFace-Synchronisation**: Die Anwendung synchronisiert jetzt automatisch die Daten zwischen CompreFace und der lokalen Datenbank.
-- **Toast-Benachrichtigungen**: Moderne, nicht-blockierende Benachrichtigungen für Systemereignisse und Benutzeraktionen.
-- **Verbesserte Diagnostics-Seite**: Zeigt detaillierte Informationen über das System, die Datenbank und die CompreFace-Integration.
-- **Bild-Neuverarbeitung**: Bilder können jetzt direkt aus der Benutzeroberfläche neu verarbeitet werden.
-- **Vollständige Mehrsprachigkeit**: Komplette Unterstützung für Deutsch und Englisch in allen Teilen der Benutzeroberfläche mit Sprachauswahl und persistenter Speicherung der Spracheinstellung.
-- **Verbesserte Navigation**: Fixierte Navigationsleiste für bessere Benutzerfreundlichkeit und Konsistenz über alle Seiten hinweg.
-- **Scrollposition-Erhaltung**: Bei Sprachumschaltung bleibt die Scrollposition erhalten, was die Benutzerfreundlichkeit erhöht.
-
-## API-Dokumentation
-
-Double-Take Go stellt eine umfangreiche REST-API bereit, mit der andere Anwendungen mit dem System interagieren können. Eine vollständige Dokumentation der API-Endpunkte finden Sie hier:
-
-- [API-Dokumentation (Deutsch)](docs/API.md)
-- [API Documentation (English)](docs/API.en.md)
-
-Die API ermöglicht die Steuerung aller wichtigen Funktionen des Systems, einschließlich der Bildverarbeitung, Identitätsverwaltung und Systemfunktionen.
 
 ## Feedback willkommen!
 

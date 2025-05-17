@@ -6,6 +6,7 @@
 FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 as opencv-builder
 
 # Install OpenCV dependencies
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -20,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
-    libdc1394-22-dev \
+    libdc1394-dev \
     libv4l-dev \
     libopenblas-dev \
     libatlas-base-dev \
@@ -71,21 +72,37 @@ RUN cd /tmp/opencv-${OPENCV_VERSION} && mkdir build && cd build && \
           -D BUILD_opencv_python3=OFF \
           -D OPENCV_GENERATE_PKGCONFIG=ON \
           -D WITH_CUDA=ON \
-          -D CUDA_ARCH_BIN="5.0 5.2 6.0 6.1 7.0 7.5 8.0 8.6 9.0" \
+          -D CUDA_ARCH_BIN="6.0 6.1 7.0 7.5 8.0" \
           -D CUDA_ARCH_PTX="" \
-          -D WITH_CUDNN=ON \
-          -D OPENCV_DNN_CUDA=ON \
+          -D WITH_CUDNN=OFF \
+          -D OPENCV_DNN_CUDA=OFF \
           -D CUDA_FAST_MATH=ON \
           -D WITH_CUBLAS=ON \
           -D WITH_NVCUVID=ON \
           -D WITH_OPENCL=OFF \
+          -D OPENCV_ENABLE_NONFREE=ON \
           .. && \
     make -j$(nproc) && \
     make install && \
     ldconfig
 
 # Stage 2: Go Builder with OpenCV + CUDA
-FROM golang:1.24-bullseye AS builder
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS builder
+
+# Install Go
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV GO_VERSION=1.23.0
+RUN curl -sSL https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xz
+ENV PATH=$PATH:/usr/local/go/bin
+ENV GOPATH=/go
+ENV PATH=$PATH:$GOPATH/bin
 
 # Copy OpenCV libraries from the opencv-builder stage
 COPY --from=opencv-builder /usr/local/include/opencv4 /usr/local/include/opencv4
@@ -94,7 +111,7 @@ COPY --from=opencv-builder /usr/local/share/opencv4 /usr/local/share/opencv4
 COPY --from=opencv-builder /usr/local/bin /usr/local/bin
 COPY --from=opencv-builder /usr/local/lib/pkgconfig/opencv4.pc /usr/local/lib/pkgconfig/opencv4.pc
 
-# Install CUDA and dependencies
+# Install additional dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -104,13 +121,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libavutil-dev \
     libswscale-dev \
     libavformat-dev \
-    libjpeg-dev \
+    libjpeg8-dev \
+    libjpeg8 \
     libpng-dev \
     libtiff-dev \
-    ca-certificates \
-    git \
     tzdata \
-    libtbb2 \
+    libtbb-dev \
+    libtbb12 \
     && rm -rf /var/lib/apt/lists/*
 
 # Update ldconfig to include OpenCV libraries
@@ -134,13 +151,14 @@ FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 WORKDIR /app
 
 # Install runtime dependencies
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     mosquitto-clients \
     jq \
     curl \
-    libtbb2 \
+    libtbb12 \
     libgtk-3-0 \
     libavcodec58 \
     libavformat58 \
@@ -148,6 +166,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg8 \
     libpng16-16 \
     libtiff5 \
+    libdc1394-25 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy OpenCV libraries from the opencv-builder stage

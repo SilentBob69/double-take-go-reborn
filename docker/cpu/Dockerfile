@@ -48,7 +48,7 @@ RUN cd /tmp && \
     unzip ${OPENCV_VERSION}.zip && \
     rm ${OPENCV_VERSION}.zip
 
-# Build OpenCV with contrib modules (CPU version)
+# Build OpenCV with contrib modules (CPU version) - Consistent with other platforms
 RUN cd /tmp/opencv-${OPENCV_VERSION} && mkdir build && cd build && \
     cmake -D CMAKE_BUILD_TYPE=RELEASE \
           -D CMAKE_INSTALL_PREFIX=/usr/local \
@@ -71,6 +71,7 @@ RUN cd /tmp/opencv-${OPENCV_VERSION} && mkdir build && cd build && \
           -D OPENCV_GENERATE_PKGCONFIG=ON \
           -D WITH_CUDA=OFF \
           -D WITH_OPENCL=OFF \
+          -D OPENCV_ENABLE_NONFREE=ON \
           .. && \
     make -j$(nproc) && \
     make install && \

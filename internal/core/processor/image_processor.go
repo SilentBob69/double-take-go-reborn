@@ -16,6 +16,7 @@ import (
 	"double-take-go-reborn/internal/integrations/compreface"
 	"double-take-go-reborn/internal/integrations/frigate"
 	"double-take-go-reborn/internal/integrations/homeassistant"
+	"double-take-go-reborn/internal/integrations/opencv"
 	"double-take-go-reborn/internal/server/sse"
 
 	log "github.com/sirupsen/logrus"
@@ -37,6 +38,7 @@ type ImageProcessor struct {
 	db           *gorm.DB
 	cfg          *config.Config
 	compreface   *compreface.Client
+	opencvService *opencv.Service     // OpenCV-Service für Gesichtserkennung als Vorfilter
 	sseHub       *sse.Hub
 	frigateClient *frigate.FrigateClient
 	haPublisher  *homeassistant.Publisher
@@ -45,19 +47,47 @@ type ImageProcessor struct {
 
 // NewImageProcessor erstellt einen neuen Bildverarbeitungsprozessor
 func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.Client, sseHub *sse.Hub, frigateClient *frigate.FrigateClient, haPublisher *homeassistant.Publisher) *ImageProcessor {
+	// OpenCV-Service initialisieren, falls in der Config aktiviert
+	var opencvService *opencv.Service
+	if cfg.OpenCV.Enabled {
+		var err error
+		opencvService, err = opencv.NewService(&cfg.OpenCV)
+		if err != nil {
+			log.Warnf("Fehler beim Initialisieren des OpenCV-Service: %v. OpenCV wird deaktiviert.", err)
+		} else {
+			// Logging der OpenCV-Konfiguration
+			useGPU := cfg.OpenCV.UseGPU
+			detectionMethod := cfg.OpenCV.PersonDetection.Method
+			log.Infof("OpenCV-Service erfolgreich initialisiert (GPU: %v, Methode: %s)", useGPU, detectionMethod)
+			
+			if useGPU {
+				log.Infof("OpenCV GPU-Konfiguration: Backend=%s, Target=%s", 
+					cfg.OpenCV.PersonDetection.Backend, cfg.OpenCV.PersonDetection.Target)
+			}
+		}
+	} else {
+		log.Info("OpenCV-Service ist in der Konfiguration deaktiviert")
+	}
+
 	return &ImageProcessor{
 		db:           db,
 		cfg:          cfg,
 		compreface:   compreface,
+		opencvService: opencvService,
 		sseHub:       sseHub,
 		frigateClient: frigateClient,
 		haPublisher:  haPublisher,
 	}
 }
 
-// SetWorkerPool setzt den Worker-Pool für den ImageProcessor
-func (p *ImageProcessor) SetWorkerPool(pool *WorkerPool) {
-	p.workerPool = pool
+// SetWorkerPool setzt den Worker-Pool für die Bildverarbeitung
+func (p *ImageProcessor) SetWorkerPool(workerPool *WorkerPool) {
+	p.workerPool = workerPool
+}
+
+// GetOpenCVService gibt einen Verweis auf den OpenCV-Service zurück
+func (p *ImageProcessor) GetOpenCVService() *opencv.Service {
+	return p.opencvService
 }
 
 // ProcessImage verarbeitet ein Bild, sucht nach Gesichtern und speichert die Ergebnisse
@@ -178,10 +208,71 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		log.Infof("Created new image record ID: %d", image.ID)
 	}
 
-	// 5. CompreFace-Verarbeitung, falls aktiviert
+	// 5. OpenCV-Vorfilterung und CompreFace-Verarbeitung, falls aktiviert
 	var allMatches []models.Match
+	var opencvPersons []opencv.DetectedPerson
+	var hasPersons = true // Standardmäßig nehmen wir an, dass Personen vorhanden sind
+	var skipCompreFace = false
 	
-	if p.cfg.CompreFace.Enabled && p.compreface != nil {
+	// OpenCV-Personenerkennung als Vorfilter verwenden, wenn aktiviert
+	if p.opencvService != nil && p.cfg.OpenCV.Enabled {
+		log.Debugf("Verwende OpenCV-Personenerkennung als Vorfilter für: %s", imagePath)
+		
+		// Prüfen, ob im Bild Personen vorhanden sind
+		var opencvErr error
+		hasPersons, opencvPersons, opencvErr = p.opencvService.DetectPersons(ctx, imagePath)
+		
+		if opencvErr != nil {
+			log.Warnf("OpenCV-Personenerkennung fehlgeschlagen: %v. Fahre mit CompreFace fort.", opencvErr)
+			// Bei Fehlern in der Vorfilterung trotzdem mit CompreFace fortfahren
+		} else if !hasPersons {
+			log.Infof("OpenCV: Keine Personen im Bild erkannt, CompreFace-Verarbeitung wird übersprungen: %s", imagePath)
+			skipCompreFace = true
+			
+			// In den Metadaten vermerken, dass keine Personen erkannt wurden
+			metadataJSON := map[string]interface{}{
+				"opencv_processed": true,
+				"persons_detected": false,
+			}
+			if metadataBytes, err := json.Marshal(metadataJSON); err == nil {
+				image.SourceData = datatypes.JSON(metadataBytes)
+				if err := p.db.Save(&image).Error; err != nil {
+					log.Warnf("Konnte Bild-Metadaten nicht aktualisieren: %v", err)
+				}
+			}
+		} else {
+			log.Infof("OpenCV: %d Personen im Bild erkannt, fahre mit CompreFace-Gesichtserkennung fort: %s", len(opencvPersons), imagePath)
+			
+			// Erkannte Personen in den Metadaten speichern
+			personRects := make([]map[string]interface{}, 0, len(opencvPersons))
+			for _, person := range opencvPersons {
+				personRects = append(personRects, map[string]interface{}{
+					"x_min": person.Rectangle.Min.X,
+					"y_min": person.Rectangle.Min.Y,
+					"x_max": person.Rectangle.Max.X,
+					"y_max": person.Rectangle.Max.Y,
+					"confidence": person.Confidence,
+				})
+			}
+			
+			metadataJSON := map[string]interface{}{
+				"opencv_processed": true,
+				"persons_detected": true,
+				"person_count": len(opencvPersons),
+				"person_rects": personRects,
+			}
+			
+			if metadataBytes, err := json.Marshal(metadataJSON); err == nil {
+				image.SourceData = datatypes.JSON(metadataBytes)
+				if err := p.db.Save(&image).Error; err != nil {
+					log.Warnf("Konnte Bild-Metadaten nicht aktualisieren: %v", err)
+				}
+			}
+		}
+	}
+	
+	// CompreFace nur verwenden, wenn diese aktiviert ist UND der OpenCV-Personendetektor keinen Grund zum Überspringen gegeben hat
+	if p.cfg.CompreFace.Enabled && p.compreface != nil && !skipCompreFace {
 		// CompreFace-Verarbeitung durchführen
 		log.Infof("Processing image %s with CompreFace", imagePath)
 		var processErr error // Lokale err-Variable für diesen Bereich

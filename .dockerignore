@@ -19,10 +19,14 @@ data/snapshots/
 *.gif
 *.bmp
 
-# Config files (excluding example config)
+# Config files (excluding example and platform-specific configs)
 /config/config.yaml
 /config/config.local.yaml
 /config/config.production.yaml
+
+# User-specific Dockerfiles should not be copied to the image
+/Dockerfile.custom
+/Dockerfile.local
 
 # IDE/editor specific files
 .vscode/

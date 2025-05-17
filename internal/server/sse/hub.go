@@ -30,6 +30,9 @@ type Hub struct {
 
 	// Mutex zum Schutz des simultanen Zugriffs auf die Clients-Map
 	mu sync.Mutex
+
+	// Ping-Intervall für aktive Clients
+	pingInterval time.Duration
 }
 
 // SseEventType definiert die möglichen Ereignistypen für SSE-Nachrichten
@@ -92,7 +95,13 @@ func NewHub() *Hub {
 		register:   make(chan Client),
 		unregister: make(chan Client),
 		clients:    make(map[Client]bool),
+		pingInterval: 30 * time.Second,       // Standard-Ping alle 30 Sekunden
 	}
+}
+
+// lastActivity speichert den Zeitpunkt der letzten Aktivität für jeden Client
+type clientInfo struct {
+	lastActivity time.Time
 }
 
 // Run startet die Verarbeitungsschleife des Hubs
@@ -100,11 +109,18 @@ func NewHub() *Hub {
 func (h *Hub) Run() {
 	log.Info("SSE Hub started and running")
 	
+	// Verbessert: Speichert Aktivitätsdaten für jeden Client
+	clientInfoMap := make(map[Client]*clientInfo)
+
+	// Cleanup-Ticker für inaktive Clients (alle 5 Minuten prüfen)
+	cleanupTicker := time.NewTicker(5 * time.Minute)
+
 	for {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			clientInfoMap[client] = &clientInfo{lastActivity: time.Now()}
 			clientCount := len(h.clients)
 			h.mu.Unlock()
 			log.Infof("SSE client registered. Total clients: %d", clientCount)
@@ -113,6 +129,7 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
+				delete(clientInfoMap, client)
 				close(client)
 				clientCount := len(h.clients)
 				log.Infof("SSE client unregistered. Total clients: %d", clientCount)
@@ -127,12 +144,38 @@ func (h *Hub) Run() {
 				select {
 				case client <- message:
 					// Nachricht erfolgreich gesendet
+					// Aktualisiere den Zeitstempel der letzten Aktivität
+					if info, ok := clientInfoMap[client]; ok {
+						info.lastActivity = time.Now()
+					}
 				default:
 					// Client-Kanal ist voll oder geschlossen
 					log.Warn("SSE client channel full or closed, removing client")
 					delete(h.clients, client)
+					delete(clientInfoMap, client)
 					close(client)
 				}
+			}
+			h.mu.Unlock()
+		
+		case <-cleanupTicker.C:
+			// Prüfe und entferne inaktive Clients (älter als 30 Minuten)
+			h.mu.Lock()
+			inactiveThreshold := time.Now().Add(-30 * time.Minute)
+			removed := 0
+			
+			for client, info := range clientInfoMap {
+				if info.lastActivity.Before(inactiveThreshold) {
+					// Client ist inaktiv, entfernen
+					delete(h.clients, client)
+					delete(clientInfoMap, client)
+					close(client)
+					removed++
+				}
+			}
+			
+			if removed > 0 {
+				log.Infof("Cleaned up %d inactive SSE clients. Remaining: %d", removed, len(h.clients))
 			}
 			h.mu.Unlock()
 		}

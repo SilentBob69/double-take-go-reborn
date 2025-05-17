@@ -199,6 +199,15 @@
     "external_services": "Externe Dienste",
     "compreface_subjects": "CompreFace Identitäten",
     "trained_persons": "Trainierte Personen",
+    "opencv_config": "OpenCV Konfigurationsdetails",
+    "no_opencv_config": "Keine OpenCV-Konfigurationsdetails verfügbar. OpenCV ist möglicherweise deaktiviert.",
+    "opencv_debug": "OpenCV Debug-Visualisierung",
+    "person_detection": "Personenerkennung",
+    "auto_update": "Auto-Update",
+    "loading_opencv_images": "Lade OpenCV Debug-Bilder...",
+    "debug_visualization": "Debug-Visualisierung",
+    "parameter": "Parameter",
+    "value": "Wert",
     "no_trained_persons": "Keine trainierten Personen in CompreFace gefunden",
     "no_subjects": "Keine Subjekte gefunden",
     "recognized_subjects": "Erkannte Subjekte",
@@ -208,9 +217,7 @@
     "Deaktiviert": "Deaktiviert",
     "Verbunden": "Verbunden",
     "Unbekannt": "Unbekannt",
-    "Fehler": "Fehler",
-    "parameter": "Parameter",
-    "value": "Wert"
+    "Fehler": "Fehler"
   },
   "events": {
     "event_group": "Ereignisgruppe",

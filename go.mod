@@ -1,6 +1,6 @@
 module double-take-go-reborn
 
-go 1.24 // Aktualisiert für das neue Docker-Image
+go 1.24 // Entspricht der Projektkonfiguration
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // Added MQTT client library
@@ -12,9 +12,15 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.4 // Added für CPU-Statistiken
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.20.1
-	golang.org/x/text v0.23.0 // Added für Sprachunterstützung
+	gocv.io/x/gocv v0.36.0 // Added für OpenCV-Integration
+	golang.org/x/text v0.24.0 // Added für Sprachunterstützung
 	gorm.io/datatypes v1.2.5
 	gorm.io/gorm v1.26.0
+)
+
+require (
+	github.com/gin-contrib/sessions v1.0.3
+	github.com/nicksnyder/go-i18n/v2 v2.6.0
 )
 
 require (
@@ -35,6 +41,9 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/context v1.1.2 // indirect
+	github.com/gorilla/securecookie v1.1.2 // indirect
+	github.com/gorilla/sessions v1.4.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
@@ -62,12 +71,11 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/arch v0.15.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/arch v0.16.0 // indirect
+	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect

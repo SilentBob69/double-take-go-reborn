@@ -6,16 +6,21 @@ services:
     build:
       context: ../..
       dockerfile: docker/apple-silicon/Dockerfile
+      # Plattform explizit setzen für Apple Silicon (ARM64)
+      args:
+        - BUILDPLATFORM=linux/arm64
+        - TARGETPLATFORM=linux/arm64
     container_name: double-take
     restart: always
+    # Standard-Port für Double-Take UI
     ports:
       - "3000:3000"
     volumes:
-      - ../../config:/config
-      - double-take-data:/data
+      - ../../config:/config  # Konfigurationsdateien
+      - double-take-data:/data  # Persistente Daten
     environment:
-      - TZ=Europe/Berlin
-    platform: linux/arm64
+      - TZ=Europe/Berlin  # Zeitzone anpassen falls nötig
+    platform: linux/arm64  # Explizite ARM64-Plattformdefinition für Apple Silicon
       
   # ========================================================================
   # OPTIONAL: CompreFace-Services für Gesichtserkennung

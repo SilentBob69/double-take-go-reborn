@@ -1,53 +1,71 @@
-# Double-Take-Go Configuration Example
-
-server:
-  host: "0.0.0.0"
-  port: 3000
-  snapshot_dir: "/data/snapshots"
-  snapshot_url: "/snapshots"
-  template_dir: "/app/web/templates"
-  timezone: "Europe/Berlin"
+# Double-Take-Go-Reborn Configuration for CPU-based OpenCV integration
+# This configuration template is optimized for standard CPU usage
 
 log:
   level: "debug"
-  file: "/data/logs/double-take.log"
+  format: "text"
+  timestamp: true
 
-db:
-  # SQLite configuration
-  file: "/data/double-take.db"
-  # PostgreSQL configuration (uncomment if needed)
-  # username: "postgres"
-  # password: "password"
-  # host: "localhost"
-  # port: 5432
-  # name: "double_take"
-
-compreface:
-  enabled: true
-  url: "http://10.100.0.3:8100"
-  recognition_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
-  detection_api_key: "your_detection_api_key"
-  det_prob_threshold: 0.8
-  sync_interval_minutes: 15
+server:
+  port: 3000
+  host: "0.0.0.0"
+  base_url: "http://localhost:3000"
+  metrics_enabled: true
+  timezone: "Europe/Berlin"
 
 mqtt:
-  enabled: true
-  broker: "192.168.0.55"
+  enabled: true  # MQTT ist wichtig für die Tests
+  broker: "192.168.0.55"  # IP-Adresse des externen MQTT-Brokers
   port: 1883
-  username: "hans"
-  password: "desert"
+  username: "hans"  # Benutzername für den Broker
+  password: "desert"  # Passwort für den Broker
   client_id: "double-take-go"
+  topic_prefix: "double-take"
   topic: "frigate/events"
-  # Home Assistant Integration
-  homeassistant:
-    enabled: true
-    discovery_prefix: "homeassistant"
-    publish_results: true
+
+storage:
+  path: "/data"
+  snapshots_path: "/data/snapshots"
+  processed_path: "/data/processed"
+  training_path: "/data/training"
+
+opencv:
+  enabled: true
+  use_gpu: true
+  person_detection:
+    method: "dnn"  # DNN-Methode für GPU-Beschleunigung
+    confidence_threshold: 0.75
+    scale_factor: 1.05
+    min_neighbors: 4
+    min_size_width: 96
+    min_size_height: 192
+    backend: "cuda"  # CUDA-Backend für NVIDIA-GPUs
+    target: "cuda"   # CUDA als Berechnungsziel
+
+compreface:
+  enabled: true  # Aktiviert für Gesichtserkennung
+  url: "http://10.100.0.3:8100"  # Basis-URL des externen CompreFace-Servers
+  subjects_api_url: "http://10.100.0.3:8100/api/v1/recognition/subjects"  # IP-Adresse des externen CompreFace-Servers
+  detection_api_url: "http://10.100.0.3:8100/api/v1/detection/detect"
+  recognition_api_url: "http://10.100.0.3:8100/api/v1/recognition/recognize"
+  verification_api_url: "http://10.100.0.3:8100/api/v1/verification/verify"
+  recognition_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
+  detection_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
+  detection_threshold: 0.7
+  recognition_threshold: 0.7
+  limit: 0
+  status_check_interval: 1
+  status_check_timeout: 30
+
+processor:
+  image_processing_interval: 5
+  max_workers: 5
+  max_processing_time: 30
 
 frigate:
   enabled: true
-  api_url: "http://192.168.0.55:5000"
-  url: "http://192.168.0.55:5000"
-
-cleanup:
-  retention_days: 5
+  event_topic: "frigate/events"
+  process_person_only: true
+  # Die URL MUSS mit einem Schrägstrich enden, damit relative Pfade korrekt angehängt werden
+  url: "http://192.168.0.55:5000/"
+  host: "http://192.168.0.55:5000/"

@@ -12,16 +12,21 @@ import (
 
 // Service ist der Hauptdienst für die OpenCV-Integration
 type Service struct {
-	cfg          *config.OpenCVConfig
-	detector     *PersonDetector
-	mutex        sync.Mutex
-	initialized  bool
+	cfg       *config.OpenCVConfig
+	detector  *PersonDetector
+	DebugSvc  *DebugService // Debug-Service für die Visualisierung
+	mutex     sync.Mutex
+	initialized bool
 }
 
 // NewService erstellt einen neuen OpenCV-Service
 func NewService(cfg *config.OpenCVConfig) (*Service, error) {
+	// Debug-Service erstellen
+	debugSvc := NewDebugService(30) // speichere bis zu 30 Debug-Bilder
+	
 	service := &Service{
 		cfg:         cfg,
+		DebugSvc:    debugSvc,
 		initialized: false,
 	}
 
@@ -50,6 +55,9 @@ func (s *Service) initialize() error {
 	if err != nil {
 		return fmt.Errorf("konnte OpenCV Personendetektor nicht initialisieren: %w", err)
 	}
+	
+	// Debug-Service an den Detektor weitergeben
+	s.detector.debugService = s.DebugSvc
 
 	// Initialisiere den Detektor mit Standardkontext
 	ctx := context.Background()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/color"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -85,6 +86,7 @@ type PersonDetector struct {
 	useGPU            bool                   // Flag für GPU-Nutzung
 	dnnInputWidth     int                    // Breite des Eingabebildes für DNN
 	dnnInputHeight    int                    // Höhe des Eingabebildes für DNN
+	debugService      *DebugService          // Verweis auf den Debug-Service für Visualisierung
 }
 
 // DetectedPerson repräsentiert eine erkannte Person mit Position und Konfidenz
@@ -206,10 +208,39 @@ func getGPUBackend(cfg config.OpenCVConfig) (int, int) {
 
 // haveNvidiaGPU prüft, ob eine NVIDIA-GPU verfügbar ist
 func haveNvidiaGPU() bool {
-	// Einfache Heuristik: Prüfen, ob nvidia-smi existiert und ausführbar ist
-	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
-		if _, err := os.Stat("/usr/bin/nvidia-smi"); err == nil {
+	// Prüfe zuerst nach NVIDIA-Docker-Umgebungsvariablen
+	if os.Getenv("NVIDIA_VISIBLE_DEVICES") != "" || os.Getenv("NVIDIA_DRIVER_CAPABILITIES") != "" {
+		log.Info("NVIDIA-Docker-Umgebung erkannt über Umgebungsvariablen")
+		return true
+	}
+
+	// Prüfe CUDA-Bibliotheken im Container
+	cudaLibPaths := []string{
+		"/usr/local/cuda/lib64/libcudart.so",
+		"/usr/lib/x86_64-linux-gnu/libcuda.so",
+		"/usr/lib/libcuda.so",
+	}
+	
+	for _, path := range cudaLibPaths {
+		if _, err := os.Stat(path); err == nil {
+			log.Infof("CUDA-Bibliothek gefunden: %s", path)
 			return true
+		}
+	}
+
+	// Standardmethode: Prüfen, ob nvidia-smi existiert und ausführbar ist
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		nvidiaSmiPaths := []string{
+			"/usr/bin/nvidia-smi",
+			"/usr/local/bin/nvidia-smi",
+			"/bin/nvidia-smi",
+		}
+		
+		for _, path := range nvidiaSmiPaths {
+			if _, err := os.Stat(path); err == nil {
+				log.Infof("nvidia-smi gefunden: %s", path)
+				return true
+			}
 		}
 	} else if runtime.GOOS == "windows" {
 		// Windows-Pfade zu nvidia-smi prüfen
@@ -397,12 +428,15 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 
 	// Je nach konfiguriertem Detektor
 	if pd.detectorType == HOGDetector {
-		// HOG-basierte Personenerkennung - passe Parameter an die tatsächliche API an
+		// HOG-basierte Personenerkennung mit konfigurierten Parametern
+		// Personen mit HOG-Descriptor erkennen
+		// Angepasste Parameter - ohne zusätzliche Konfigurationsparameter
 		rects := pd.hogDescriptor.DetectMultiScale(processImg)
-		// HOG liefert keine Konfidenzwerte direkt, daher setzen wir einen Standardwert
+		
+		// HOG liefert keine direkten Konfidenzwerte, daher setzen wir 0.8 als Standard
 		weights := make([]float64, len(rects))
 		for i := range weights {
-			weights[i] = 0.8 // Standardkonfidenz für HOG-Erkennung
+			weights[i] = 0.8 // Standard-Konfidenz für HOG
 		}
 
 		// Skalierung zurück, wenn Bild verkleinert wurde
@@ -421,10 +455,10 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 				)
 			}
 
-			// Konfidenzwert aus HOG-Detektor
-			confidence := 0.6 // Standardwert
+			// Konfidenzwert aus HOG-Detektor verwenden
+			confidence := 0.6 // Standardwert für den Fall, dass kein Gewicht vorliegt
 			if i < len(weights) {
-				confidence = weights[i]
+				confidence = weights[i] // Tatsächlicher Konfidenzwert aus der HOG-Erkennung
 			}
 
 			// Nur hinzufügen, wenn Konfidenz über dem Schwellenwert
@@ -495,6 +529,75 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 	}
 
 	log.Debugf("OpenCV: %d Personen in %s erkannt", len(persons), filepath.Base(imgPath))
+	
+	// Visualisierung der erkannten Personen für Debug-Stream
+	log.Debugf("Beginne Visualisierung für %d erkannte Personen", len(persons))
+	
+	// Zugriff auf Debug-Service prüfen
+	if pd.debugService == nil {
+		log.Debug("Kein Debug-Service verfügbar für Visualisierung")
+		return persons, nil
+	}
+	
+	if len(persons) > 0 {
+		try := func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("Panic bei der Visualisierung: %v", r)
+				}
+			}()
+			
+			// Originalbild für die Visualisierung verwenden
+			log.Debugf("Klone Bild für Visualisierung: %s", imgPath)
+			visImg := img.Clone()
+			defer visImg.Close()
+			
+			if visImg.Empty() {
+				log.Errorf("Visualisierungsbild ist leer!")
+				return
+			}
+			
+			log.Debugf("Beginne Zeichnen von %d Rechtecken", len(persons))
+			
+			// Rechtecke für alle erkannten Personen einzeichnen
+			for i, person := range persons {
+				r := person.Rectangle
+				
+				// Rechteck mit roter Farbe zeichnen (GoCV erwartet Scalar, nicht color.RGBA)
+				red := color.RGBA{255, 0, 0, 0} 
+				gocv.Rectangle(&visImg, r, red, 2)
+				
+				// Konfidenzwert als Text anzeigen
+				confText := fmt.Sprintf("Person %d: %.2f", i+1, person.Confidence)
+				green := color.RGBA{0, 255, 0, 0}
+				gocv.PutText(&visImg, confText, image.Point{
+					X: r.Min.X,
+					Y: r.Min.Y - 5,
+				}, gocv.FontHersheyPlain, 1.2, green, 2)
+			}
+			
+			// Bild in JPEG-Format encodieren für Speicherung im Debug-Service
+			buf, err := gocv.IMEncode(".jpg", visImg)
+			if err != nil {
+				log.Errorf("Konnte Bild nicht encodieren: %v", err)
+				return
+			}
+			
+			// Native Buffer in []byte umwandeln
+			imgBytes := buf.GetBytes()
+			
+			// Eindeutige ID für das Debug-Bild generieren
+			baseName := filepath.Base(imgPath)
+			imageID := strings.TrimSuffix(baseName, filepath.Ext(baseName))
+			
+			// Debug-Bild zum Service hinzufügen
+			pd.debugService.AddDebugImage(imageID, imgPath, imgBytes, len(persons))
+			log.Infof("Debug-Bild für OpenCV-Erkennung hinzugefügt: %s mit %d Personen", imageID, len(persons))
+		}
+		
+		try()
+	}
+	
 	return persons, nil
 }
 

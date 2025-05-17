@@ -74,6 +74,7 @@ RUN cd /tmp/opencv-${OPENCV_VERSION} && mkdir build && cd build && \
           -D WITH_OPENCL=ON \
           -D OPENCV_DNN_OPENCL=ON \
           -D WITH_CUDA=OFF \
+          -D OPENCV_ENABLE_NONFREE=ON \
           .. && \
     make -j$(nproc) && \
     make install && \

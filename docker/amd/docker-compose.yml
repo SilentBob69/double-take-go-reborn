@@ -1,23 +1,31 @@
 version: '3.8'
 
 services:
-  # AMD GPU Version (benötigt ROCm)
+  # AMD GPU Version (benötigt ROCm Support)
   double-take:
     build:
       context: ../..
       dockerfile: docker/amd/Dockerfile
+      # Plattform explizit setzen für bessere Kompatibilität
+      # amd64 = Standard Intel/AMD 64-bit Prozessoren
+      args:
+        - BUILDPLATFORM=linux/amd64
+        - TARGETPLATFORM=linux/amd64
     container_name: double-take
     restart: always
+    # Standard-Port für Double-Take UI
     ports:
       - "3000:3000"
     volumes:
-      - ../../config:/config
-      - double-take-data:/data
+      - ../../config:/config  # Konfigurationsdateien
+      - double-take-data:/data  # Persistente Daten
     environment:
-      - TZ=Europe/Berlin
+      - TZ=Europe/Berlin  # Zeitzone anpassen falls nötig
+    platform: linux/amd64  # Explizite Plattformdefinition
+    # AMD GPU Zugriff konfigurieren
     devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
+      - /dev/kfd:/dev/kfd  # ROCm Kernel Fusion Driver
+      - /dev/dri:/dev/dri  # Direct Rendering Manager
       
   # ========================================================================
   # OPTIONAL: CompreFace-Services für Gesichtserkennung

@@ -21,6 +21,17 @@ data/snapshots/
 /config/config.yaml
 /config/config.local.yaml
 /config/config.production.yaml
+/config/config.nvidia.yaml
+/config/config.amd.yaml
+/config/config.apple-silicon.yaml
+/config/config.opencv-*.yaml
+/config/platforms/*
+!/config/examples/**/*
+!/config/examples/platforms/**/*
+
+# User-specific Dockerfiles for testing
+/Dockerfile.custom
+/Dockerfile.local
 
 # Dependencies
 /vendor

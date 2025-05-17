@@ -120,6 +120,14 @@ func main() {
 	// Worker-Pool im ImageProcessor registrieren
 	imageProcessor.SetWorkerPool(workerPool)
 	
+	// OpenCV-Debug-Service für Visualisierung registrieren, wenn OpenCV aktiviert ist
+	if opencvSvc := imageProcessor.GetOpenCVService(); opencvSvc != nil {
+		if debugSvc := opencvSvc.DebugSvc; debugSvc != nil {
+			log.Info("Registering OpenCV debug service for visualization")
+			// Die Routing-Registrierung wird später im Code beim Router-Setup erfolgen
+		}
+	}
+	
 	log.Info("Image processor and worker pool initialized successfully")
 
 	// 8. MQTT-Client erstellen, falls aktiviert
@@ -247,6 +255,12 @@ func main() {
 	log.Info("Initializing event handler...")
 	eventHandler := handlers.NewEventHandler(db.DB, webHandler)
 	eventHandler.RegisterRoutes(router)
+	
+	// OpenCV-Debug-Service-Routen registrieren, falls verfügbar
+	if opencvSvc := imageProcessor.GetOpenCVService(); opencvSvc != nil && opencvSvc.DebugSvc != nil {
+		log.Info("Registering OpenCV debug service routes")
+		opencvSvc.DebugSvc.RegisterRoutes(router)
+	}
 
 	// 12. Server starten
 	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
