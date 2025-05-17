@@ -27,7 +27,7 @@
                         <button class="btn btn-sm btn-warning" id="restartContainer" data-bs-toggle="tooltip" data-bs-title="{{ t "diagnostics.restart_container" }}">
                             <i class="bi bi-arrow-repeat"></i> {{ t "diagnostics.restart_container" }}
                         </button>
-                    </div>
+                </div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             {{ t "diagnostics.frigate" }} URL
@@ -48,7 +48,7 @@
                             MQTT Topic
                             <span><code>{{.Config.MQTTTopic}}</code></span>
                         </li>
-                        {{end}}
+                    {{end}}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             CompreFace
                             <span class="badge {{if .Config.CompreEnabled}}bg-success{{else}}bg-secondary{{end}}">
@@ -60,7 +60,7 @@
                             CompreFace URL
                             <span><code>{{.Config.CompreFaceURL}}</code></span>
                         </li>
-                        {{end}}
+                    {{end}}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             Data Directory
                             <span><code>{{.Config.DataDir}}</code></span>
@@ -70,8 +70,8 @@
                             <span><code>{{.Config.Version}}</code></span>
                         </li>
                     </ul>
-                </div>
             </div>
+        </div>
 
             {{/* Database Stats Card */}}
             <div class="col">
@@ -103,9 +103,9 @@
                             <span>{{if not .DBStats.LastRecognition.IsZero}}{{formatDateTime .DBStats.LastRecognition}}{{else}}{{ t "common.never" }}{{end}}</span>
                         </li>
                     </ul>
-                </div>
             </div>
         </div>
+    </div>
 
         <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
             {{/* System Statistics Card */}}
@@ -116,7 +116,7 @@
                         <button class="btn btn-sm btn-outline-primary" id="refreshSystemStats">
                             <i class="bi bi-arrow-clockwise"></i> {{ t "common.refresh" }}
                         </button>
-                    </div>
+                </div>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             {{ t "diagnostics.cpu_cores" }}
@@ -126,12 +126,12 @@
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 CPU-Auslastung
                                 <span>{{printf "%.1f" .SystemStats.CPUUsage}}%</span>
-                            </div>
+                        </div>
                             <div class="progress" style="height: 10px;">
                                 <div 
                                     {{if lt .SystemStats.CPUUsage 50.0}} class="progress-bar bg-success" {{else if lt .SystemStats.CPUUsage 80.0}} class="progress-bar bg-warning" {{else}} class="progress-bar bg-danger" {{end}} role="progressbar" style="width: {{.SystemStats.CPUUsage}}%" aria-valuenow="{{.SystemStats.CPUUsage}}" aria-valuemin="0" aria-valuemax="100">
-                                </div>
                             </div>
+                        </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             {{ t "diagnostics.goroutines" }}
@@ -146,8 +146,8 @@
                             <span>{{.SystemStats.MemorySys}}</span>
                         </li>
                     </ul>
-                </div>
             </div>
+        </div>
 
             {{/* Worker Pool Card */}}
             <div class="col">
@@ -171,11 +171,11 @@
                             <span>{{formatDateTime .SystemStats.Timestamp}}</span>
                         </li>
                     </ul>
-                </div>
             </div>
         </div>
+    </div>
 
-        <div class="row row-cols-1 row-cols-md-1 g-4">
+        <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
             {{/* Services Card */}}
             <div class="col">
                 <div class="card h-100 shadow-sm">
@@ -198,11 +198,14 @@
                             <span class="badge {{if eq .Services.OpenCV "Aktiviert"}}bg-success{{else if eq .Services.OpenCV "Deaktiviert"}}bg-secondary{{else}}bg-warning{{end}}">
                                 {{ t (printf "diagnostics.%s" .Services.OpenCV) }}
                             </span>
+                            {{if eq .Services.OpenCV "Aktiviert"}}
+                            <a href="#opencv-debug" class="btn btn-sm btn-outline-primary ms-2">{{ t "diagnostics.debug_visualization" }}</a>
+                        {{end}}
                         </li>
                     </ul>
-                </div>
             </div>
         </div>
+    </div>
 
         {{if .Config.CompreEnabled}}
         <div class="row mt-4">
@@ -211,7 +214,7 @@
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>{{ t "diagnostics.compreface_subjects" }} ({{len .CompreFaceSubjects}})</span>
                         <span class="badge bg-info">{{ t "diagnostics.trained_persons" }}</span>
-                    </div>
+                </div>
                     <div class="card-body">
                         {{if eq (len .CompreFaceSubjects) 0}}
                             <p class="card-text text-muted">{{ t "diagnostics.no_trained_persons" }}</p>
@@ -223,26 +226,23 @@
                                         <div class="card-body d-flex align-items-center">
                                             <i class="bi bi-person-bounding-box me-3 fs-4"></i>
                                             <h5 class="card-title mb-0">{{.}}</h5>
-                                        </div>
                                     </div>
                                 </div>
-                                {{end}}
                             </div>
-                        {{end}}
-                    </div>
+                            {{end}}
+                        </div>
+                    {{end}}
                 </div>
             </div>
         </div>
-        {{end}}
+    </div>
+    {{end}}
 
-
-
-        <!-- OpenCV Konfigurationsdetails -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card mt-4 shadow-sm">
+        <div class="row row-cols-1 row-cols-md-2 g-4 mb-4">
+            <div class="col">
+                <div class="card h-100 shadow-sm">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>OpenCV Konfigurationsdetails</span>
+                        <span>{{ t "diagnostics.opencv_config" }}</span>
                     </div>
                     <div class="card-body">
                         <div class="table-responsive">
@@ -260,20 +260,65 @@
                                         <td>{{$key}}</td>
                                         <td>{{$value}}</td>
                                     </tr>
-                                    {{end}}
+                                {{end}}
                                 </tbody>
                             </table>
                             {{else}}
                             <div class="alert alert-warning">
-                                Keine OpenCV-Konfigurationsdetails verfügbar. OpenCV ist möglicherweise deaktiviert.
+                                {{ t "diagnostics.no_opencv_config" }}
                             </div>
                             {{end}}
                         </div>
                     </div>
                 </div>
             </div>
+            
+            {{if eq .Services.OpenCV "Aktiviert"}}
+            <div class="col" id="opencv-debug">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>{{ t "diagnostics.opencv_debug" }}</span>
+                        <div>
+                            <span class="badge bg-info me-2">{{ t "diagnostics.person_detection" }}</span>
+                            <button class="btn btn-sm btn-outline-primary" id="refresh-opencv-debug">
+                                <i class="bi bi-arrow-clockwise"></i> {{ t "common.refresh" }}
+                            </button>
+                            <div class="form-check form-switch d-inline-block ms-2">
+                                <input class="form-check-input" type="checkbox" id="auto-refresh-opencv" checked>
+                                <label class="form-check-label small" for="auto-refresh-opencv">{{ t "diagnostics.auto_update" }}</label>
+                            </div>
+                            <span class="small text-body-secondary ms-2">
+                                <span id="opencv-countdown">10</span>s
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body p-3">
+                        <div id="opencv-images" class="row row-cols-1 row-cols-md-3 g-4">
+                            <div class="col-12 text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">{{ t "common.loading" }}</span>
+                                </div>
+                                <p class="mt-2 text-muted">{{ t "diagnostics.loading_opencv_images" }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{else}}
+            <div class="col">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-header">
+                        <span>{{ t "diagnostics.opencv_debug" }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            {{ t "diagnostics.disabled" }} - {{ t "diagnostics.no_opencv_config" }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{end}}
         </div>
-
     </div>
 
     <!-- Bootstrap Bundle with Popper -->
@@ -331,6 +376,124 @@
                         });
                     }
                 });
+            }
+            
+            // OpenCV Debug-Visualisierung
+            const opencvDebugSection = document.getElementById('opencv-debug');
+            if (opencvDebugSection) {
+                const imagesContainer = document.getElementById('opencv-images');
+                const refreshButton = document.getElementById('refresh-opencv-debug');
+                const countdownElement = document.getElementById('opencv-countdown');
+                const autoRefreshCheckbox = document.getElementById('auto-refresh-opencv');
+                
+                let countdown = 10;
+                let timer;
+                let autoRefresh = true;
+                
+                // Debug-Bilder vom API-Endpoint laden
+                function fetchOpenCVDebugImages() {
+                    fetch('/api/debug/opencv')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.count === 0) {
+                                imagesContainer.innerHTML = '<div class="col-12 text-center"><p>Keine Debug-Bilder vorhanden. Es werden automatisch Bilder angezeigt, sobald OpenCV Personen erkennt.</p></div>';
+                                return;
+                            }
+                            
+                            // Bilder nach Zeitstempel sortieren (neueste zuerst)
+                            data.images.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                            
+                            // Container leeren
+                            imagesContainer.innerHTML = '';
+                            
+                            // Bilder anzeigen
+                            data.images.forEach(image => {
+                                const col = document.createElement('div');
+                                col.className = 'col';
+                                
+                                const card = document.createElement('div');
+                                card.className = 'card h-100';
+                                
+                                // Bild mit Cache-Busting URL
+                                const img = document.createElement('img');
+                                img.src = image.url + '?t=' + new Date().getTime();
+                                img.className = 'card-img-top';
+                                img.alt = 'OpenCV Debug-Bild';
+                                img.loading = 'lazy';
+                                
+                                // Badge für Personenzahl
+                                const personBadge = document.createElement('div');
+                                personBadge.className = 'position-absolute top-0 end-0 m-2';
+                                personBadge.innerHTML = `<span class="badge bg-success">${image.persons} Person${image.persons !== 1 ? 'en' : ''}</span>`;
+                                
+                                // Bild-Metadaten
+                                const cardBody = document.createElement('div');
+                                cardBody.className = 'card-body p-2';
+                                
+                                const time = new Date(image.timestamp).toLocaleTimeString();
+                                const filename = image.imagePath.split('/').pop();
+                                
+                                cardBody.innerHTML = `
+                                    <p class="card-text small mb-1"><i class="bi bi-clock"></i> ${time}</p>
+                                    <p class="card-text small text-truncate" title="${filename}">
+                                        <i class="bi bi-file-image"></i> ${filename}
+                                    </p>
+                                `;
+                                
+                                card.appendChild(img);
+                                card.appendChild(personBadge);
+                                card.appendChild(cardBody);
+                                col.appendChild(card);
+                                imagesContainer.appendChild(col);
+                            });
+                        })
+                        .catch(error => {
+                            console.error('Fehler beim Laden der OpenCV Debug-Bilder:', error);
+                            imagesContainer.innerHTML = '<div class="col-12 text-center"><p>Fehler beim Laden der Debug-Bilder.</p></div>';
+                        })
+                        .finally(() => {
+                            if (autoRefresh) {
+                                countdown = 10;
+                                startCountdown();
+                            }
+                        });
+                }
+                
+                // Countdown für Auto-Refresh
+                function startCountdown() {
+                    clearTimeout(timer);
+                    countdownElement.textContent = countdown;
+                    
+                    if (countdown <= 0) {
+                        fetchOpenCVDebugImages();
+                        return;
+                    }
+                    
+                    timer = setTimeout(() => {
+                        countdown--;
+                        startCountdown();
+                    }, 1000);
+                }
+                
+                // Event-Listener
+                refreshButton.addEventListener('click', () => {
+                    clearTimeout(timer);
+                    fetchOpenCVDebugImages();
+                });
+                
+                autoRefreshCheckbox.addEventListener('change', (e) => {
+                    autoRefresh = e.target.checked;
+                    if (autoRefresh) {
+                        countdown = 10;
+                        startCountdown();
+                    } else {
+                        clearTimeout(timer);
+                        countdownElement.textContent = '—';
+                    }
+                });
+                
+                // Initial laden
+                fetchOpenCVDebugImages();
             }
         });
     </script>
