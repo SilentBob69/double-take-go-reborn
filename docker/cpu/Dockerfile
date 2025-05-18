@@ -2,7 +2,7 @@
 # This Dockerfile compiles OpenCV with the correct version and flags for gocv
 
 # Stage 1: OpenCV Builder
-FROM debian:bullseye as opencv-builder
+FROM debian:bullseye AS opencv-builder
 
 # Install OpenCV dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

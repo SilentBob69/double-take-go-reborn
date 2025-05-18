@@ -3,7 +3,7 @@
 # Designed for Apple Silicon (M1, M2, M3) processors
 
 # Stage 1: OpenCV Builder for ARM64
-FROM --platform=linux/arm64 ubuntu:22.04 as opencv-builder
+FROM --platform=linux/arm64 ubuntu:22.04 AS opencv-builder
 
 # Install OpenCV dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

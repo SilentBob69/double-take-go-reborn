@@ -3,7 +3,7 @@
 # Requires nvidia-docker or Docker with GPU support
 
 # Stage 1: OpenCV Builder with CUDA
-FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 as opencv-builder
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04 AS opencv-builder
 
 # Install OpenCV dependencies
 ENV DEBIAN_FRONTEND=noninteractive
