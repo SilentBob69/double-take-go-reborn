@@ -60,6 +60,7 @@ Jede Plattform bietet optimierte OpenCV-Integration für die jeweilige Hardware 
 - 🇩🇪 **Deutsch**
   - [Installation](docs/INSTALLATION.md)
   - [Hardware-Plattformen](docs/PLATFORMS.md)
+  - [Container-Management](docs/CONTAINER.md)
   - [Migration](docs/MIGRATION.md)
   - [API-Dokumentation](docs/API.md)
   - [OpenCV-Integration](docs/opencv-integration.md)
@@ -127,13 +128,13 @@ Die neue Projektstruktur ist so organisiert:
 ├── config/                   # Konfigurationsdateien
 │   ├── config.yaml           # Hauptkonfiguration
 │   ├── config.example.yaml   # Beispielkonfiguration (ohne sensible Daten)
-│   ├── platforms/            # Plattformspezifische Konfigurationen (aktiv genutzte)
+│   ├── hardware/             # Hardware-spezifische Konfigurationen (GPU/CPU, aktiv genutzte)
 │   │   ├── config-cpu.yaml              # Konfiguration für CPU
 │   │   ├── config-nvidia-gpu.yaml       # Konfiguration für NVIDIA
 │   │   ├── config-amd-gpu.yaml          # Konfiguration für AMD
 │   │   └── config-apple-silicon.yaml    # Konfiguration für Apple Silicon
 │   └── examples/             # Beispielkonfigurationen (ohne sensible Daten)
-│       └── platforms/        # Plattformspezifische Beispielkonfigurationen
+│       └── platforms/        # Hardware-spezifische Beispielkonfigurationen
 │           ├── config-cpu.example.yaml          # Beispiel für CPU
 │           ├── config-nvidia-gpu.example.yaml   # Beispiel für NVIDIA
 │           ├── config-amd-gpu.example.yaml      # Beispiel für AMD

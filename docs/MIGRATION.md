@@ -7,7 +7,7 @@ Dieser Leitfaden hilft dir, deine bestehende Double-Take Go Reborn Installation 
 In der neuesten Version wurde die Struktur der Konfigurationsdateien verbessert:
 
 1. **Neue Verzeichnisstruktur:**
-   - Aktive Konfigurationen: `/config/platforms/`
+   - Aktive Konfigurationen: `/config/hardware/`
    - Beispielkonfigurationen: `/config/examples/platforms/`
 
 2. **Neue Dateinamen:**
@@ -48,7 +48,7 @@ git pull origin main
 Erstelle das Verzeichnis für deine aktiven Konfigurationen:
 
 ```bash
-mkdir -p config/platforms
+mkdir -p config/hardware
 ```
 
 ### 4. Konfigurationsdateien migrieren
@@ -59,7 +59,7 @@ Wähle die für deine Plattform passende Option:
 
 ```bash
 # Kopiere die Beispielkonfiguration
-cp config/examples/platforms/config-nvidia-gpu.example.yaml config/platforms/config-nvidia-gpu.yaml
+cp config/examples/platforms/config-nvidia-gpu.example.yaml config/hardware/config-nvidia-gpu.yaml
 
 # Übertrage deine Einstellungen von der alten Konfiguration
 # Wichtig: API-Keys und sensible Daten müssen manuell übertragen werden
@@ -69,7 +69,7 @@ cp config/examples/platforms/config-nvidia-gpu.example.yaml config/platforms/con
 
 ```bash
 # Kopiere die Beispielkonfiguration
-cp config/examples/platforms/config-amd-gpu.example.yaml config/platforms/config-amd-gpu.yaml
+cp config/examples/platforms/config-amd-gpu.example.yaml config/hardware/config-amd-gpu.yaml
 
 # Übertrage deine Einstellungen von der alten Konfiguration
 # Wichtig: API-Keys und sensible Daten müssen manuell übertragen werden
@@ -79,7 +79,7 @@ cp config/examples/platforms/config-amd-gpu.example.yaml config/platforms/config
 
 ```bash
 # Kopiere die Beispielkonfiguration
-cp config/examples/platforms/config-apple-silicon.example.yaml config/platforms/config-apple-silicon.yaml
+cp config/examples/platforms/config-apple-silicon.example.yaml config/hardware/config-apple-silicon.yaml
 
 # Übertrage deine Einstellungen von der alten Konfiguration
 # Wichtig: API-Keys und sensible Daten müssen manuell übertragen werden
@@ -89,7 +89,7 @@ cp config/examples/platforms/config-apple-silicon.example.yaml config/platforms/
 
 ```bash
 # Kopiere die Beispielkonfiguration
-cp config/examples/platforms/config-cpu.example.yaml config/platforms/config-cpu.yaml
+cp config/examples/platforms/config-cpu.example.yaml config/hardware/config-cpu.yaml
 
 # Übertrage deine Einstellungen von der alten Konfiguration
 # Wichtig: API-Keys und sensible Daten müssen manuell übertragen werden
@@ -101,7 +101,7 @@ Verbinde deine Hauptkonfiguration mit der plattformspezifischen Konfiguration:
 
 ```bash
 # Sicherstellen, dass die Hauptkonfiguration die richtige plattformspezifische Konfiguration verwendet
-cp config/platforms/config-nvidia-gpu.yaml config/config.yaml  # Ersetze mit deiner Plattform
+cp config/hardware/config-nvidia-gpu.yaml config/config.yaml  # Ersetze mit deiner Plattform
 ```
 
 ### 6. Wichtige Einstellungen prüfen

@@ -18,16 +18,25 @@ data/snapshots/
 *.bmp
 
 # Config
+# Produktionskonfigurationen (persönliche Daten)
 /config/config.yaml
 /config/config.local.yaml
 /config/config.production.yaml
-/config/config.nvidia.yaml
-/config/config.amd.yaml
-/config/config.apple-silicon.yaml
+
+# Archivierte oder redundante Dateien
+/config/archive/
 /config/config.opencv-*.yaml
+
+# Persönliche Hardware-Konfigurationen mit echten Zugangsdaten
+/config/my-hardware/
+
+# Hardware-Konfigurationen (GPU/CPU-Beschleunigung)
+/config/hardware/*
 /config/platforms/*
+
+# Erlaubte Konfigurationen und Beispiele
 !/config/examples/**/*
-!/config/examples/platforms/**/*
+!/config/hardware/config-*.yaml
 
 # User-specific Dockerfiles for testing
 /Dockerfile.custom

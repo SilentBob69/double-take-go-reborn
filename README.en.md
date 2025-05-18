@@ -211,8 +211,10 @@ Double-Take Go provides a comprehensive REST API that allows other applications 
 - [API Documentation (English)](docs/API.en.md)
 - [API-Dokumentation (Deutsch)](docs/API.md)
 - [OpenCV Integration](docs/opencv-integration.md)
-- [Migration Guide](docs/MIGRATION.en.md)
-- [Migrationsleitfaden](docs/MIGRATION.md)
+- [Hardware Platforms](docs/PLATFORMS.en.md)
+- [Container Management](docs/CONTAINER.en.md)
+- [Migration](docs/MIGRATION.en.md)
+- [API Documentation](docs/API.en.md)
 
 The API enables control of all key functions of the system, including image processing, identity management, and system functions.
 

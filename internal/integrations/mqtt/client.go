@@ -93,7 +93,9 @@ func (c *Client) Start() error {
 	
 	// Client-ID mit Zeitstempel für Einzigartigkeit
 	clientID := c.config.ClientID
-	if !strings.HasPrefix(clientID, "dt_") {
+	if clientID == "" {
+		clientID = "double_take" 
+	} else if !strings.HasPrefix(clientID, "dt_") {
 		clientID = "dt_" + clientID
 	}
 	// Timestamp anhängen, um bei Neustarts eine eindeutige Client-ID zu haben
@@ -106,20 +108,26 @@ func (c *Client) Start() error {
 		opts.SetPassword(c.config.Password)
 	}
 	
+	// Last Will Testament für Home Assistant einrichten
+	// Das ermöglicht, dass Home Assistant automatisch erkennt, wenn die Verbindung abbricht
+	topicPrefix := c.config.TopicPrefix
+	if topicPrefix == "" {
+		topicPrefix = "double-take"
+	}
+	statusTopic := fmt.Sprintf("%s/status", topicPrefix)
+	opts.SetWill(statusTopic, "offline", 1, true) // QoS 1, retained
+	
 	// Connection-Callbacks konfigurieren
 	opts.SetOnConnectHandler(c.onConnectHandler)
 	opts.SetConnectionLostHandler(c.connectionLostHandler)
 	
 	// Verbindungsstabilität und automatische Wiederverbindung
 	opts.SetAutoReconnect(true)
-	// Häufigere, schnellere Wiederverbindungsversuche
-	opts.SetMaxReconnectInterval(3 * time.Second)  
-	opts.SetConnectTimeout(30 * time.Second)      
-	// Kürzeres Keep-Alive-Intervall für häufigere Lebenszeichen 
-	opts.SetKeepAlive(15 * time.Second)           
-	opts.SetPingTimeout(5 * time.Second)        
-	opts.SetCleanSession(true)                 
-	opts.SetOrderMatters(false)                
+	opts.SetMaxReconnectInterval(30 * time.Second) // Maximal 30 Sekunden zwischen Verbindungsversuchen
+	opts.SetKeepAlive(60 * time.Second)            // 60 Sekunden Keep-Alive
+	opts.SetPingTimeout(10 * time.Second)          // 10 Sekunden für Ping-Timeout
+	opts.SetConnectTimeout(30 * time.Second)       // 30 Sekunden für Verbindungsaufbau
+	opts.SetCleanSession(false)                    // Session beibehalten für zuverlässige Subscriptions
 	
 	// Mehr Server-Puffer-Einstellungen
 	opts.SetWriteTimeout(5 * time.Second)
@@ -166,22 +174,28 @@ func (c *Client) Start() error {
 
 // monitorConnection überwacht die MQTT-Verbindung und führt regelmäßige Health-Checks durch
 func (c *Client) monitorConnection() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(30 * time.Second) // Alle 30 Sekunden überprüfen
 	defer ticker.Stop()
 	
-	for {
-		select {
-		case <-ticker.C:
-			if !c.client.IsConnected() {
-				log.Warn("MQTT connection check: Client is disconnected, attempting reconnect")
-				if token := c.client.Connect(); token.Wait() && token.Error() != nil {
-					log.Errorf("Failed to reconnect to MQTT broker: %v", token.Error())
-				} else {
-					log.Info("MQTT client reconnected successfully")
+	// Topic für Status-Updates
+	topicPrefix := c.config.TopicPrefix
+	if topicPrefix == "" {
+		topicPrefix = "double-take"
+	}
+	statusTopic := fmt.Sprintf("%s/status", topicPrefix)
+	
+	for range ticker.C {
+		if c.client != nil && c.config.Enabled {
+			if c.client.IsConnected() {
+				// Online-Status veröffentlichen
+				token := c.client.Publish(statusTopic, 1, true, "online")
+				if token.Wait() && token.Error() != nil {
+					log.Warnf("Failed to publish online status: %v", token.Error())
 				}
+				c.isConnected = true
 			} else {
-				// Veröffentliche eine Heartbeat-Nachricht
-				topic := "double-take/heartbeat"
+				log.Warn("MQTT connection lost, trying to reconnect...")
+				c.isConnected = false
 				payload := fmt.Sprintf("{\"timestamp\":\"%s\",\"client_id\":\"%s\"}", 
 					time.Now().Format(time.RFC3339), c.config.ClientID)
 				
@@ -214,6 +228,19 @@ func (c *Client) IsConnected() bool {
 func (c *Client) onConnectHandler(client mqtt.Client) {
 	log.Infof("Connected to MQTT broker at %s:%d", c.config.Broker, c.config.Port)
 	c.isConnected = true
+	
+	// Online-Status sofort veröffentlichen für Home Assistant
+	topicPrefix := c.config.TopicPrefix
+	if topicPrefix == "" {
+		topicPrefix = "double-take"
+	}
+	statusTopic := fmt.Sprintf("%s/status", topicPrefix)
+	
+	if token := client.Publish(statusTopic, 1, true, "online"); token.Wait() && token.Error() != nil {
+		log.Errorf("Failed to publish online status: %v", token.Error())
+	} else {
+		log.Info("Published online status to Home Assistant")
+	}
 	
 	// Thema abonnieren
 	log.Infof("Subscribing to MQTT topic: %s", c.config.Topic)

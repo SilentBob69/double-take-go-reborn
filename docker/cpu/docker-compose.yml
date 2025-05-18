@@ -1,4 +1,4 @@
-version: '3.8'
+# Docker Compose Konfiguration für CPU-basierte Verarbeitung
 
 services:
   # CPU Version (funktioniert auf allen Plattformen)

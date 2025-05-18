@@ -7,7 +7,7 @@ This guide helps you migrate your existing Double-Take Go Reborn installation to
 In the latest version, the structure of configuration files has been improved:
 
 1. **New directory structure:**
-   - Active configurations: `/config/platforms/`
+   - Active configurations: `/config/hardware/`
    - Example configurations: `/config/examples/platforms/`
 
 2. **New file names:**
@@ -48,7 +48,7 @@ git pull origin main
 Create the directory for your active configurations:
 
 ```bash
-mkdir -p config/platforms
+mkdir -p config/hardware
 ```
 
 ### 4. Migrate configuration files
@@ -59,7 +59,7 @@ Choose the option appropriate for your platform:
 
 ```bash
 # Copy the example configuration
-cp config/examples/platforms/config-nvidia-gpu.example.yaml config/platforms/config-nvidia-gpu.yaml
+cp config/examples/platforms/config-nvidia-gpu.example.yaml config/hardware/config-nvidia-gpu.yaml
 
 # Transfer your settings from the old configuration
 # Important: API keys and sensitive data must be transferred manually
@@ -69,7 +69,7 @@ cp config/examples/platforms/config-nvidia-gpu.example.yaml config/platforms/con
 
 ```bash
 # Copy the example configuration
-cp config/examples/platforms/config-amd-gpu.example.yaml config/platforms/config-amd-gpu.yaml
+cp config/examples/platforms/config-amd-gpu.example.yaml config/hardware/config-amd-gpu.yaml
 
 # Transfer your settings from the old configuration
 # Important: API keys and sensitive data must be transferred manually
@@ -79,7 +79,7 @@ cp config/examples/platforms/config-amd-gpu.example.yaml config/platforms/config
 
 ```bash
 # Copy the example configuration
-cp config/examples/platforms/config-apple-silicon.example.yaml config/platforms/config-apple-silicon.yaml
+cp config/examples/platforms/config-apple-silicon.example.yaml config/hardware/config-apple-silicon.yaml
 
 # Transfer your settings from the old configuration
 # Important: API keys and sensitive data must be transferred manually
@@ -89,7 +89,7 @@ cp config/examples/platforms/config-apple-silicon.example.yaml config/platforms/
 
 ```bash
 # Copy the example configuration
-cp config/examples/platforms/config-cpu.example.yaml config/platforms/config-cpu.yaml
+cp config/examples/platforms/config-cpu.example.yaml config/hardware/config-cpu.yaml
 
 # Transfer your settings from the old configuration
 # Important: API keys and sensitive data must be transferred manually
@@ -101,7 +101,7 @@ Connect your main configuration to the platform-specific configuration:
 
 ```bash
 # Ensure that the main configuration uses the correct platform-specific configuration
-cp config/platforms/config-nvidia-gpu.yaml config/config.yaml  # Replace with your platform
+cp config/hardware/config-nvidia-gpu.yaml config/config.yaml  # Replace with your platform
 ```
 
 ### 6. Check important settings

@@ -1,4 +1,4 @@
-version: '3.8'
+# Docker Compose Konfiguration für AMD GPU
 
 services:
   # AMD GPU Version (benötigt ROCm Support)

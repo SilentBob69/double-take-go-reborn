@@ -1,5 +1,5 @@
-# Double-Take-Go-Reborn Configuration for Apple Silicon (M-series) with OpenCV
-# Diese Konfiguration ist optimiert für Apple M1/M2/M3 Prozessoren
+# Double-Take-Go-Reborn Configuration for NVIDIA GPU acceleration with OpenCV
+# Diese Konfiguration ist optimiert für NVIDIA GPUs mit CUDA-Unterstützung
 # HINWEIS: OpenCV kann unabhängig von CompreFace verwendet werden
 
 log:
@@ -31,16 +31,15 @@ opencv:
   enabled: true
   use_gpu: true
   person_detection:
-    method: "dnn"  # DNN method is optimized for Apple Neural Engine
-    model: "ssd_mobilenet"  # Better performance on Apple Silicon
+    method: "dnn"  # DNN method is preferred for GPU acceleration
     confidence_threshold: 0.6
     scale_factor: 1.03
     min_neighbors: 3
     min_size_width: 64
     min_size_height: 128
-    # Apple Silicon optimizations
-    backend: "default"  # Use the default backend which is optimized for ARM
-    target: "cpu"       # Target compute device is CPU with NEON instructions
+    # GPU-specific DNN parameters
+    backend: "cuda"  # Use CUDA backend for OpenCV DNN
+    target: "cuda"   # Target compute device is CUDA
 
 # =========================================================================
 # OPTIONAL: CompreFace-Integration für Gesichtserkennung
@@ -49,12 +48,12 @@ opencv:
 # oder 'enabled: false' setzen.
 # =========================================================================
 compreface:
-  enabled: false  # Auf 'true' setzen, wenn CompreFace verwendet werden soll
+  enabled: false
   subjects_api_url: "http://compreface:8000/api/v1/recognition/subjects"
   detection_api_url: "http://compreface:8000/api/v1/detection/detect"
   recognition_api_url: "http://compreface:8000/api/v1/recognition/recognize"
   verification_api_url: "http://compreface:8000/api/v1/verification/verify"
-  api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
+  api_key: "YOUR_API_KEY_HERE"
   detection_threshold: 0.7
   recognition_threshold: 0.7
   limit: 0
@@ -63,5 +62,5 @@ compreface:
 
 processor:
   image_processing_interval: 5
-  max_workers: 8  # Optimized for Apple Silicon cores
+  max_workers: 10  # Increased worker count for GPU hardware
   max_processing_time: 30

@@ -104,16 +104,27 @@ func NewDiscoveryManager(mqttClient *mqtt.Client, cfg *config.Config) *Discovery
 
 // RegisterIdentities veröffentlicht Discovery-Konfigurationen für Home Assistant
 func (dm *DiscoveryManager) RegisterIdentities(identities []models.Identity) error {
-	// Erstelle den Device-Eintrag für Double-Take
-	device := &Device{
-		Identifiers:  []string{"double_take_go"},
-		Name:         "Double Take Go",
-		Manufacturer: "Double Take Go Project",
-		Model:        "Recognition System",
-		SWVersion:    "1.0.0",
+	if dm.mqttClient == nil || !dm.mqttClient.IsConnected() {
+		return fmt.Errorf("MQTT client not connected")
 	}
 
-	// Erstelle nur die Hauptsensoren für Erkennungen
+	// Version aus Konfiguration oder Standard
+	version := "1.0.0"
+	if dm.cfg != nil && dm.cfg.Version != "" {
+		version = dm.cfg.Version
+	}
+
+	// Gerät-Konfiguration erstellen nach Home Assistant Standard
+	device := &Device{
+		// HomeAssistant empfiehlt einen eindeutigen Identifier
+		Identifiers:  []string{"double_take_go"},
+		Name:         "Double Take Go",
+		Manufacturer: "Double Take Community",
+		Model:        "Go Edition",
+		SWVersion:    version,
+	}
+
+	// Einfache Sensoren registrieren
 	if err := dm.registerSimpleSensors(device); err != nil {
 		log.Errorf("Failed to register recognition sensors: %v", err)
 		return err

@@ -1,5 +1,5 @@
-# Double-Take-Go-Reborn OpenCV Integration Example Configuration
-# Dies ist eine Beispielkonfiguration für die OpenCV-Personenerkennungsfunktion
+# Double-Take-Go-Reborn Configuration for AMD GPU acceleration with OpenCV
+# Diese Konfiguration ist optimiert für AMD GPUs mit OpenCL-Unterstützung
 # HINWEIS: OpenCV kann unabhängig von CompreFace verwendet werden
 
 log:
@@ -15,7 +15,7 @@ server:
 
 mqtt:
   enabled: false
-  broker: "tcp://mosquitto:1883"
+  broker: "tcp://localhost:1883"
   username: ""
   password: ""
   client_id: "double-take-go"
@@ -29,17 +29,17 @@ storage:
 
 opencv:
   enabled: true
-  use_gpu: false  # Set to true if hardware acceleration is available
+  use_gpu: true
   person_detection:
-    method: "hog"  # Options: "hog" (CPU-optimized), "dnn" (for GPU acceleration)
-    confidence_threshold: 0.5
-    scale_factor: 1.05
-    min_neighbors: 2
+    method: "dnn"  # DNN method is preferred for GPU acceleration
+    confidence_threshold: 0.6
+    scale_factor: 1.03
+    min_neighbors: 3
     min_size_width: 64
     min_size_height: 128
-    # GPU-specific parameters (only used when use_gpu is true and method is "dnn")
-    backend: "default"  # Options: "default", "cuda" (NVIDIA), "opencl" (AMD)
-    target: "cpu"       # Options: "cpu", "cuda", "opencl"
+    # GPU-specific DNN parameters
+    backend: "opencl"  # Use OpenCL backend for OpenCV DNN
+    target: "opencl"   # Target compute device is OpenCL
 
 # =========================================================================
 # OPTIONAL: CompreFace-Integration für Gesichtserkennung
@@ -53,7 +53,7 @@ compreface:
   detection_api_url: "http://compreface:8000/api/v1/detection/detect"
   recognition_api_url: "http://compreface:8000/api/v1/recognition/recognize"
   verification_api_url: "http://compreface:8000/api/v1/verification/verify"
-  api_key: "your-recognition-api-key-here"  # Replace with your actual API key
+  api_key: "YOUR_API_KEY_HERE"
   detection_threshold: 0.7
   recognition_threshold: 0.7
   limit: 0
@@ -62,5 +62,5 @@ compreface:
 
 processor:
   image_processing_interval: 5
-  max_workers: 4  # Increase for more powerful hardware
+  max_workers: 10  # Increased worker count for GPU hardware
   max_processing_time: 30
