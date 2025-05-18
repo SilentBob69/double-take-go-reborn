@@ -43,7 +43,7 @@ If you're looking for a proven and complete solution, we recommend using the ori
 - Optional: Frigate NVR (as an external service to provide camera events)
 - Optional: Home Assistant (for automatic integration of recognition results)
 
-## Installation
+## Quick Start
 
 1. Clone the repository:
    ```bash
@@ -51,20 +51,19 @@ If you're looking for a proven and complete solution, we recommend using the ori
    cd double-take-go-reborn
    ```
 
-2. Create the configuration file:
+2. Run the initial setup to create personal hardware configurations:
    ```bash
-   cp config/config.example.yaml config/config.yaml
+   ./scripts/switch-config.sh --setup
    ```
 
-3. Adjust the configuration file (IP addresses, API keys, etc.):
+3. Choose the appropriate hardware configuration:
    ```bash
-   nano config/config.yaml
+   # Choose one of: cpu, nvidia, amd, apple
+   ./scripts/switch-config.sh nvidia
    ```
-
-4. Start the application with Docker Compose:
-   ```bash
-   docker-compose up -d
-   ```
+   
+   The script will automatically ask if you want to restart the container
+   and will execute all necessary Docker commands if you confirm.
 
 5. The application is now accessible at:
    - Double-Take UI: http://localhost:3000
@@ -249,37 +248,34 @@ Depending on your hardware, different optimized Docker images are provided:
 - **AMD GPU Version**: OpenCL-accelerated variant for AMD graphics cards
 - **Apple Silicon Version**: Specially optimized for M1/M2/M3 processors
 
-### Installation
+### Switching Hardware Platforms
 
-1. Choose the Docker image suitable for your hardware:
-   ```bash
-   # In docker-compose.yml, select the appropriate version (example):
-   services:
-     double-take:
-       build:
-         context: .
-         dockerfile: Dockerfile.opencv        # Standard CPU version
-         # dockerfile: Dockerfile.opencv-cuda  # NVIDIA GPU version
-         # dockerfile: Dockerfile.opencv-opencl # AMD GPU version
-         # dockerfile: Dockerfile.opencv-arm64 # Apple Silicon
-   ```
+Double-Take Go Reborn includes a convenient script to switch between hardware platforms:
 
-2. Use the appropriate configuration template:
-   ```bash
-   # For standard version (CPU)
-   cp config/platforms/config-cpu.yaml config/config.yaml
-   # For specific hardware platforms
-   cp config/platforms/config-nvidia-gpu.yaml config/config.yaml  # NVIDIA
-   cp config/platforms/config-amd-gpu.yaml config/config.yaml     # AMD
-   cp config/platforms/config-apple-silicon.yaml config/config.yaml  # Apple Silicon
-   ```
+```bash
+# First time setup (creates personal hardware configurations)
+./scripts/switch-config.sh --setup
 
-3. Adjust the API key for CompreFace in the `config.yaml`.
+# List available configurations
+./scripts/switch-config.sh --list
 
-4. Build and start the container:
-   ```bash
-   docker-compose up -d --build
-   ```
+# Switch to a specific hardware platform
+./scripts/switch-config.sh nvidia   # For NVIDIA GPU acceleration
+./scripts/switch-config.sh amd      # For AMD GPU acceleration
+./scripts/switch-config.sh cpu      # For CPU-only processing
+./scripts/switch-config.sh apple    # For Apple Silicon
+
+# Check current configuration
+./scripts/switch-config.sh --status
+```
+
+The script will:
+1. Copy the appropriate configuration file
+2. Ask if you want to restart the container
+3. Automatically use the correct Docker directory
+4. Optionally display container logs
+
+Before using, make sure to customize your personal configuration files in `config/my-hardware/` with the appropriate API keys and connection details.
 
 ### Configuration Options
 

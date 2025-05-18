@@ -28,15 +28,18 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 git clone https://github.com/SilentBob69/double-take-go-reborn.git
 cd double-take-go-reborn
 
-# 2. Wähle die passende Version für deine Hardware:
-#    - CPU: Standard für Intel/AMD Prozessoren ohne GPU-Beschleunigung
-#    - NVIDIA: Für NVIDIA GPU-Beschleunigung (erfordert nvidia-docker)
-#    - AMD: Für AMD GPU-Beschleunigung mit OpenCL (erfordert ROCm)
-#    - Apple-Silicon: Für M1/M2/M3 Chips
-cd docker/cpu            # oder: nvidia, amd, apple-silicon
+# 2. Ersteinrichtung durchführen (erstellt persönliche Konfigurationen)
+./scripts/switch-config.sh --setup
 
-# 3. Starte den Container
-docker compose up -d
+# 3. Wähle die passende Hardware-Konfiguration:
+#    - cpu: Standard für Intel/AMD Prozessoren ohne GPU-Beschleunigung
+#    - nvidia: Für NVIDIA GPU-Beschleunigung (erfordert nvidia-docker)
+#    - amd: Für AMD GPU-Beschleunigung mit OpenCL (erfordert ROCm)
+#    - apple: Für Apple Silicon M1/M2/M3 Chips
+./scripts/switch-config.sh nvidia   # oder: cpu, amd, apple
+
+# Das Skript fragt automatisch, ob der Container neu gestartet werden soll
+# und führt auf Wunsch alle erforderlichen Docker-Befehle aus
 ```
 
 Die Anwendung ist nun erreichbar unter:
