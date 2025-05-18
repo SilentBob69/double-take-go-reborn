@@ -10,6 +10,12 @@ vendor/
 !/data/.gitkeep
 /logs
 
+# Persönliche und sensible Konfigurationen
+/config/my-hardware/
+/config/config.yaml
+/config/config.local.yaml
+/config/config.production.yaml
+
 # Explizit alle Bilder und Snapshots ausschließen
 /data/snapshots/
 data/snapshots/
@@ -19,12 +25,13 @@ data/snapshots/
 *.gif
 *.bmp
 
-# Config files (excluding example and platform-specific configs)
-/config/config.yaml
-/config/config.local.yaml
-/config/config.production.yaml
+# Docker-spezifische Dateien und Skripte
+.docker/
+docker_temp/
+scripts/docker-publish.sh
+docker/DOCKER-TAGS*.md
 
-# User-specific Dockerfiles should not be copied to the image
+# User-specific Dockerfiles
 /Dockerfile.custom
 /Dockerfile.local
 
@@ -42,3 +49,8 @@ Thumbs.db
 *.env
 *.pem
 *.key
+*.crt
+*.cert
+
+# GitHub-spezifische Dateien
+.github/

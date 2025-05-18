@@ -38,9 +38,17 @@ data/snapshots/
 !/config/examples/**/*
 !/config/hardware/config-*.yaml
 
-# User-specific Dockerfiles for testing
+# Docker-bezogene Dateien
 /Dockerfile.custom
 /Dockerfile.local
+.docker/
+docker_temp/
+# Docker-Build Caches
+.docker-cache/
+.buildx/
+.buildkit/
+# Internal publishing scripts (security)
+/scripts/docker-publish.sh
 
 # Dependencies
 /vendor
