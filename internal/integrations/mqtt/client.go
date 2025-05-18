@@ -199,7 +199,8 @@ func (c *Client) monitorConnection() {
 				payload := fmt.Sprintf("{\"timestamp\":\"%s\",\"client_id\":\"%s\"}", 
 					time.Now().Format(time.RFC3339), c.config.ClientID)
 				
-				if token := c.client.Publish(topic, 0, false, payload); token.Wait() && token.Error() != nil {
+				heartbeatTopic := fmt.Sprintf("%s/heartbeat", c.config.TopicPrefix)
+				if token := c.client.Publish(heartbeatTopic, 0, false, payload); token.Wait() && token.Error() != nil {
 					log.Warnf("Failed to publish heartbeat: %v", token.Error())
 				} else {
 					log.Debug("MQTT heartbeat sent successfully")

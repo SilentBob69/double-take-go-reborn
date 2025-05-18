@@ -15,11 +15,17 @@ server:
 
 mqtt:
   enabled: false
-  broker: "tcp://localhost:1883"
+  broker: "localhost"
+  port: 1883
   username: ""
   password: ""
   client_id: "double-take-go"
+  topic: "frigate/events"
   topic_prefix: "double-take"
+  homeassistant:
+    enabled: false  # Auf true setzen, um Home Assistant Discovery zu aktivieren
+    discovery_prefix: "homeassistant"  # Standard-Präfix für Home Assistant
+    publish_results: true  # Erkennungsergebnisse veröffentlichen
 
 storage:
   path: "/data"

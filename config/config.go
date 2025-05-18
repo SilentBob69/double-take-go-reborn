@@ -66,13 +66,14 @@ type CompreFaceConfig struct {
 
 // MQTTConfig enthält die Konfiguration für den MQTT-Client
 type MQTTConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	Broker    string `mapstructure:"broker"`
-	Port      int    `mapstructure:"port"`
-	Username  string `mapstructure:"username"`
-	Password  string `mapstructure:"password"`
-	ClientID  string `mapstructure:"client_id"`
-	Topic     string `mapstructure:"topic"`
+	Enabled     bool   `mapstructure:"enabled"`
+	Broker      string `mapstructure:"broker"`
+	Port        int    `mapstructure:"port"`
+	Username    string `mapstructure:"username"`
+	Password    string `mapstructure:"password"`
+	ClientID    string `mapstructure:"client_id"`
+	Topic       string `mapstructure:"topic"`
+	TopicPrefix string `mapstructure:"topic_prefix"`  // Für Home Assistant und andere Integrationen
 	HomeAssistant HomeAssistantConfig `mapstructure:"homeassistant"`
 }
 
@@ -226,6 +227,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("mqtt.port", 1883)
 	v.SetDefault("mqtt.client_id", "double-take-go")
 	v.SetDefault("mqtt.topic", "frigate/events")
+	v.SetDefault("mqtt.topic_prefix", "double-take")
 	v.SetDefault("mqtt.homeassistant.enabled", false)
 	v.SetDefault("mqtt.homeassistant.discovery_prefix", "homeassistant")
 	v.SetDefault("mqtt.homeassistant.publish_results", true)
