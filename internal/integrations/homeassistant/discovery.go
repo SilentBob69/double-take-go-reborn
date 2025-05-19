@@ -108,11 +108,13 @@ func (dm *DiscoveryManager) RegisterIdentities(identities []models.Identity) err
 		return fmt.Errorf("MQTT client not connected")
 	}
 
-	// Version aus Konfiguration oder Standard
-	version := "1.0.0"
-	if dm.cfg != nil && dm.cfg.Version != "" {
-		version = dm.cfg.Version
+	// Zuerst den Online-Status veröffentlichen
+	if err := dm.PublishAvailability(true); err != nil {
+		log.Warnf("Failed to publish availability: %v", err)
 	}
+
+	// Feste Version für Home Assistant Device-Info
+	const version = "1.0.0"
 
 	// Gerät-Konfiguration erstellen nach Home Assistant Standard
 	device := &Device{
@@ -151,11 +153,11 @@ func (dm *DiscoveryManager) registerSimpleSensors(device *Device) error {
 		Device:            device,
 	}
 
-	// Discovery-Topic für den Sensor
-	sensorTopic := fmt.Sprintf("%s/%s/%s/person/config", 
+	// Discovery-Topic für den Sensor - Format: <discovery_prefix>/<component>/<object_id>/config
+	// Für Home Assistant muss object_id eine eindeutige ID sein
+	sensorTopic := fmt.Sprintf("%s/%s/double_take_person/config", 
 		DiscoveryPrefix, 
-		ComponentSensor, 
-		NodeID)
+		ComponentSensor)
 
 	// Konfiguration für Sensor senden
 	log.Info("Registering Home Assistant person sensor entity")
@@ -323,12 +325,10 @@ func (dm *DiscoveryManager) registerUnknownSensor(device *Device) error {
 		EntityCategory:    "diagnostic", // Als diagnostische Entität markieren
 	}
 
-	// Discovery-Topic für Anwesenheits-Sensor
-	binarySensorTopic := fmt.Sprintf("%s/%s/%s/%s_presence/config", 
+	// Discovery-Topic für Anwesenheits-Sensor - Format: <discovery_prefix>/<component>/<object_id>/config
+	binarySensorTopic := fmt.Sprintf("%s/%s/double_take_unknown_presence/config", 
 		DiscoveryPrefix, 
-		ComponentBinarySensor, 
-		NodeID,
-		"unknown")
+		ComponentBinarySensor)
 
 	// Konfiguration für Anwesenheits-Sensor senden
 	log.Debug("Registering Home Assistant presence sensor for unknown faces")
@@ -349,12 +349,10 @@ func (dm *DiscoveryManager) registerUnknownSensor(device *Device) error {
 		EntityCategory:    "diagnostic", // Als diagnostische Entität markieren
 	}
 
-	// Discovery-Topic für Info-Sensor
-	infoSensorTopic := fmt.Sprintf("%s/%s/%s/%s_info/config", 
+	// Discovery-Topic für Info-Sensor - Format: <discovery_prefix>/<component>/<object_id>/config
+	infoSensorTopic := fmt.Sprintf("%s/%s/double_take_unknown_info/config", 
 		DiscoveryPrefix, 
-		ComponentSensor, 
-		NodeID,
-		"unknown")
+		ComponentSensor)
 
 	// Konfiguration für Info-Sensor senden
 	log.Debug("Registering Home Assistant info sensor for unknown faces")
@@ -373,12 +371,10 @@ func (dm *DiscoveryManager) registerUnknownSensor(device *Device) error {
 		Device:            device,
 	}
 
-	// Discovery-Topic für Kamera
-	cameraTopic := fmt.Sprintf("%s/%s/%s/%s_image/config", 
+	// Discovery-Topic für Kamera - Format: <discovery_prefix>/<component>/<object_id>/config
+	cameraTopic := fmt.Sprintf("%s/%s/double_take_unknown_image/config", 
 		DiscoveryPrefix, 
-		ComponentCamera, 
-		NodeID,
-		"unknown")
+		ComponentCamera)
 
 	// Konfiguration für Kamera senden
 	log.Debug("Registering Home Assistant camera for unknown faces")

@@ -456,7 +456,7 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 			}
 
 			// Konfidenzwert aus HOG-Detektor verwenden
-			confidence := 0.6 // Standardwert für den Fall, dass kein Gewicht vorliegt
+			confidence := pd.confidenceThreshold // Standardwert aus der Konfiguration verwenden
 			if i < len(weights) {
 				confidence = weights[i] // Tatsächlicher Konfidenzwert aus der HOG-Erkennung
 			}

@@ -87,8 +87,11 @@ func (c *Client) Start() error {
 	// MQTT-Client-Optionen konfigurieren
 	opts := mqtt.NewClientOptions()
 	
-	// Broker-URL erstellen - TCP statt ws oder wss verwenden für bessere Stabilität
+	// Broker-URL erstellen - Hier wird das tcp:// protokoll hinzugefügt
+	// So kann in der config.yaml einfach die IP-Adresse ohne Protokoll verwendet werden
 	brokerURL := fmt.Sprintf("tcp://%s:%d", c.config.Broker, c.config.Port)
+	
+	log.Debugf("Verbinde mit MQTT-Broker: %s", brokerURL)
 	opts.AddBroker(brokerURL)
 	
 	// Client-ID mit Zeitstempel für Einzigartigkeit

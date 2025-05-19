@@ -18,7 +18,7 @@ services:
       - "3000:3000"
     volumes:
       - ../../config:/config  # Konfigurationsdateien
-      - double-take-data:/data  # Persistente Daten
+      - ../../data:/data      # Persistente Daten direkt im Projektverzeichnis
     environment:
       - TZ=Europe/Berlin  # Zeitzone anpassen falls nötig
     platform: linux/amd64  # Explizite Plattformdefinition
@@ -28,6 +28,4 @@ services:
   # Bitte stellen Sie sicher, dass diese Dienste auf ihren externen
   # Servern verfügbar sind und in config.yaml richtig konfiguriert sind.
 
-volumes:
-  # Nur das Double-Take-Volume wird benötigt
-  double-take-data:
+# Keine benannten Docker-Volumes mehr erforderlich, da direkte Verzeichnis-Mappings verwendet werden

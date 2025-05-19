@@ -18,7 +18,7 @@ services:
       - "3000:3000"
     volumes:
       - ../../config:/config  # Konfigurationsdateien
-      - double-take-data:/data  # Persistente Daten
+      - ../../data:/data      # Persistente Daten direkt im Projektverzeichnis
     environment:
       - TZ=Europe/Berlin  # Zeitzone anpassen falls nötig
     platform: linux/amd64  # Explizite Plattformdefinition
@@ -75,8 +75,7 @@ services:
   # depends_on:
   #   - compreface-api
 
-volumes:
-  # Aktiviere diese Volumes, wenn du CompreFace verwendest
-  # compreface-db:
-  # compreface-data:
-  double-take-data:
+# Wenn du CompreFace aktivierst, füge einen volumes-Abschnitt hinzu:
+# volumes:
+#   compreface-db:
+#   compreface-data:

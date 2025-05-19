@@ -188,8 +188,19 @@ switch_config() {
         pushd "$docker_dir" > /dev/null
         docker compose down
         
+        # Fragen, ob ein Clean-Build durchgeführt werden soll
+        read -p "Clean-Build durchführen (--no-cache)? Empfohlen bei Template/Config-Änderungen (j/n): " clean_build_choice
+        
         echo -e "${YELLOW}Container gestoppt. Baue neues Image und starte Container...${NC}"
-        docker compose up -d --build
+        if [[ "$clean_build_choice" =~ ^[jJyY]$ ]]; then
+            echo -e "${BLUE}Führe Clean-Build aus (--no-cache)...${NC}"
+            docker compose build --no-cache
+        else
+            echo -e "${BLUE}Führe normalen Build aus...${NC}"
+            docker compose build
+        fi
+        
+        docker compose up -d
         
         echo -e "${GREEN}Container erfolgreich neu gestartet!${NC}"
         popd > /dev/null

@@ -1282,6 +1282,10 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 	// Debug-Ausgabe zur Fehlersuche
 	log.Infof("OpenCV Status: %s", opencvStatus)
 	log.Infof("OpenCV Config Map Größe: %d", len(opencvDetailedConfig))
+	// Direkte Debug-Ausgabe des Konfidenz-Schwellenwerts
+	log.Infof("KONFIDENZ DEBUG: Wert direkt aus Konfiguration = %v", h.cfg.OpenCV.PersonDetection.ConfidenceThreshold)
+	log.Infof("KONFIDENZ DEBUG: Gesamte PersonDetection-Struktur = %+v", h.cfg.OpenCV.PersonDetection)
+	// Ausgabe aller Konfigurationsdetails
 	for k, v := range opencvDetailedConfig {
 		log.Infof("OpenCV Config: %s = %v", k, v)
 	}
