@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"image"
 	"image/jpeg"
 	"os"
 	"path/filepath"
@@ -15,6 +14,10 @@ import (
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/integrations/mqtt"
+	"double-take-go-reborn/internal/util/timezone"
+
+	"github.com/glebarez/sqlite" // Verwende den bereits im Projekt vorhandenen SQLite-Treiber
+	"gorm.io/gorm"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -36,11 +39,30 @@ type Publisher struct {
 	lastDetections   map[string]time.Time // Speichert die letzten Erkennungszeitpunkte pro Identität
 }
 
+// cleanCameraName bereinigt einen Kameranamen von Präfixen und Suffixen
+func cleanCameraName(camera string) string {
+	cleanCamera := camera
+	
+	// Entferne "frigate_" oder "frigate/" Präfix
+	if strings.HasPrefix(cleanCamera, "frigate_") {
+		cleanCamera = strings.TrimPrefix(cleanCamera, "frigate_")
+	} else if strings.HasPrefix(cleanCamera, "frigate/") {
+		cleanCamera = strings.TrimPrefix(cleanCamera, "frigate/")
+	}
+	
+	// Entferne "_camera" Suffix
+	if strings.HasSuffix(cleanCamera, "_camera") {
+		cleanCamera = strings.TrimSuffix(cleanCamera, "_camera")
+	}
+	
+	return cleanCamera
+}
+
 // MatchEvent enthält die Daten eines Matches, die über MQTT veröffentlicht werden
 type MatchEvent struct {
 	ID        string    `json:"id"`
 	Duration  float64   `json:"duration"`
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp string    `json:"timestamp"` // ISO 8601 String mit expliziter Zeitzone
 	Attempts  int       `json:"attempts"`
 	Camera    string    `json:"camera"`
 	Zones     []string  `json:"zones"`
@@ -51,7 +73,7 @@ type MatchEvent struct {
 type CameraEvent struct {
 	ID        string    `json:"id"`
 	Duration  float64   `json:"duration"`
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp string    `json:"timestamp"` // ISO 8601 String mit expliziter Zeitzone
 	Attempts  int       `json:"attempts"`
 	Camera    string    `json:"camera"`
 	Zones     []string  `json:"zones"`
@@ -103,6 +125,8 @@ type Counts struct {
 
 // NewPublisher erstellt einen neuen MQTT-Publisher für Home Assistant
 func NewPublisher(mqttClient *mqtt.Client, cfg *config.Config) *Publisher {
+	// Timezone wird bereits in main.go initialisiert
+	
 	return &Publisher{
 		mqttClient:       mqttClient,
 		cfg:              cfg,
@@ -127,7 +151,7 @@ func (p *Publisher) StartResetTimers() {
 
 // checkAndResetCounters prüft, ob Zähler zurückgesetzt werden müssen
 func (p *Publisher) checkAndResetCounters() {
-	now := time.Now()
+	now := timezone.Now()
 	
 	for camera, lastUpdate := range p.personLastUpdate {
 		// Wenn der letzte Update mehr als 30 Sekunden her ist, Zähler zurücksetzen
@@ -177,12 +201,19 @@ func (p *Publisher) PublishMatchResult(face models.Face, match models.Match, ima
 	}
 	
 	// Event erstellen
+	// Zeit mit expliziter Zeitzone formatieren (ISO 8601)
+	now := timezone.Now()
+	isoTime := now.Format(time.RFC3339) // Format: 2025-05-18T11:26:42+02:00
+	
+	// Bereinigten Kameranamen verwenden
+	cleanCamera := cleanCameraName(image.Source)
+	
 	event := MatchEvent{
 		ID:        fmt.Sprintf("%d", image.ID),
 		Duration:  duration,
-		Timestamp: time.Now(),
+		Timestamp: isoTime,
 		Attempts:  attempts,
-		Camera:    image.Source,
+		Camera:    cleanCamera,
 		Zones:     []string{},
 		Match:     matchInfo,
 	}
@@ -203,8 +234,11 @@ func (p *Publisher) PublishMatchResult(face models.Face, match models.Match, ima
 
 // PublishCameraResult veröffentlicht ein Kamera-Ereignis mit allen Matches
 func (p *Publisher) PublishCameraResult(image *models.Image, matches []models.Match, duration float64, attempts int) error {
-	// Kamera-Topic
-	topic := fmt.Sprintf("double-take/cameras/%s", image.Source)
+	// Bereinigten Kameranamen verwenden
+	cleanCamera := cleanCameraName(image.Source)
+	
+	// Kamera-Topic mit bereinigtem Namen
+	topic := fmt.Sprintf("double-take/cameras/%s", cleanCamera)
 	
 	// Listen für die verschiedenen Ergebnistypen
 	matchItems := make([]*Match, 0)
@@ -308,12 +342,16 @@ func (p *Publisher) PublishCameraResult(image *models.Image, matches []models.Ma
 	}
 	
 	// Event erstellen
+	// Zeit mit expliziter Zeitzone formatieren (ISO 8601)
+	now := timezone.Now()
+	isoTime := now.Format(time.RFC3339) // Format: 2025-05-18T11:26:42+02:00
+	
 	event := CameraEvent{
 		ID:        fmt.Sprintf("%d", image.ID),
 		Duration:  duration,
-		Timestamp: time.Now(),
+		Timestamp: isoTime,
 		Attempts:  attempts,
-		Camera:    image.Source,
+		Camera:    cleanCamera,
 		Zones:     []string{},
 		Matches:   matchItems,
 		Misses:    missItems,
@@ -374,26 +412,50 @@ func (p *Publisher) UpdateRecognizedPerson(identityName string, camera string, c
 	// 1. Aktualisiere den Wert des Haupt-Sensors mit Namen, Kamera und Zeitstempel
 	personTopic := "double-take/person"
 	
-	// Aktuelle Zeit für den Timestamp
-	timestamp := time.Now()
+	// Versuche, die originale Bildzeit zu finden anstatt time.Now() zu verwenden
+	timestamp := timezone.Now()
 	formattedTime := timestamp.Format("15:04")
 	
-	// Extrahiere sauberen Kameranamen - entferne Präfixe und Suffixe
+	// Versuche, ein Bild mit der angegebenen ID zu laden, um den tatsächlichen Zeitstempel zu erhalten
+	var image models.Image
+	var err error
+	
+	// Pfad zur Datenbank über Umgebungsvariable holen
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "data/double-take.db"
+	}
+	
+	// Temporäre DB-Verbindung nur für diesen Zweck
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	if err == nil {
+		if err := db.First(&image, imageID).Error; err == nil && !image.Timestamp.IsZero() {
+			// Verwende den tatsächlichen Zeitstempel des Bildes
+			timestamp = image.Timestamp
+			formattedTime = timestamp.Format("15:04")
+			log.Infof("Verwende tatsächlichen Zeitstempel aus Bild: %s", formattedTime)
+		}
+	}
+	
+	// Kameranamen korrekt extrahieren
+	// Extrahiere den tatsächlichen Kameranamen ohne ihn zu sehr zu verändern
 	cleanCamera := camera
 	
-	// Entferne "frigate_" oder "frigate/" Präfix
-	if strings.HasPrefix(cleanCamera, "frigate_") {
-		cleanCamera = strings.TrimPrefix(cleanCamera, "frigate_")
-	} else if strings.HasPrefix(cleanCamera, "frigate/") {
-		cleanCamera = strings.TrimPrefix(cleanCamera, "frigate/")
+	// Wenn der Kameraname "frigate" enthält, versuche Metadaten aus dem Bild zu verwenden
+	if cleanCamera == "frigate" || strings.HasPrefix(cleanCamera, "frigate_") || strings.HasPrefix(cleanCamera, "frigate/") {
+		// Versuche, die tatsächliche Kamera aus den Metadaten zu extrahieren
+		if err == nil && image.ID > 0 {
+			// Versuche die SourceData zu extrahieren, falls vorhanden
+			var metadataJSON map[string]interface{}
+			string_data := string(image.SourceData)
+			if string_data != "" && json.Unmarshal([]byte(string_data), &metadataJSON) == nil {
+				if cameraName, ok := metadataJSON["camera"].(string); ok && cameraName != "" {
+					cleanCamera = cameraName
+					log.Infof("Verwende Kameranamen aus Bild-Metadaten: %s", cleanCamera)
+				}
+			}
+		}
 	}
-	
-	// Entferne "_camera" Suffix
-	if strings.HasSuffix(cleanCamera, "_camera") {
-		cleanCamera = strings.TrimSuffix(cleanCamera, "_camera")
-	}
-	
-	// Auf jeden Fall den tatsächlichen Kameranamen beibehalten, keine generische Ersetzung
 	
 	// Kürzeres Format für den Sensorwert, nur mit Stunde:Minute
 	// Format: "Name (Kamera 15:04)"
@@ -470,7 +532,7 @@ func (p *Publisher) UpdateRecognizedPerson(identityName string, camera string, c
 	}
 
 	// 3. Aktualisiere das Kamera-Bild - mit Zeitstempel, um Caching zu verhindern
-	timestampStr := fmt.Sprintf("%d", time.Now().UnixNano()/int64(time.Millisecond))
+	timestampStr := fmt.Sprintf("%d", timezone.Now().UnixNano()/int64(time.Millisecond))
 	imageTopic := fmt.Sprintf("%s/image", personTopic)
 	
 	// Zusätzlich ein Topic mit Zeitstempel, das Home Assistant zwingt, das Vorschaubild zu aktualisieren
@@ -503,14 +565,14 @@ func (p *Publisher) UpdateRecognizedPerson(identityName string, camera string, c
 		maxSize := 50 * 1024
 		processedImageBytes := imageBytes
 		
-		// Wenn das Bild zu groß ist, verwenden wir eine höhere JPEG-Kompression
+		// Wenn das Bild zu groß ist (> 50KB), müssen wir es komprimieren
 		if size > maxSize {
-			log.Infof("Image too large for MQTT payload, compressing it: %d bytes", size)
+			log.Infof("Image too large (%d bytes), attempting to compress", size)
 			
-			// Bild dekodieren
-			img, _, decErr := image.Decode(bytes.NewReader(imageBytes))
-			if decErr != nil {
-				log.Warnf("Failed to decode image for compression: %v", decErr)
+			// Versuche das Bild zu dekodieren
+			img, err := jpeg.Decode(bytes.NewReader(imageBytes))
+			if err != nil {
+				log.Warnf("Failed to decode image for compression: %v", err)
 			} else {
 				// Stark komprimiertes JPEG erzeugen
 				buf := new(bytes.Buffer)
@@ -607,10 +669,12 @@ func (p *Publisher) updatePersonCounter(camera string) {
 	p.personCounters[camera] = counter
 	
 	// Zeitstempel aktualisieren
-	p.personLastUpdate[camera] = time.Now()
+	p.personLastUpdate[camera] = timezone.Now()
 	
 	// Zähler veröffentlichen
-	topic := fmt.Sprintf("double-take/cameras/%s/person", camera)
+	// Bereinigten Kameranamen verwenden
+	cleanCamera := cleanCameraName(camera)
+	topic := fmt.Sprintf("double-take/cameras/%s/person", cleanCamera)
 	if err := p.mqttClient.Publish(topic, fmt.Sprintf("%d", counter)); err != nil {
 		log.Errorf("Failed to publish person counter for camera %s: %v", camera, err)
 	}

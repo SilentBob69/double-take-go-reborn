@@ -192,7 +192,58 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		}
 	}
 
-	// Prüfen, ob wir ein bestehendes Bild verwenden sollen oder ein neues erstellen
+	// 5. OpenCV-Vorfilterung durchführen, falls aktiviert
+	var allMatches []models.Match
+	var opencvPersons []opencv.DetectedPerson
+	var hasPersons = true // Standardmäßig nehmen wir an, dass Personen vorhanden sind
+
+	// OpenCV-Personenerkennung als strikter Vorfilter verwenden, wenn aktiviert
+	if p.opencvService != nil && p.cfg.OpenCV.Enabled {
+		log.Debugf("Verwende OpenCV-Personenerkennung als Vorfilter für: %s", imagePath)
+		
+		// Prüfen, ob im Bild Personen vorhanden sind
+		var opencvErr error
+		hasPersons, opencvPersons, opencvErr = p.opencvService.DetectPersons(ctx, imagePath)
+		
+		if opencvErr != nil {
+			log.Warnf("OpenCV-Personenerkennung fehlgeschlagen: %v. Fahre mit CompreFace fort.", opencvErr)
+			// Bei Fehlern in der Vorfilterung trotzdem mit CompreFace fortfahren
+		} else if !hasPersons {
+			// Keine Personen erkannt - Verarbeitung komplett überspringen
+			log.Infof("OpenCV: Keine Personen im Bild erkannt, Verarbeitung wird komplett übersprungen: %s", imagePath)
+			return nil, nil // Bild nicht speichern und keine weitere Verarbeitung durchführen
+		} else {
+			// Personen erkannt - Metadaten speichern und mit CompreFace fortfahren
+			log.Infof("OpenCV: %d Personen im Bild erkannt, fahre mit CompreFace fort: %s", len(opencvPersons), imagePath)
+			
+			// Erkannte Personen in den Metadaten speichern
+			personRects := make([]map[string]interface{}, 0, len(opencvPersons))
+			for _, person := range opencvPersons {
+				personRects = append(personRects, map[string]interface{}{
+					"x_min": person.Rectangle.Min.X,
+					"y_min": person.Rectangle.Min.Y,
+					"x_max": person.Rectangle.Max.X,
+					"y_max": person.Rectangle.Max.Y,
+					"confidence": person.Confidence,
+				})
+			}
+			
+			// Metadaten zum Bild hinzufügen
+			metadataJSON := map[string]interface{}{
+				"opencv_processed": true,
+				"persons_detected": true,
+				"person_count": len(opencvPersons),
+				"person_rects": personRects,
+			}
+			
+			if metadataBytes, err := json.Marshal(metadataJSON); err == nil {
+				image.SourceData = datatypes.JSON(metadataBytes)
+			}
+		}
+	}
+
+	// 6. Bild nur in der Datenbank speichern, wenn es verarbeitet werden soll
+	// (also wenn OpenCV nicht aktiviert ist ODER Personen erkannt wurden)
 	if options.ExistingImageID > 0 {
 		// Vorhandenes Bild verwenden - wir müssen es aus der Datenbank laden
 		log.Infof("Verwende existierendes Bild mit ID: %d", options.ExistingImageID)
@@ -207,72 +258,9 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		}
 		log.Infof("Created new image record ID: %d", image.ID)
 	}
-
-	// 5. OpenCV-Vorfilterung und CompreFace-Verarbeitung, falls aktiviert
-	var allMatches []models.Match
-	var opencvPersons []opencv.DetectedPerson
-	var hasPersons = true // Standardmäßig nehmen wir an, dass Personen vorhanden sind
-	var skipCompreFace = false
 	
-	// OpenCV-Personenerkennung als Vorfilter verwenden, wenn aktiviert
-	if p.opencvService != nil && p.cfg.OpenCV.Enabled {
-		log.Debugf("Verwende OpenCV-Personenerkennung als Vorfilter für: %s", imagePath)
-		
-		// Prüfen, ob im Bild Personen vorhanden sind
-		var opencvErr error
-		hasPersons, opencvPersons, opencvErr = p.opencvService.DetectPersons(ctx, imagePath)
-		
-		if opencvErr != nil {
-			log.Warnf("OpenCV-Personenerkennung fehlgeschlagen: %v. Fahre mit CompreFace fort.", opencvErr)
-			// Bei Fehlern in der Vorfilterung trotzdem mit CompreFace fortfahren
-		} else if !hasPersons {
-			log.Infof("OpenCV: Keine Personen im Bild erkannt, CompreFace-Verarbeitung wird übersprungen: %s", imagePath)
-			skipCompreFace = true
-			
-			// In den Metadaten vermerken, dass keine Personen erkannt wurden
-			metadataJSON := map[string]interface{}{
-				"opencv_processed": true,
-				"persons_detected": false,
-			}
-			if metadataBytes, err := json.Marshal(metadataJSON); err == nil {
-				image.SourceData = datatypes.JSON(metadataBytes)
-				if err := p.db.Save(&image).Error; err != nil {
-					log.Warnf("Konnte Bild-Metadaten nicht aktualisieren: %v", err)
-				}
-			}
-		} else {
-			log.Infof("OpenCV: %d Personen im Bild erkannt, fahre mit CompreFace-Gesichtserkennung fort: %s", len(opencvPersons), imagePath)
-			
-			// Erkannte Personen in den Metadaten speichern
-			personRects := make([]map[string]interface{}, 0, len(opencvPersons))
-			for _, person := range opencvPersons {
-				personRects = append(personRects, map[string]interface{}{
-					"x_min": person.Rectangle.Min.X,
-					"y_min": person.Rectangle.Min.Y,
-					"x_max": person.Rectangle.Max.X,
-					"y_max": person.Rectangle.Max.Y,
-					"confidence": person.Confidence,
-				})
-			}
-			
-			metadataJSON := map[string]interface{}{
-				"opencv_processed": true,
-				"persons_detected": true,
-				"person_count": len(opencvPersons),
-				"person_rects": personRects,
-			}
-			
-			if metadataBytes, err := json.Marshal(metadataJSON); err == nil {
-				image.SourceData = datatypes.JSON(metadataBytes)
-				if err := p.db.Save(&image).Error; err != nil {
-					log.Warnf("Konnte Bild-Metadaten nicht aktualisieren: %v", err)
-				}
-			}
-		}
-	}
-	
-	// CompreFace nur verwenden, wenn diese aktiviert ist UND der OpenCV-Personendetektor keinen Grund zum Überspringen gegeben hat
-	if p.cfg.CompreFace.Enabled && p.compreface != nil && !skipCompreFace {
+	// 7. CompreFace nur verwenden, wenn aktiviert
+	if p.cfg.CompreFace.Enabled && p.compreface != nil {
 		// CompreFace-Verarbeitung durchführen
 		log.Infof("Processing image %s with CompreFace", imagePath)
 		var processErr error // Lokale err-Variable für diesen Bereich
@@ -628,6 +616,9 @@ func (p *ImageProcessor) processNewFrigateEvent(ctx context.Context, event *frig
 		})
 		if processErr != nil {
 			log.Warnf("Fehler bei der Verarbeitung des Bildes %s: %v", fullPath, processErr)
+		} else if image == nil {
+			// Wenn OpenCV keine Person gefunden hat, ist image nil, aber kein Fehler
+			log.Infof("Frigate-Event-Bild %d von %d übersprungen (keine Person erkannt): %s", i+1, len(snapshotPaths), localPath)
 		} else {
 			// Das verarbeitete Bild zur Liste hinzufügen für das spätere SSE-Event
 			processedImages = append(processedImages, *image)
@@ -825,13 +816,19 @@ func (p *ImageProcessor) processUpdateFrigateEvent(ctx context.Context, event *f
 
 	// Bild zur Verarbeitung an den Worker-Pool übergeben
 	// Dies stellt sicher, dass Karten erst nach der CompreFace-Verarbeitung erstellt werden
-	_, processErr := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
+	processedImage, processErr := p.ProcessImage(ctx, fullPath, "frigate", ProcessingOptions{
 		DetectFaces:    true,
 		RecognizeFaces: true,
 		Metadata:       metadata,
 	})
+	
 	if processErr != nil {
 		return fmt.Errorf("Fehler bei der Bildverarbeitung: %w", processErr)
+	} else if processedImage == nil {
+		// Wenn OpenCV aktiviert ist und keine Person erkannt wurde, wird nil zurückgegeben
+		// Das ist kein Fehler, sondern ein normaler Filterungsfall
+		log.Infof("Frigate Update-Event-Bild übersprungen (keine Person erkannt): %s", localPath)
+		return nil
 	}
 
 	log.Infof("Frigate Update-Event-Bild verarbeitet: %s", localPath)

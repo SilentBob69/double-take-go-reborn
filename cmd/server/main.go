@@ -23,6 +23,7 @@ import (
 	"double-take-go-reborn/internal/integrations/mqtt"
 	"double-take-go-reborn/internal/server/sse"
 	"double-take-go-reborn/internal/services/cleanup"
+	"double-take-go-reborn/internal/util/timezone"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -58,7 +59,12 @@ func main() {
 			log.Warnf("Failed to set timezone to %s: %v, using UTC", cfg.Server.Timezone, err)
 		} else {
 			time.Local = loc
+			// Initialisiere auch unsere eigene Zeitzonenfunktionalität
+			timezone.Initialize()
 		}
+	} else {
+		// Initialisiere die Zeitzonenfunktionalität mit Standardwerten
+		timezone.Initialize()
 	}
 
 	// 4. Datenbankverbindung initialisieren
