@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"double-take-go-reborn/internal/util/timezone"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -487,7 +488,7 @@ func (h *WebHandler) handleTrainCompreFace(c *gin.Context) {
 		"Title":       "CompreFace anlernen", // Wird im Template übersetzt
 		"Image":       image,
 		"Identities":  identities,
-		"CurrentYear": time.Now().Year(),
+		"CurrentYear": timezone.Now().Year(),
 	}
 
 	// Template rendern
@@ -570,16 +571,16 @@ func (h *WebHandler) handleIndex(c *gin.Context) {
 	var startDate time.Time
 	switch daterange {
 		case "today":
-			today := time.Now().Truncate(24 * time.Hour) // Heute 00:00
+			today := timezone.Now().Truncate(24 * time.Hour) // Heute 00:00
 			startDate = today
 		case "yesterday":
-			yesterday := time.Now().Truncate(24 * time.Hour).Add(-24 * time.Hour) // Gestern 00:00
+			yesterday := timezone.Now().Truncate(24 * time.Hour).Add(-24 * time.Hour) // Gestern 00:00
 			startDate = yesterday
 		case "week":
-			weekStart := time.Now().Truncate(24 * time.Hour).Add(-7 * 24 * time.Hour) // Vor 7 Tagen 00:00
+			weekStart := timezone.Now().Truncate(24 * time.Hour).Add(-7 * 24 * time.Hour) // Vor 7 Tagen 00:00
 			startDate = weekStart
 		case "month":
-			monthStart := time.Now().Truncate(24 * time.Hour).Add(-30 * 24 * time.Hour) // Vor 30 Tagen 00:00
+			monthStart := timezone.Now().Truncate(24 * time.Hour).Add(-30 * 24 * time.Hour) // Vor 30 Tagen 00:00
 			startDate = monthStart
 	}
 	
@@ -975,7 +976,7 @@ func (h *WebHandler) handleSSE(c *gin.Context) {
 			case <-ticker.C:
 				// Kommentar-Nachricht senden, die als Ping dient
 				// und vom Browser ignoriert wird
-				if _, err := fmt.Fprintf(c.Writer, ": ping %v\n\n", time.Now().Unix()); err != nil {
+				if _, err := fmt.Fprintf(c.Writer, ": ping %v\n\n", timezone.Now().Unix()); err != nil {
 					cancel()
 					return
 				}

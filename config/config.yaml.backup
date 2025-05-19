@@ -38,7 +38,7 @@ opencv:
   use_gpu: true
   person_detection:
     method: "dnn"  # DNN-Methode für GPU-Beschleunigung
-    confidence_threshold: 0.75
+    confidence_threshold: 0.85
     scale_factor: 1.05
     min_neighbors: 4
     min_size_width: 96
@@ -55,8 +55,8 @@ compreface:
   verification_api_url: "http://10.100.0.3:8100/api/v1/verification/verify"
   recognition_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
   detection_api_key: "83c64961-b02c-4fe2-8fc1-bf39ac58c9f5"
-  detection_threshold: 0.6
-  recognition_threshold: 0.6
+  detection_threshold: 0.7
+  recognition_threshold: 0.7
   limit: 0
   status_check_interval: 1
   status_check_timeout: 30

@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"time"
 
+	"double-take-go-reborn/internal/util/timezone"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -47,8 +49,8 @@ func (h *APIHandler) RegisterRoutes(router *gin.RouterGroup) {
 	// Bilder-Endpunkte
 	router.GET("/images", h.ListImages)
 	router.GET("/images/:id", h.GetImage)
-	router.DELETE("/images/:id", h.DeleteImage)
 	router.DELETE("/images/all", h.DeleteAllImages)
+	router.DELETE("/images/:id", h.DeleteImage)
 	router.POST("/images/:id/recognize", h.RecognizeImage)
 
 	// Identitäts-Endpunkte
@@ -93,7 +95,7 @@ func (h *APIHandler) ProcessImage(c *gin.Context) {
 	}
 
 	// Temporären Dateinamen generieren
-	timestamp := time.Now().Format("20060102_150405")
+	timestamp := timezone.Now().Format("20060102_150405")
 	filename := fmt.Sprintf("%s_%s", timestamp, header.Filename)
 	filePath := filepath.Join(h.cfg.Server.SnapshotDir, filename)
 
@@ -283,6 +285,22 @@ func (h *APIHandler) DeleteAllImages(c *gin.Context) {
 	// SSE-Funktion ist hier nicht verfügbar, Client muss die UI selbst aktualisieren
 	log.Infof("Deleted all images: %d", deleted)
 
+	// Optional: Verwaiste Identitäten (ohne zugehörige Matches) löschen, wenn der Parameter gesetzt ist
+	if c.Query("cleanup_identities") == "true" {
+		result := h.db.Exec(`
+			DELETE FROM identities 
+			WHERE id NOT IN (
+				SELECT DISTINCT identity_id FROM matches
+			)
+		`)
+		
+		if result.Error != nil {
+			log.Warnf("Failed to clean up unused identities: %v", result.Error)
+		} else {
+			log.Infof("Removed %d unused identities", result.RowsAffected)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "All images deleted successfully",
 		"count":   deleted,
@@ -460,7 +478,7 @@ func (h *APIHandler) AddIdentityExample(c *gin.Context) {
 func (h *APIHandler) GetStatus(c *gin.Context) {
 	status := gin.H{
 		"status": "ok",
-		"timestamp": time.Now(),
+		"timestamp": timezone.Now(),
 		"compreface": gin.H{
 			"enabled": h.cfg.CompreFace.Enabled,
 		},
@@ -899,7 +917,7 @@ func (h *APIHandler) TrainCompreFaceWithFace(c *gin.Context) {
 	}
 
 	// 2. Dateiname für CompreFace generieren (muss einzigartig sein)
-	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+	timestamp := timezone.Now().UnixNano() / int64(time.Millisecond)
 	filename := fmt.Sprintf("face_%d_%d_%s.jpg", face.ID, timestamp, filepath.Base(imageFilePath))
 
 	// 3. Bild als Beispiel für die neue Identität zu CompreFace hinzufügen

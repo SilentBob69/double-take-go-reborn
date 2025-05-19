@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"double-take-go-reborn/internal/core/models"
+	"double-take-go-reborn/internal/util/timezone"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -120,7 +121,7 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
-			clientInfoMap[client] = &clientInfo{lastActivity: time.Now()}
+			clientInfoMap[client] = &clientInfo{lastActivity: timezone.Now()}
 			clientCount := len(h.clients)
 			h.mu.Unlock()
 			log.Infof("SSE client registered. Total clients: %d", clientCount)
@@ -146,7 +147,7 @@ func (h *Hub) Run() {
 					// Nachricht erfolgreich gesendet
 					// Aktualisiere den Zeitstempel der letzten Aktivität
 					if info, ok := clientInfoMap[client]; ok {
-						info.lastActivity = time.Now()
+						info.lastActivity = timezone.Now()
 					}
 				default:
 					// Client-Kanal ist voll oder geschlossen
@@ -161,7 +162,7 @@ func (h *Hub) Run() {
 		case <-cleanupTicker.C:
 			// Prüfe und entferne inaktive Clients (älter als 30 Minuten)
 			h.mu.Lock()
-			inactiveThreshold := time.Now().Add(-30 * time.Minute)
+			inactiveThreshold := timezone.Now().Add(-30 * time.Minute)
 			removed := 0
 			
 			for client, info := range clientInfoMap {
@@ -262,7 +263,7 @@ func (h *Hub) BroadcastNewImage(image models.Image, snapshotURL string, matches 
 	
 	sseEvent := SseEvent{
 		Type:      eventType,
-		Timestamp: time.Now(),
+		Timestamp: timezone.Now(),
 		Data:      imageData,
 	}
 	
@@ -316,7 +317,7 @@ func (h *Hub) BroadcastNewGroup(eventID, source, camera, label, zone string, ima
 	// SSE-Event erstellen
 	sseEvent := SseEvent{
 		Type:      EventNewGroup,
-		Timestamp: time.Now(),
+		Timestamp: timezone.Now(),
 		Data:      groupData,
 	}
 	

@@ -15,6 +15,7 @@ require (
 	gocv.io/x/gocv v0.36.0 // Added für OpenCV-Integration
 	golang.org/x/text v0.24.0 // Added für Sprachunterstützung
 	gorm.io/datatypes v1.2.5
+	gorm.io/driver/sqlite v1.5.7 // Added für SQLite-Zugriff in Home Assistant Integration
 	gorm.io/gorm v1.26.0
 )
 

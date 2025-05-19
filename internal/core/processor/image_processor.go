@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"double-take-go-reborn/internal/util/timezone"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -149,13 +150,13 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		contentHash, err = calculateFileHash(imagePath)
 		if err != nil {
 			log.Warnf("Konnte Hash für %s nicht berechnen: %v, verwende Fallback", imagePath, err)
-			contentHash = fmt.Sprintf("fallback:%s:%d", filepath.Base(imagePath), time.Now().UnixNano())
+			contentHash = fmt.Sprintf("fallback:%s:%d", filepath.Base(imagePath), timezone.Now().UnixNano())
 		}
 	}
 
 	image := models.Image{
 		FilePath:    relPath,
-		Timestamp:   time.Now(),
+		Timestamp:   timezone.Now(),
 		ContentHash: contentHash,
 		Source:      source,
 	}

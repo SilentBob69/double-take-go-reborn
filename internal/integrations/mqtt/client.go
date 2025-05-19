@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"double-take-go-reborn/internal/util/timezone"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -102,7 +103,7 @@ func (c *Client) Start() error {
 		clientID = "dt_" + clientID
 	}
 	// Timestamp anhängen, um bei Neustarts eine eindeutige Client-ID zu haben
-	clientID = fmt.Sprintf("%s_%d", clientID, time.Now().Unix())
+	clientID = fmt.Sprintf("%s_%d", clientID, timezone.Now().Unix())
 	opts.SetClientID(clientID)
 	
 	// Optionale Authentifizierung
@@ -137,7 +138,7 @@ func (c *Client) Start() error {
 	
 	// Will-Nachricht (Last Will and Testament) einrichten
 	willTopic := fmt.Sprintf("double-take/status/%s", clientID)
-	willPayload := []byte("{\"status\": \"offline\", \"timestamp\": \"" + time.Now().Format(time.RFC3339) + "\"}")
+	willPayload := []byte("{\"status\": \"offline\", \"timestamp\": \"" + timezone.Now().Format(time.RFC3339) + "\"}")
 	opts.SetWill(willTopic, string(willPayload), 0, false) // QoS 0 und nicht retained für weniger Overhead
 	
 	// Client erstellen
@@ -200,7 +201,7 @@ func (c *Client) monitorConnection() {
 				log.Warn("MQTT connection lost, trying to reconnect...")
 				c.isConnected = false
 				payload := fmt.Sprintf("{\"timestamp\":\"%s\",\"client_id\":\"%s\"}", 
-					time.Now().Format(time.RFC3339), c.config.ClientID)
+					timezone.Now().Format(time.RFC3339), c.config.ClientID)
 				
 				heartbeatTopic := fmt.Sprintf("%s/heartbeat", c.config.TopicPrefix)
 				if token := c.client.Publish(heartbeatTopic, 0, false, payload); token.Wait() && token.Error() != nil {

@@ -248,6 +248,15 @@ Depending on your hardware, different optimized Docker images are provided:
 - **AMD GPU Version**: OpenCL-accelerated variant for AMD graphics cards
 - **Apple Silicon Version**: Specially optimized for M1/M2/M3 processors
 
+### Configuration System
+
+The configuration system is structured as follows:
+
+- `/config/config.yaml` - The actively used configuration file
+- `/config/config.example.yaml` - An example configuration for GitHub
+- `/config/hardware/` - Standard base configurations for different hardware types
+- `/config/my-hardware/` - Personal, customized configurations for your hardware
+
 ### Switching Hardware Platforms
 
 Double-Take Go Reborn includes a convenient script to switch between hardware platforms:
@@ -276,6 +285,16 @@ The script will:
 4. Optionally display container logs
 
 Before using, make sure to customize your personal configuration files in `config/my-hardware/` with the appropriate API keys and connection details.
+
+#### Important Note on Configuration Management
+
+When editing the active configuration (`config/config.yaml`), it is important to know that:
+
+1. This file will be **overwritten** by the `switch-config.sh` script when you switch between hardware configurations
+2. Changes to the active configuration will be lost if they are not also applied to the corresponding files under `config/my-hardware/`
+3. The hardware-specific configuration files (`config/my-hardware/config-*.yaml`) are the "single source of truth"
+
+**Recommendation**: Always edit the files in `config/my-hardware/` directly when you want to make permanent changes.
 
 ### Configuration Options
 

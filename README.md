@@ -58,6 +58,43 @@ Double-Take Go Reborn unterstützt folgende Hardwarekonfigurationen:
 
 Jede Plattform bietet optimierte OpenCV-Integration für die jeweilige Hardware und ist mit einer passenden `docker-compose.yml` konfiguriert. Die Dateien enthalten ausführliche Kommentare zur Konfiguration.
 
+### Konfigurationssystem
+
+Das Konfigurationssystem ist wie folgt strukturiert:
+
+- `/config/config.yaml` - Die aktiv verwendete Konfigurationsdatei
+- `/config/config.example.yaml` - Eine Beispielkonfiguration für GitHub
+- `/config/hardware/` - Standard-Basiskonfigurationen für verschiedene Hardware-Typen
+- `/config/my-hardware/` - Persönliche, angepasste Konfigurationen für Ihre Hardware
+
+#### Konfigurationswechsel
+
+Um zwischen Hardware-Konfigurationen zu wechseln, verwenden Sie das `switch-config.sh` Skript:
+
+```bash
+# Status der aktuellen Konfiguration anzeigen
+./scripts/switch-config.sh --status
+
+# Verfügbare Konfigurationen auflisten
+./scripts/switch-config.sh --list
+
+# Zu einer spezifischen Hardware wechseln
+./scripts/switch-config.sh nvidia   # NVIDIA GPU-Konfiguration
+./scripts/switch-config.sh cpu      # CPU-Konfiguration
+./scripts/switch-config.sh amd      # AMD GPU-Konfiguration
+./scripts/switch-config.sh apple    # Apple Silicon-Konfiguration
+```
+
+#### Wichtiger Hinweis zum Konfigurationsmanagement
+
+Beim Bearbeiten der aktiven Konfiguration (`config/config.yaml`) ist es wichtig zu wissen, dass:
+
+1. Diese Datei durch das `switch-config.sh` Skript **überschrieben** wird, wenn Sie zwischen Hardware-Konfigurationen wechseln
+2. Änderungen an der aktiven Konfiguration gehen verloren, wenn sie nicht auch in die entsprechenden Dateien unter `config/my-hardware/` übernommen werden
+3. Die Hardware-spezifischen Konfigurationsdateien (`config/my-hardware/config-*.yaml`) sind die "Single Source of Truth"
+
+**Empfehlung**: Bearbeiten Sie immer die Dateien in `config/my-hardware/` direkt, wenn Sie dauerhafte Änderungen vornehmen möchten.
+
 ### Dokumentation
 
 - 🇩🇪 **Deutsch**

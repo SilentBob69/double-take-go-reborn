@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"double-take-go-reborn/internal/util/timezone"
 	"fmt"
 	"runtime"
 	"sync"
@@ -82,7 +83,7 @@ func GetCPUUsage() float64 {
 	}
 	
 	// Cache aktualisieren
-	lastCPUTime = time.Now()
+	lastCPUTime = timezone.Now()
 	lastCPUUsage = usage
 	
 	return usage
@@ -99,7 +100,7 @@ func GetSystemStats(workerPool *processor.WorkerPool) *SystemStats {
 		CPUUsage:     GetCPUUsage(),
 		MemoryAlloc:  memStats.Alloc,
 		MemorySys:    memStats.Sys,
-		Timestamp:    time.Now(),
+		Timestamp:    timezone.Now(),
 	}
 	
 	// Worker-Pool-Statistiken, falls verfügbar

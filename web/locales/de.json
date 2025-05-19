@@ -76,6 +76,7 @@
     "delete_all": "Alle Bilder löschen",
     "delete_confirm_single": "Sind Sie sicher, dass Sie das Bild löschen möchten?",
     "delete_confirm_all": "Sind Sie sicher, dass Sie ALLE Bilder löschen möchten?",
+    "delete_confirm_title": "Alle Bilder löschen",
     "delete_error_single": "Fehler beim Löschen des Bildes",
     "delete_error_all": "Fehler beim Löschen aller Bilder",
     "deleted_success_single": "Bild erfolgreich gelöscht",
@@ -136,7 +137,10 @@
     "delete_confirm": "Sind Sie sicher, dass Sie die Identität löschen möchten",
     "delete_warning": "Diese Aktion kann nicht rückgängig gemacht werden. Alle Zuordnungen zu dieser Identität werden entfernt.",
     "correct_match": "Treffer korrigieren", 
-    "assign_face": "Gesicht zuordnen"
+    "assign_face": "Gesicht zuordnen",
+    "cleanup_orphaned": "Verwaiste Identitäten bereinigen",
+    "cleanup_orphaned_help": "Löscht Identitäten, die keinem Gesicht mehr zugeordnet sind.",
+    "orphaned_removed": "Verwaiste Identitäten wurden entfernt"
   },
   "pagination": {
     "previous": "Zurück",

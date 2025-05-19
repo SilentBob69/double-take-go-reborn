@@ -138,7 +138,7 @@
                                 <i class="bi bi-x-circle-fill me-1"></i> {{ t "common.reset" }}
                             </a>
                         </div>
-                        <button id="deleteAllButton" class="btn btn-danger" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_delete_all" }}">
+                        <button type="button" id="deleteAllButton" class="btn btn-danger" data-bs-toggle="tooltip" data-bs-title="{{ t "images.tooltip_delete_all" }}">
                             <i class="bi bi-trash3-fill me-1"></i> {{ t "images.delete_all" }}
                         </button>
                     </div>
@@ -443,9 +443,7 @@
                         const imageId = recognizeButton.dataset.imageId;
                         recognizeImage(imageId);
                      } else if (deleteAllButton) { // Handle delete all
-                        if (confirm(translations.deleteAllConfirm)) {
-                            deleteAllImages();
-                        }
+                        deleteAllImages(); // Dies zeigt das Modal mit der Checkbox
                     } else if (editMatchButton) {
                         const matchId = editMatchButton.dataset.matchId;
                         handleEditRequest('match', matchId);
@@ -744,41 +742,123 @@
                 });
         }
 
-        function deleteAllImages() {
-            fetch('/api/images/all', { method: 'DELETE' })
+        // Separate Handler-Funktion für das Delete-All-Bestätigungsformular
+        function confirmDeleteAllHandler(fromFallback = false) {
+            console.log('confirmDeleteAllHandler aufgerufen, fromFallback:', fromFallback);
+            
+            // Wenn das Modal verwendet wurde (nicht Fallback)
+            let cleanupIdentities = false;
+            if (!fromFallback) {
+                // Aktives Modal suchen und Instanz holen
+                const modalElement = document.getElementById('deleteAllModal');
+                const modalInstance = bootstrap.Modal.getInstance(modalElement);
+                
+                // Prüfen, ob die Checkbox zum Bereinigen verwaister Identitäten aktiviert ist
+                cleanupIdentities = document.getElementById('cleanupIdentitiesCheckbox').checked;
+                
+                // Modal schließen
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            } else {
+                // Im Fallback-Modus immer verwaiste Identitäten bereinigen
+                cleanupIdentities = true;
+            }
+            
+            console.log('Lösche alle Bilder, bereinige verwaiste Identitäten:', cleanupIdentities);
+            
+            // URL mit optionalem Query-Parameter
+            const url = cleanupIdentities ? '/api/images/all?cleanup_identities=true' : '/api/images/all';
+
+            // API-Aufruf zum Löschen aller Bilder
+            fetch(url, { method: 'DELETE' })
                 .then(response => {
                     if (response.ok) {
-                        console.log('All images deleted successfully.');
-                        showToast(translations.success, '{{ t "images.deleted_all" }}', 'success');
-                        // Remove all cards from the items container
-                        const itemsContainer = document.getElementById('items-container');
-                        if(itemsContainer) {
-                            itemsContainer.innerHTML = '';
-                            // Show the 'no images' message
-                            const mainContainer = document.querySelector('.container-fluid');
-                            if (mainContainer) {
-                                const noImagesMsg = document.createElement('p');
-                                noImagesMsg.className = 'text-muted';
-                                noImagesMsg.textContent = '{{ t "no_images_yet" }}';
-                                mainContainer.appendChild(noImagesMsg);
-                            }
-                        }
+                        return response.json(); // Erfolgreiche Antwort als JSON parsen
                     } else {
-                         response.json().then(data => {
-                             console.error('Failed to delete all images:', response.status, data.error);
-                            showToast(translations.error, `{{ t "images.delete_error_all" }}: ${data.error || '{{ t "common.unknown_error" }}'}`, 'error');
-                         }).catch(() => {
-                             console.error('Failed to delete all images:', response.statusText);
-                            showToast(translations.error, '{{ t "common.server_error" }}', 'error');
-                        });
+                        throw response; // Fehlerfall
+                    }
+                })
+                .then(data => {
+                    console.log('All images deleted successfully:', data);
+                    showToast(translations.success, `{{ t "images.deleted_all" }} (${data.count})${cleanupIdentities ? ', {{ t "identities.orphaned_removed" }}' : ''}`, 'success');
+                    
+                    // Remove all cards from the items container
+                    const itemsContainer = document.getElementById('items-container');
+                    if(itemsContainer) {
+                        itemsContainer.innerHTML = '';
+                        // Show the 'no images' message
+                        const emptyMessage = document.createElement('p');
+                        emptyMessage.className = 'text-muted';
+                        emptyMessage.textContent = '{{ t "no_images_yet" }}';
+                        itemsContainer.appendChild(emptyMessage);
                     }
                 })
                 .catch(error => {
-                    console.error('Error during delete all request:', error);
-                    showToast(translations.error, '{{ t "common.network_error" }}', 'error');
-                    alert('Netzwerkfehler beim Löschen aller Bilder. Siehe Konsole.');
+                    if (error.json) {
+                        error.json().then(data => {
+                            console.error('Failed to delete all images:', data.error);
+                            showToast(translations.error, `{{ t "images.delete_error_all" }}: ${data.error || '{{ t "common.unknown_error" }}'}`, 'error');
+                        }).catch(() => {
+                            console.error('Failed to delete all images:', error.statusText);
+                            showToast(translations.error, '{{ t "common.server_error" }}', 'error');
+                        });
+                    } else {
+                        console.error('Error during delete all request:', error);
+                        showToast(translations.error, '{{ t "common.network_error" }}', 'error');
+                    }
                 });
         }
+
+        // Funktion zum Öffnen des Lösch-Modals
+        function deleteAllImages() {
+            console.log('deleteAllImages wurde aufgerufen');
+            
+            // Prüfe ob Bootstrap verfügbar ist
+            if (typeof bootstrap === 'undefined') {
+                console.error('Bootstrap ist nicht geladen!');
+                showToast('Fehler', 'Bootstrap ist nicht geladen. Seite neu laden.', 'error');
+                return;
+            }
+            
+            // Prüfe ob Bootstrap-Modal verfügbar ist
+            if (typeof bootstrap.Modal === 'undefined') {
+                console.error('Bootstrap.Modal ist nicht verfügbar!');
+                showToast('Fehler', 'Bootstrap Modal ist nicht verfügbar', 'error');
+                return;
+            }
+            
+            // Bootstrap-Modal für die Bestätigung öffnen
+            const modalElement = document.getElementById('deleteAllModal');
+            if (modalElement) {
+                console.log('Modal-Element gefunden, zeige an', modalElement);
+                
+                try {
+                    const modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                    console.log('Modal sollte jetzt angezeigt werden');
+                } catch (error) {
+                    console.error('Fehler beim Öffnen des Modals:', error);
+                    showToast('Fehler', 'Konnte das Bestätigungsfenster nicht öffnen', 'error');
+                }
+            } else {
+                console.error('Modal-Element nicht gefunden: #deleteAllModal');
+                // Als Fallback eine einfache Bestätigung verwenden
+                if (confirm(translations.deleteAllConfirm)) {
+                    // Direkt den Handler aufrufen
+                    confirmDeleteAllHandler(true);
+                }
+            }
+        }
+
+        // Event-Listener beim Laden der Seite hinzufügen
+        document.addEventListener('DOMContentLoaded', function() {
+            // Event-Listener für den Bestätigungs-Button im Modal
+            const confirmDeleteAllBtn = document.getElementById('confirmDeleteAll');
+            if (confirmDeleteAllBtn) {
+                confirmDeleteAllBtn.addEventListener('click', confirmDeleteAllHandler);
+            }
+        });
 
         // --- New functions for identity assignment ---
 
@@ -1153,5 +1233,30 @@
     </div>
     <!-- End Identity Assignment Modal -->
 
+    <!-- Modal für "Alle Bilder löschen" Bestätigung -->
+    <div class="modal fade" id="deleteAllModal" tabindex="-1" role="dialog" aria-labelledby="deleteAllModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteAllModalLabel">{{ t "images.delete_confirm_title" }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>{{ t "images.delete_confirm_all" }}</p>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="" id="cleanupIdentitiesCheckbox">
+                        <label class="form-check-label" for="cleanupIdentitiesCheckbox">
+                            {{ t "identities.cleanup_orphaned" }}
+                        </label>
+                        <small class="form-text text-muted d-block">{{ t "identities.cleanup_orphaned_help" }}</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t "common.cancel" }}</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteAll">{{ t "common.delete" }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

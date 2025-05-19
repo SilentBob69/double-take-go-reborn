@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"double-take-go-reborn/internal/util/timezone"
 	"context"
 	"runtime"
 	"sync"
@@ -82,7 +83,7 @@ func (p *WorkerPool) startWorkers() {
 					log.Debugf("Worker %d processing image from %s (active jobs: %d)", 
 						workerID, job.source, jobCount)
 					
-					startTime := time.Now()
+					startTime := timezone.Now()
 					
 					// Bild verarbeiten
 					image, err := p.processor.processImageInternal(

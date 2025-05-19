@@ -359,7 +359,7 @@ func (h *MQTTHandler) processPersonSnapshot(ctx context.Context, topic string, p
 	cameraName := parts[1]
 	
 	// Snapshot-Datei generieren
-	timestamp := time.Now().Format("20060102-150405")
+	timestamp := timezone.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("%s_%s_person.jpg", timestamp, cameraName)
 	
 	// Snapshot-Verzeichnis aus der Konfiguration auslesen
@@ -538,7 +538,7 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 // loggerMiddleware erstellt eine Gin-Middleware für das Logging
 func loggerMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		start := time.Now()
+		start := timezone.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
 		
@@ -546,7 +546,7 @@ func loggerMiddleware() gin.HandlerFunc {
 		c.Next()
 		
 		// Log nach der Bearbeitung
-		end := time.Now()
+		end := timezone.Now()
 		latency := end.Sub(start)
 		
 		if query != "" {
