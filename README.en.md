@@ -43,7 +43,27 @@ If you're looking for a proven and complete solution, we recommend using the ori
 - Optional: Frigate NVR (as an external service to provide camera events)
 - Optional: Home Assistant (for automatic integration of recognition results)
 
-## Quick Start
+## Installation Options
+
+#### ⭐️ RECOMMENDED: Installation with Docker Hub ⭐️
+
+> **[Docker Hub Installation](docs/DOCKERHUB.en.md)** - The quickest and easiest method for most users!  
+> No Git repository required, direct installation from pre-built containers for all supported hardware platforms.
+
+```bash
+# Example: Start CPU version
+docker run -d --name double-take \
+  -p 3000:3000 \
+  -v $(pwd)/config:/config \
+  -v $(pwd)/data:/data \
+  silentbob69/double-take-go-reborn:cpu
+```
+
+Alternatively for developers and advanced users:
+
+* **Installation with Git Repository**: For full control over configuration and development
+
+## Quick Start with Git
 
 1. Clone the repository:
    ```bash
@@ -70,7 +90,7 @@ If you're looking for a proven and complete solution, we recommend using the ori
 
 ## Docker Hub
 
-Double-Take-Go-Reborn is also available as a ready-to-use Docker image on Docker Hub:
+Double-Take-Go-Reborn is available as a ready-to-use Docker image on Docker Hub. For detailed instructions on using these images, see the [Docker Hub Installation Guide](docs/DOCKERHUB.en.md).
 
 ```bash
 # Standard (latest)

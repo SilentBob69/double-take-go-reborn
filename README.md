@@ -21,7 +21,27 @@ Wenn Sie nach einer bewährten und vollständigen Lösung suchen, empfehlen wir 
 
 ## 📘 Für Benutzer
 
-### Schnellstart
+### Installationsmöglichkeiten
+
+#### ⭐️ EMPFOHLEN: Installation mit Docker Hub ⭐️
+
+> **[Docker Hub Installation](docs/DOCKERHUB.md)** - Die schnellste und einfachste Methode für die meisten Benutzer!  
+> Kein Git-Repository erforderlich, direkte Installation aus vorgefertigten Containern für alle unterstützten Hardwareplattformen.
+
+```bash
+# Beispiel: CPU-Version starten
+docker run -d --name double-take \
+  -p 3000:3000 \
+  -v $(pwd)/config:/config \
+  -v $(pwd)/data:/data \
+  silentbob69/double-take-go-reborn:cpu
+```
+
+Alternativ für Entwickler und fortgeschrittene Benutzer:
+
+* **Installation mit Git-Repository**: Für volle Kontrolle über die Konfiguration und Entwicklung
+
+### Schnellstart mit Git
 
 ```bash
 # 1. Repository klonen
@@ -106,6 +126,7 @@ Beim Bearbeiten der aktiven Konfiguration (`config/config.yaml`) ist es wichtig 
   - [OpenCV-Integration](docs/opencv-integration.md)
   
 - 🇬🇧 **English**
+  - [Docker Hub Installation](docs/DOCKERHUB.en.md)
   - [Hardware Platforms](docs/PLATFORMS.en.md)
   - [Migration](docs/MIGRATION.en.md)
   - [API Documentation](docs/API.en.md)
@@ -141,6 +162,7 @@ Beim Bearbeiten der aktiven Konfiguration (`config/config.yaml`) ist es wichtig 
 ### Dokumentation
 
 - 🇩🇪 **Deutsch**
+  - [Docker Hub Installation](docs/DOCKERHUB.md)
   - [Entwicklungsumgebung](docs/DEVELOPMENT.md)
   - [Architektur](docs/ARCHITECTURE.md)
   - [Testen](docs/TESTING.md)
