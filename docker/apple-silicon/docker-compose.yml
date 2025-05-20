@@ -22,10 +22,29 @@ services:
       - TZ=Europe/Berlin  # Zeitzone anpassen falls nötig
     platform: linux/arm64  # Explizite ARM64-Plattformdefinition für Apple Silicon
       
-  # ========================================================================
-  # OPTIONAL: CompreFace-Services für Gesichtserkennung
-  # Entkommentiere diese Blöcke, wenn du die Gesichtserkennung nutzen möchtest
-  # Hinweis: Die OpenCV-Integration funktioniert auch ohne CompreFace!
+  # InsightFace für Apple Silicon
+  insightface:
+    image: insightface/insightface-rest:v0.7.3
+    container_name: insightface
+    restart: always
+    ports:
+      - "18081:18081"
+    volumes:
+      - ../../data/insightface:/workspace/models
+    environment:
+      - TZ=Europe/Berlin
+      - PYTHONUNBUFFERED=0
+      - INFERENCE_BACKEND=ort  # ONNX Runtime für Apple Silicon
+    platform: linux/arm64  # ARM64 für Apple Silicon
+    # Beim ersten Start werden Modelle heruntergeladen, was einige Zeit dauern kann
+    # Bitte haben Sie Geduld, bis der Container vollständig gestartet ist
+
+  # HINWEIS: CompreFace und MQTT werden als externe Dienste verwendet
+  # und sind nicht Teil dieser docker-compose Konfiguration.
+  # Bitte stellen Sie sicher, dass diese Dienste auf ihren externen
+  # Servern verfügbar sind und in config.yaml richtig konfiguriert sind.
+
+# Keine benannten Docker-Volumes mehr erforderlich, da direkte Verzeichnis-Mappings verwendet werden!
   # ========================================================================
   
   # compreface-postgres:
