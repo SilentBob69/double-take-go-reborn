@@ -138,11 +138,16 @@ docker run -d --name double-take \
 Es wird empfohlen, Container-Versionen mit Tags zu versehen, die der Versionsnummer oder dem Commit-Hash entsprechen:
 
 ```bash
-# Image mit Version taggen
-docker tag double-take-go:latest double-take-go:v1.2.3
+# Docker-Images folgen dem Benennungsschema silentbob69/double-take-[hardware]:latest
+# Beispiele:
+# - silentbob69/double-take-cpu:latest     (Standard CPU-Version)
+# - silentbob69/double-take-nvidia:latest  (NVIDIA GPU-Version)
+# - silentbob69/double-take-amd:latest     (AMD GPU-Version)
+# - silentbob69/double-take-apple:latest   (Apple Silicon-Version)
 
-# Bei Problemen zurückrollen
+# Bei Problemen mit einer neuen Version kann die docker-compose.yml angepasst werden,
+# um eine spezifische Image-Version zu verwenden
 docker compose down
-# Die docker-compose.yml anpassen oder ein alternatives Compose-File mit dem älteren Tag verwenden
+# Die docker-compose.yml anpassen oder ein alternatives Compose-File verwenden
 docker compose -f docker-compose.old.yml up -d
 ```
