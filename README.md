@@ -234,6 +234,19 @@ Jede Unterstützung, egal ob finanziell oder durch Beiträge zum Projekt, wird s
 
 ## Zukünftige Pläne
 
+### 🔥 Aktuelles Hauptprojekt: InsightFace-Integration
+
+Wir arbeiten derzeit intensiv an der Integration von [InsightFace](https://github.com/deepinsight/insightface) als Alternative zu CompreFace. Diese neue Gesichtserkennungs-Engine bietet folgende Vorteile:
+
+- Bessere Erkennungsgenauigkeit mit neuesten Deep-Learning-Modellen
+- Aktive Entwicklung und regelmäßige Updates
+- Vollständig selbst-hostbar für maximalen Datenschutz
+- Unterstützung für GPU-Beschleunigung auf allen Plattformen
+
+Diese umfassende Integration wird den nächsten Release-Zyklus verlängern, verspricht aber erhebliche Verbesserungen bei der Gesichtserkennung. Beide Systeme werden parallel unterstützt, sodass Sie zwischen CompreFace und InsightFace wählen können.
+
+### Weitere geplante Funktionen
+
 - Verbesserung der Gesichtserkennungsgenauigkeit
 - Erweiterung der Home Assistant-Integration
 - Integration mit weiteren NVR-Systemen

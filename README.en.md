@@ -333,6 +333,19 @@ For more detailed documentation, see [OpenCV Integration](docs/opencv-integratio
 
 ## Future Plans
 
+### 🔥 Current Major Project: InsightFace Integration
+
+We are currently working intensively on integrating [InsightFace](https://github.com/deepinsight/insightface) as an alternative to CompreFace. This new facial recognition engine offers the following advantages:
+
+- Better recognition accuracy with state-of-the-art deep learning models
+- Active development and regular updates
+- Fully self-hostable for maximum privacy protection
+- Support for GPU acceleration on all platforms
+
+This comprehensive integration will extend the next release cycle but promises significant improvements in facial recognition. Both systems will be supported in parallel, allowing you to choose between CompreFace and InsightFace.
+
+### Additional Planned Features
+
 - Improving facial recognition accuracy
 - Expanding Home Assistant integration
 - Integration with additional NVR systems
