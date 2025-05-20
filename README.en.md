@@ -11,6 +11,17 @@ A Go implementation inspired by [Double Take](https://github.com/jakowenko/doubl
 
 > **Note**: This project is still in early development. It is functional but may have bugs and incomplete features. Contributions and feedback are welcome!
 
+## 🔥 Current Development: InsightFace Integration
+
+We are currently working intensively on integrating [InsightFace](https://github.com/deepinsight/insightface) as an alternative to CompreFace. This new facial recognition engine offers the following advantages:
+
+- Better recognition accuracy with state-of-the-art deep learning models
+- Active development and regular updates
+- Fully self-hostable for maximum privacy protection
+- Support for GPU acceleration on all platforms
+
+This comprehensive integration will extend the next release cycle but promises significant improvements in facial recognition. Both systems will be supported in parallel, allowing you to choose between CompreFace and InsightFace.
+
 ## Acknowledgement
 
 This project is a reimplementation in Go and was heavily inspired by the excellent [Double Take](https://github.com/jakowenko/double-take) by [Jacob Kowenko](https://github.com/jakowenko). The original version uses Node.js and offers a broader range of features. This project aims to implement similar functionality in Go but has not yet achieved full feature parity.
@@ -332,19 +343,6 @@ opencv:
 For more detailed documentation, see [OpenCV Integration](docs/opencv-integration.md).
 
 ## Future Plans
-
-### 🔥 Current Major Project: InsightFace Integration
-
-We are currently working intensively on integrating [InsightFace](https://github.com/deepinsight/insightface) as an alternative to CompreFace. This new facial recognition engine offers the following advantages:
-
-- Better recognition accuracy with state-of-the-art deep learning models
-- Active development and regular updates
-- Fully self-hostable for maximum privacy protection
-- Support for GPU acceleration on all platforms
-
-This comprehensive integration will extend the next release cycle but promises significant improvements in facial recognition. Both systems will be supported in parallel, allowing you to choose between CompreFace and InsightFace.
-
-### Additional Planned Features
 
 - Improving facial recognition accuracy
 - Expanding Home Assistant integration

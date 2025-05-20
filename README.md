@@ -13,6 +13,17 @@ Eine Go-Implementierung inspiriert von [Double Take](https://github.com/jakowenk
 
 > **Hinweis**: Dieses Projekt befindet sich noch in einem frühen Entwicklungsstadium. Es ist funktional, hat aber möglicherweise noch Fehler und unvollständige Funktionen. Beiträge und Feedback sind willkommen!
 
+## 🔥 Aktuelle Entwicklung: InsightFace-Integration
+
+Wir arbeiten derzeit intensiv an der Integration von [InsightFace](https://github.com/deepinsight/insightface) als Alternative zu CompreFace. Diese neue Gesichtserkennungs-Engine bietet folgende Vorteile:
+
+- Bessere Erkennungsgenauigkeit mit neuesten Deep-Learning-Modellen
+- Aktive Entwicklung und regelmäßige Updates
+- Vollständig selbst-hostbar für maximalen Datenschutz
+- Unterstützung für GPU-Beschleunigung auf allen Plattformen
+
+Diese umfassende Integration wird den nächsten Release-Zyklus verlängern, verspricht aber erhebliche Verbesserungen bei der Gesichtserkennung. Beide Systeme werden parallel unterstützt, sodass Sie zwischen CompreFace und InsightFace wählen können.
+
 ## Danksagung
 
 Dieses Projekt ist eine Neuimplementierung in Go und wurde stark inspiriert durch das hervorragende [Double Take](https://github.com/jakowenko/double-take) von [Jacob Kowenko](https://github.com/jakowenko). Die ursprüngliche Version verwendet Node.js und bietet einen größeren Funktionsumfang. Dieses Projekt strebt danach, ähnliche Funktionen in Go zu implementieren, hat aber noch nicht die vollständige Feature-Parität erreicht.
@@ -233,19 +244,6 @@ Wenn Ihnen dieses Projekt gefällt und Sie seine Entwicklung unterstützen möch
 Jede Unterstützung, egal ob finanziell oder durch Beiträge zum Projekt, wird sehr geschätzt und hilft dabei, Double-Take Go Reborn weiterzuentwickeln und zu verbessern.
 
 ## Zukünftige Pläne
-
-### 🔥 Aktuelles Hauptprojekt: InsightFace-Integration
-
-Wir arbeiten derzeit intensiv an der Integration von [InsightFace](https://github.com/deepinsight/insightface) als Alternative zu CompreFace. Diese neue Gesichtserkennungs-Engine bietet folgende Vorteile:
-
-- Bessere Erkennungsgenauigkeit mit neuesten Deep-Learning-Modellen
-- Aktive Entwicklung und regelmäßige Updates
-- Vollständig selbst-hostbar für maximalen Datenschutz
-- Unterstützung für GPU-Beschleunigung auf allen Plattformen
-
-Diese umfassende Integration wird den nächsten Release-Zyklus verlängern, verspricht aber erhebliche Verbesserungen bei der Gesichtserkennung. Beide Systeme werden parallel unterstützt, sodass Sie zwischen CompreFace und InsightFace wählen können.
-
-### Weitere geplante Funktionen
 
 - Verbesserung der Gesichtserkennungsgenauigkeit
 - Erweiterung der Home Assistant-Integration
