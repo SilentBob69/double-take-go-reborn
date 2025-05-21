@@ -131,6 +131,7 @@ type FaceData struct {
 	HasMatch   bool
 	MatchName  string
 	Confidence float64
+	Provider   string    // Erkennungsprovider (CompreFace, InsightFace, etc.)
 }
 
 // createEventGroupFromImages erstellt eine EventGroup aus einer Liste von Bildern
@@ -224,6 +225,7 @@ func prepareImagesForTemplate(images []models.Image) []ImageData {
 				HasMatch:   hasMatch,
 				MatchName:  matchName,
 				Confidence: confidence,
+				Provider:   face.Detector,
 			})
 		}
 		

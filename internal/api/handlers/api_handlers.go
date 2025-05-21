@@ -5,7 +5,9 @@ import (
 	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/core/processor"
 	"double-take-go-reborn/internal/integrations/compreface"
+	"double-take-go-reborn/internal/services/sync"
 
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,17 +28,19 @@ import (
 type APIHandler struct {
 	db            *gorm.DB
 	cfg           *config.Config
-	compreface    *compreface.Client
+	compreface    *compreface.APIClient
 	imageProcessor *processor.ImageProcessor
+	syncService   *sync.Service
 }
 
 // NewAPIHandler erstellt einen neuen API-Handler
-func NewAPIHandler(db *gorm.DB, cfg *config.Config, compreface *compreface.Client, imageProcessor *processor.ImageProcessor) *APIHandler {
+func NewAPIHandler(db *gorm.DB, cfg *config.Config, compreface *compreface.APIClient, imageProcessor *processor.ImageProcessor, syncService *sync.Service) *APIHandler {
 	return &APIHandler{
 		db:            db,
 		cfg:           cfg,
 		compreface:    compreface,
 		imageProcessor: imageProcessor,
+		syncService:   syncService,
 	}
 }
 
@@ -414,13 +418,62 @@ func (h *APIHandler) DeleteIdentity(c *gin.Context) {
 		return
 	}
 
-	// Identität löschen
+	// WICHTIG: Wir priorisieren das Löschen aus der lokalen Datenbank
+	// und stellen alle externen Operationen (wie CompreFace-Löschung) in eine Warteschlange
+	// So ist die Benutzererfahrung nicht durch Netzwerkprobleme beeinträchtigt
+
+	// Versuche sofortiges Löschen in CompreFace, falls erreichbar
+	deleteErrors := []string{}
+	compreFaceDeleteError := false
+	
+	if h.cfg.CompreFace.Enabled && h.compreface != nil {
+		// Prüfen, ob CompreFace erreichbar ist und Status zurückgibt
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+		
+		// Versuche direkte Löschung mit Timeout von 5 Sekunden
+		_, err := h.compreface.DeleteSubject(ctx, identity.Name)
+		if err != nil {
+			compreFaceDeleteError = true
+			log.WithError(err).Warn("Direktes Löschen des Subjekts in CompreFace fehlgeschlagen - wird in Warteschlange gestellt")
+			deleteErrors = append(deleteErrors, fmt.Sprintf("CompreFace: %v (operation queued)", err))
+		}
+	}
+
+	// Identität in der lokalen Datenbank löschen
 	if err := h.db.Delete(&identity).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete identity: %v", err)})
+		log.WithError(err).Error("Fehler beim Löschen der Identität aus der Datenbank")
+		deleteErrors = append(deleteErrors, fmt.Sprintf("Database: %v", err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": fmt.Sprintf("Failed to delete identity: %v", err),
+			"details": deleteErrors,
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Identity deleted successfully"})
+	// Wenn CompreFace-Löschung fehlgeschlagen ist, zur Warteschlange hinzufügen
+	if compreFaceDeleteError && h.syncService != nil {
+		log.Infof("Identity %s (%d) wird zur Lösch-Warteschlange hinzugefügt", identity.Name, identity.ID)
+		err := h.syncService.AddPendingOperation(
+			models.POTypeDeleteIdentity,
+			models.POResourceIdentity, 
+			identity.Name,
+			identity.ID,
+			nil, // Keine zusätzlichen Daten nötig
+		)
+		
+		if err != nil {
+			log.WithError(err).Error("Fehler beim Hinzufügen der Löschoperation zur Warteschlange")
+			deleteErrors = append(deleteErrors, fmt.Sprintf("Queue: %v", err))
+		}
+	}
+
+	// Erfolgreiche Antwort
+	response := gin.H{"message": "Identity deleted successfully"}
+	if len(deleteErrors) > 0 {
+		response["warnings"] = deleteErrors
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // AddIdentityExample fügt ein Beispielbild zu einer Identität hinzu

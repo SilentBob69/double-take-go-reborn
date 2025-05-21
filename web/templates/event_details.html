@@ -191,6 +191,7 @@
                                                 {{ else }}
                                                     {{ t "common.unknown" }}
                                                 {{ end }}
+                                                <small class="text-info">{{ if .Provider }}[{{ .Provider }}]{{ else }}[CompreFace]{{ end }}</small>
                                             </span>
                                         {{ end }}
                                     </div>

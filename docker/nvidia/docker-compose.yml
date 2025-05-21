@@ -33,17 +33,19 @@ services:
       
   # InsightFace mit NVIDIA GPU-Beschleunigung
   insightface:
-    image: insightface/insightface-rest:v0.7.3
+    build:
+      context: ../insightface
+      dockerfile: Dockerfile
     container_name: insightface
     restart: always
     ports:
       - "18081:18081"
     volumes:
-      - ../../data/insightface:/workspace/models
+      - ../../data/insightface:/app/models  # Modelle persistent speichern
     environment:
       - TZ=Europe/Berlin
-      - PYTHONUNBUFFERED=0
-      - INFERENCE_BACKEND=tensorrt  # NVIDIA TensorRT für maximale Leistung
+      - PYTHONUNBUFFERED=1
+      - INFERENCE_BACKEND=trt  # TensorRT für NVIDIA GPU-Beschleunigung
     platform: linux/amd64
     deploy:
       resources:
@@ -53,7 +55,6 @@ services:
               count: 1
               capabilities: [gpu]
     # Beim ersten Start werden Modelle heruntergeladen, was einige Zeit dauern kann
-    # Bitte haben Sie Geduld, bis der Container vollständig gestartet ist
 
   # HINWEIS: CompreFace und MQTT werden als externe Dienste verwendet
   # und sind nicht Teil dieser docker-compose Konfiguration.

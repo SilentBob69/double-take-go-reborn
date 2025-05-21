@@ -1,5 +1,5 @@
-# Double-Take-Go-Reborn Configuration for CPU-based OpenCV integration
-# Diese Konfiguration ist optimiert für die Standard-CPU-Nutzung von OpenCV
+# Double-Take-Go-Reborn Configuration for NVIDIA GPU acceleration with OpenCV
+# Diese Konfiguration ist optimiert für NVIDIA GPUs mit CUDA-Unterstützung
 # HINWEIS: OpenCV kann unabhängig von CompreFace verwendet werden
 
 log:
@@ -20,8 +20,8 @@ mqtt:
   username: "hans"
   password: "desert"
   client_id: "double-take-go"
-  topic_prefix: "double-take"
   topic: "frigate/events"
+  topic_prefix: "double-take"
   homeassistant:
     enabled: true
     discovery_prefix: "homeassistant"
@@ -35,14 +35,17 @@ storage:
 
 opencv:
   enabled: true
-  use_gpu: false
+  use_gpu: true
   person_detection:
-    method: "hog"  # Options: "hog", "dnn"
-    confidence_threshold: 0.5
-    scale_factor: 1.05
-    min_neighbors: 2
+    method: "dnn"  # DNN method is preferred for GPU acceleration
+    confidence_threshold: 0.85
+    scale_factor: 1.03
+    min_neighbors: 3
     min_size_width: 64
     min_size_height: 128
+    # GPU-specific DNN parameters
+    backend: "cuda"  # Use CUDA backend for OpenCV DNN
+    target: "cuda"   # Target compute device is CUDA
 
 # =========================================================================
 # OPTIONAL: CompreFace-Integration für Gesichtserkennung
@@ -51,7 +54,7 @@ opencv:
 # oder 'enabled: false' setzen.
 # =========================================================================
 compreface:
-  enabled: true
+  enabled: false
   url: "http://10.100.0.3:8100"
   subjects_api_url: "http://10.100.0.3:8100/api/v1/recognition/subjects"
   detection_api_url: "http://10.100.0.3:8100/api/v1/detection/detect"
@@ -84,11 +87,11 @@ processor:
 # Moderne, aktiv entwickelte selbst-hostbare Gesichtserkennungslösung
 # =========================================================================
 insightface:
-  enabled: true  # InsightFace ist aktiviert
-  url: "http://insightface:18081"  # URL zum InsightFace-REST-Container
-  detect_url: "http://insightface:18081/detect"  # Endpunkt für Gesichtserkennung
-  recognize_url: "http://insightface:18081/detect"  # Endpunkt für Gesichtserkennung (gleicher Endpunkt mit Parametern)
-  add_face_url: "http://insightface:18081/detect" # Endpunkt für Training (gleicher Endpunkt mit Parametern)
+  enabled: false  # Auf true setzen, um InsightFace zu aktivieren
+  url: "http://localhost:18081"  # URL zum InsightFace-REST-Container
+  detect_url: "http://localhost:18081/extract"  # Endpunkt für Gesichtserkennung
+  recognize_url: "http://localhost:18081/recognize"  # Endpunkt für Gesichtserkennung
+  add_face_url: "http://localhost:18081/add_face" # Endpunkt für Training
   detection_threshold: 0.6  # Schwellenwert für Gesichtserkennung (0.0-1.0)
   recognition_threshold: 0.5  # Schwellenwert für Erkennung (0.0-1.0) 
   max_faces: 10  # Maximale Anzahl an Gesichtern pro Bild

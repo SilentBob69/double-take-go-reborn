@@ -21,8 +21,10 @@ import (
 	"double-take-go-reborn/internal/integrations/frigate"
 	"double-take-go-reborn/internal/integrations/homeassistant"
 	"double-take-go-reborn/internal/integrations/mqtt"
+	"double-take-go-reborn/internal/integrations/provider"
 	"double-take-go-reborn/internal/server/sse"
 	"double-take-go-reborn/internal/services/cleanup"
+	"double-take-go-reborn/internal/services/sync"
 	"double-take-go-reborn/internal/util/timezone"
 
 	"github.com/gin-contrib/cors"
@@ -74,11 +76,11 @@ func main() {
 	}
 	log.Info("Database initialized successfully")
 
-	// 5. CompreFace-Client erstellen
-	var compreFaceClient *compreface.Client
+	// 5. CompreFace-Client erstellen (für Abwärtskompatibilität)
+	var compreFaceClient *compreface.APIClient
 	if cfg.CompreFace.Enabled {
 		log.Info("CompreFace integration enabled, initializing client...")
-		compreFaceClient = compreface.NewClient(cfg.CompreFace)
+		compreFaceClient = compreface.NewAPIClient(cfg.CompreFace)
 		
 		// CompreFace-Verbindung testen
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -93,6 +95,14 @@ func main() {
 	} else {
 		log.Info("CompreFace integration is disabled")
 	}
+	
+	// 5.1 Provider-Manager für Gesichtserkennung initialisieren
+	log.Info("Initializing face recognition provider manager...")
+	providerManager, err := provider.CreateManager(cfg)
+	if err != nil {
+		log.Warnf("Error initializing face recognition provider manager: %v", err)
+	}
+	log.Infof("Face recognition provider manager initialized with active provider: %s", providerManager.GetActiveProviderName())
 
 	// 6. SSE-Hub für Echtzeit-Updates initialisieren
 	log.Info("Initializing SSE hub...")
@@ -114,6 +124,7 @@ func main() {
 		db.DB,
 		cfg,
 		compreFaceClient,
+		providerManager,
 		sseHub,
 		frigateClient,
 		nil, // Zunächst ohne Home Assistant Publisher
@@ -201,12 +212,15 @@ func main() {
 		log.Info("MQTT integration is disabled")
 	}
 
-	// 9. Cleanup-Service starten, falls konfiguriert
-	if cfg.Cleanup.RetentionDays > 0 {
-		log.Infof("Starting cleanup service with retention days: %d", cfg.Cleanup.RetentionDays)
-		cleanupService := cleanup.NewCleanupService(db.DB, cfg.Cleanup, cfg.Server.SnapshotDir)
-		go cleanupService.Start(context.Background())
-	}
+	// 8. Cleanup-Service initialisieren
+	log.Info("Initializing cleanup service...")
+	cleanupService := cleanup.NewCleanupService(db.DB, cfg.Cleanup, cfg.Server.SnapshotDir)
+	go cleanupService.Start(context.Background())
+	
+	// 9. Sync-Service für ausstehende Operationen initialisieren
+	log.Info("Initializing sync service for pending operations...")
+	syncService := sync.NewService(db.DB, cfg, compreFaceClient)
+	go syncService.Start()
 
 	// 9.1. CompreFace-Synchronisations-Timer starten, falls konfiguriert
 	if cfg.CompreFace.Enabled && cfg.CompreFace.SyncIntervalMinutes > 0 {
@@ -246,15 +260,15 @@ func main() {
 	
 	// Web-Handler
 	log.Info("Initializing web handler...")
-	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub, workerPool, compreFaceClient)
+	webHandler, err := handlers.NewWebHandler(db.DB, cfg, sseHub, workerPool, compreFaceClient, syncService)
 	if err != nil {
-		log.Fatalf("Failed to create web handler: %v", err)
+		log.Fatalf("Failed to initialize WebHandler: %v", err)
 	}
 	webHandler.RegisterRoutes(router)
-	
-	// API-Handler
-	apiHandler := handlers.NewAPIHandler(db.DB, cfg, compreFaceClient, imageProcessor)
+
+	// API-Routes
 	apiGroup := router.Group("/api")
+	apiHandler := handlers.NewAPIHandler(db.DB, cfg, compreFaceClient, imageProcessor, syncService)
 	apiHandler.RegisterRoutes(apiGroup)
 	
 	// Event-Handler

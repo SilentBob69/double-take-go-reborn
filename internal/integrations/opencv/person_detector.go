@@ -511,11 +511,47 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 				continue
 			}
 			
-			// Bounding Box extrahieren
-			left := int(prob.GetFloatAt(i, 3) * float32(imgWidth))
-			top := int(prob.GetFloatAt(i, 4) * float32(imgHeight))
-			right := int(prob.GetFloatAt(i, 5) * float32(imgWidth))
-			bottom := int(prob.GetFloatAt(i, 6) * float32(imgHeight))
+			// Bounding Box extrahieren - sicherstellen, dass Koordinaten korrekt skaliert sind
+			// Die DNN-Ausgabe enthält normalisierte Koordinaten (0-1), die auf die tatsächliche Bildgröße skaliert werden müssen
+			
+			// Koordinaten aus dem Netzwerk holen (normalisiert zwischen 0 und 1)
+			x1 := float64(prob.GetFloatAt(i, 3))
+			y1 := float64(prob.GetFloatAt(i, 4))
+			x2 := float64(prob.GetFloatAt(i, 5))
+			y2 := float64(prob.GetFloatAt(i, 6))
+			
+			// Prüfen, ob die Werte im Bereich 0-1 liegen (normalisiert)
+			// Falls nicht, nehmen wir an, dass sie bereits in Pixelkoordinaten sind
+			needScaling := true
+			if x1 > 1.0 || y1 > 1.0 || x2 > 1.0 || y2 > 1.0 {
+				needScaling = false
+				log.Debugf("Koordinaten scheinen bereits in Pixeleinheiten zu sein: (%.2f,%.2f)-(%.2f,%.2f)", x1, y1, x2, y2)
+			}
+			
+			// Skalieren auf die Bildmaße, wenn nötig
+			var left, top, right, bottom int
+			if needScaling {
+				left = int(x1 * float64(imgWidth))
+				top = int(y1 * float64(imgHeight))
+				right = int(x2 * float64(imgWidth))
+				bottom = int(y2 * float64(imgHeight))
+			} else {
+				// Bereits in Pixelkoordinaten
+				left = int(x1)
+				top = int(y1)
+				right = int(x2)
+				bottom = int(y2)
+			}
+			
+			// Sicherstellen, dass die Werte innerhalb der Bildgrenzen liegen
+			left = max(0, min(left, imgWidth-1))
+			top = max(0, min(top, imgHeight-1))
+			right = max(left+1, min(right, imgWidth))
+			bottom = max(top+1, min(bottom, imgHeight))
+			
+			// Debug-Ausgabe der Koordinaten für Fehlersuche
+			log.Debugf("Person %d: Koordinaten (%.2f,%.2f)-(%.2f,%.2f) -> (%d,%d)-(%d,%d) [%dx%d]", 
+				i, x1, y1, x2, y2, left, top, right, bottom, imgWidth, imgHeight)
 			
 			// Rechteck erstellen
 			rect := image.Rect(left, top, right, bottom)
@@ -622,6 +658,14 @@ func fileExists(path string) bool {
 // Hilfsfunktion für max von zwei int-Werten
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+// Hilfsfunktion für min von zwei int-Werten
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

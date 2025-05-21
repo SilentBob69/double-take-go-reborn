@@ -2,11 +2,14 @@ package processor
 
 import (
 	"double-take-go-reborn/internal/util/timezone"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	stdimage "image"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +18,7 @@ import (
 	"double-take-go-reborn/config"
 	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/integrations/compreface"
+	"double-take-go-reborn/internal/integrations/facerecognition"
 	"double-take-go-reborn/internal/integrations/frigate"
 	"double-take-go-reborn/internal/integrations/homeassistant"
 	"double-take-go-reborn/internal/integrations/opencv"
@@ -36,18 +40,19 @@ type ProcessingOptions struct {
 
 // ImageProcessor verarbeitet Bilder, extrahiert Gesichter und identifiziert Personen
 type ImageProcessor struct {
-	db           *gorm.DB
-	cfg          *config.Config
-	compreface   *compreface.Client
+	db            *gorm.DB
+	cfg           *config.Config
+	compreface    *compreface.APIClient    // Für Abwärtskompatibilität
+	providerManager *facerecognition.ProviderManager
 	opencvService *opencv.Service     // OpenCV-Service für Gesichtserkennung als Vorfilter
-	sseHub       *sse.Hub
+	sseHub        *sse.Hub
 	frigateClient *frigate.FrigateClient
-	haPublisher  *homeassistant.Publisher
-	workerPool   *WorkerPool // Referenz zum Worker-Pool für parallele Verarbeitung
+	haPublisher   *homeassistant.Publisher
+	workerPool    *WorkerPool // Referenz zum Worker-Pool für parallele Verarbeitung
 }
 
 // NewImageProcessor erstellt einen neuen Bildverarbeitungsprozessor
-func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.Client, sseHub *sse.Hub, frigateClient *frigate.FrigateClient, haPublisher *homeassistant.Publisher) *ImageProcessor {
+func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.APIClient, providerManager *facerecognition.ProviderManager, sseHub *sse.Hub, frigateClient *frigate.FrigateClient, haPublisher *homeassistant.Publisher) *ImageProcessor {
 	// OpenCV-Service initialisieren, falls in der Config aktiviert
 	var opencvService *opencv.Service
 	if cfg.OpenCV.Enabled {
@@ -71,13 +76,14 @@ func NewImageProcessor(db *gorm.DB, cfg *config.Config, compreface *compreface.C
 	}
 
 	return &ImageProcessor{
-		db:           db,
-		cfg:          cfg,
-		compreface:   compreface,
+		db:            db,
+		cfg:           cfg,
+		compreface:    compreface,
+		providerManager: providerManager,
 		opencvService: opencvService,
-		sseHub:       sseHub,
+		sseHub:        sseHub,
 		frigateClient: frigateClient,
-		haPublisher:  haPublisher,
+		haPublisher:   haPublisher,
 	}
 }
 
@@ -194,7 +200,7 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 	}
 
 	// 5. OpenCV-Vorfilterung durchführen, falls aktiviert
-	var allMatches []models.Match
+	var matches []models.Match
 	var opencvPersons []opencv.DetectedPerson
 	var hasPersons = true // Standardmäßig nehmen wir an, dass Personen vorhanden sind
 
@@ -214,8 +220,8 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 			log.Infof("OpenCV: Keine Personen im Bild erkannt, Verarbeitung wird komplett übersprungen: %s", imagePath)
 			return nil, nil // Bild nicht speichern und keine weitere Verarbeitung durchführen
 		} else {
-			// Personen erkannt - Metadaten speichern und mit CompreFace fortfahren
-			log.Infof("OpenCV: %d Personen im Bild erkannt, fahre mit CompreFace fort: %s", len(opencvPersons), imagePath)
+			// Personen erkannt - Metadaten speichern und mit Gesichtserkennung fortfahren
+			log.Infof("OpenCV: %d Personen im Bild erkannt, fahre mit %s fort: %s", len(opencvPersons), p.providerManager.GetActiveProviderName(), imagePath)
 			
 			// Erkannte Personen in den Metadaten speichern
 			personRects := make([]map[string]interface{}, 0, len(opencvPersons))
@@ -260,79 +266,194 @@ func (p *ImageProcessor) processImageInternal(ctx context.Context, imagePath, so
 		log.Infof("Created new image record ID: %d", image.ID)
 	}
 	
-	// 7. CompreFace nur verwenden, wenn aktiviert
-	if p.cfg.CompreFace.Enabled && p.compreface != nil {
-		// CompreFace-Verarbeitung durchführen
-		log.Infof("Processing image %s with CompreFace", imagePath)
-		var processErr error // Lokale err-Variable für diesen Bereich
-		allMatches, processErr = p.processWithCompreFace(ctx, imagePath, &image)
-		if processErr != nil {
-			log.Errorf("CompreFace processing failed: %v", processErr)
-			// Wir fahren fort, auch wenn CompreFace fehlschlägt
+	// 7. Gesichtserkennung durchführen
+	// Variable matches wurde bereits in Zeile 202 deklariert
+	var faceRecognitionErr error
+	if !p.cfg.OpenCV.Enabled || hasPersons {
+		// Gesichtserkennung mit dem aktiven Provider durchführen
+		recognitionMatches, err := p.processWithFaceRecognition(ctx, imagePath, &image)
+		faceRecognitionErr = err
+		if err != nil {
+			log.Warnf("Face recognition failed: %v", err)
+		} else if len(recognitionMatches) > 0 {
+			matches = recognitionMatches
+		}
+	}
+
+	// 8. SSE-Broadcast durchführen
+	if p.sseHub != nil {
+		// Anzahl der Gesichter zählen für das Logging
+		var faceCount int64 = 0
+		if faceRecognitionErr == nil {
+			// Gesichter in der Datenbank zählen
+			p.db.Model(&models.Face{}).Where("image_id = ?", image.ID).Count(&faceCount)
+			log.Infof("Gesichter in Bild ID %d erkannt: %d", image.ID, faceCount)
 		}
 
-		// 6. SSE-Broadcast ERST NACH CompreFace-Verarbeitung durchführen
-		if p.sseHub != nil && (processErr == nil || !strings.Contains(processErr.Error(), "No face is found")) {
-			// Anzahl der Gesichter zählen für das Logging
-			var faceCount int64 = 0
-			if processErr == nil {
-				// Gesichter in der Datenbank zählen
-				p.db.Model(&models.Face{}).Where("image_id = ?", image.ID).Count(&faceCount)
-				log.Infof("Gesichter in Bild ID %d erkannt: %d", image.ID, faceCount)
-			}
+		// Broadcast nur, wenn Gesichtserkennung erfolgreich oder explizit keine Gesichter gefunden wurden
+		log.Infof("Sende SSE-Broadcast für Bild ID %d mit %d Matches (Gesichter: %d)", image.ID, len(matches), faceCount)
+		p.sseHub.BroadcastNewImage(image, p.cfg.Server.SnapshotURL+"/"+image.FilePath, matches)
+	}
+	
+	return &image, nil
+}
 
-			// Broadcast nur, wenn CompreFace-Verarbeitung erfolgreich oder explizit keine Gesichter gefunden wurden
-			log.Infof("Sende SSE-Broadcast für Bild ID %d mit %d Matches (Gesichter: %d)", image.ID, len(allMatches), faceCount)
-			p.sseHub.BroadcastNewImage(image, p.cfg.Server.SnapshotURL+"/"+image.FilePath, allMatches)
+// processWithFaceRecognition verarbeitet ein Bild mit dem aktiven Gesichtserkennungsanbieter
+func (p *ImageProcessor) processWithFaceRecognition(ctx context.Context, imagePath string, image *models.Image) ([]models.Match, error) {
+	// Den aktiven Provider ermitteln
+	activeProvider, ok := p.providerManager.GetActiveProvider()
+	if !ok || activeProvider == nil {
+		return nil, fmt.Errorf("no active face recognition provider available")
+	}
+	
+	// 1. Bilddaten lesen
+	imageData, err := ioutil.ReadFile(imagePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image data: %w", err)
+	}
+	
+	// Bild für die API-Verarbeitung dekodieren
+	img, _, err := stdimage.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+	
+	// 2. Gesichtserkennung durchführen
+	detectionRequest := facerecognition.DetectionRequest{
+		ReturnFaceData: true,
+		ExtractEmbedding: true,
+	}
+	
+	detectionResult, err := activeProvider.DetectFaces(ctx, img, detectionRequest)
+	if err != nil {
+		return nil, fmt.Errorf("face detection failed: %w", err)
+	}
+	
+	log.Infof("%s detected %d faces in image %s", p.providerManager.GetActiveProviderName(), len(detectionResult.Faces), imagePath)
+
+	// 3. Für jedes erkannte Gesicht Gesichts-DB-Eintrag erstellen
+	var matches []models.Match
+	
+	for i, face := range detectionResult.Faces {
+		log.Infof("Processing face #%d with confidence %.2f", i+1, face.Confidence)
+		
+		// BoundingBox Array auspacken [x_min, y_min, x_max, y_max]
+		if len(face.BoundingBox) < 4 {
+			log.Errorf("Invalid bounding box format for face #%d", i+1)
+			continue
+		}
+		
+		// Bounding Box als JSON für die Datenbank vorbereiten
+		boundingBoxJSON, err := json.Marshal(map[string]interface{}{
+			"x_min": face.BoundingBox[0],
+			"y_min": face.BoundingBox[1],
+			"x_max": face.BoundingBox[2],
+			"y_max": face.BoundingBox[3],
+		})
+		if err != nil {
+			log.Errorf("Failed to marshal bounding box data: %v", err)
+			continue
+		}
+		
+		// Gesichter-DB-Eintrag erstellen
+		dbFace := models.Face{
+			ImageID:     image.ID,
+			BoundingBox: datatypes.JSON(boundingBoxJSON),
+			Confidence:  face.Confidence,
+			Detector:    string(p.providerManager.GetActiveProviderName()),
+		}
+		
+		if err := p.db.Create(&dbFace).Error; err != nil {
+			log.Errorf("Failed to create face record: %v", err)
+			continue
 		}
 
-		// Home Assistant Ergebnis veröffentlichen (wenn aktiviert)
-		if p.haPublisher != nil && p.cfg.MQTT.HomeAssistant.Enabled && p.cfg.MQTT.HomeAssistant.PublishResults {
-			// Korrektur: Berechnung der Verarbeitungszeit mit positivem Wert (Zeitdauer in Sekunden)
-			processDuration := 1.0 // Standardwert, falls keine echte Zeit gemessen wurde
-			
-			// DETAILLIERTE Debug-Information zu den erkannten Personen
-			if len(allMatches) > 0 {
-				log.Infof("====== Erkannte Personen (insg. %d) =======", len(allMatches))
-				for i, match := range allMatches {
-					log.Infof("  [%d] ID: %d, Name: %s, Confidence: %.2f, Face-ID: %d", 
-						i+1, match.ID, match.Identity.Name, match.Confidence, match.FaceID)
+		log.Infof("Created face record ID: %d for image ID: %d", dbFace.ID, image.ID)
+
+		// 4. Gesichtserkennung durchführen
+		// Erkennungsparameter festlegen
+		threshold := 0.7 // Standard-Schwellwert
+		if p.providerManager.GetActiveProviderName() == facerecognition.ProviderCompreFace && p.cfg.CompreFace.SimilarityThreshold > 0 {
+			threshold = p.cfg.CompreFace.SimilarityThreshold / 100.0 // Umrechnung von Prozent (0-100) auf Dezimalwert (0-1)
+		} else if p.providerManager.GetActiveProviderName() == facerecognition.ProviderInsightFace && p.cfg.InsightFace.RecognitionThreshold > 0 {
+			threshold = p.cfg.InsightFace.RecognitionThreshold
+		}
+		
+		// Gesichtserkennung mit der RecognizeFaces-Methode (aus der Provider-Schnittstelle)
+		recognitionRequest := facerecognition.RecognitionRequest{
+			Threshold: threshold,
+		}
+		
+		// Gesichtserkennung durchführen
+		recognitionResult, err := activeProvider.RecognizeFaces(ctx, img, recognitionRequest)
+		if err != nil {
+			log.Errorf("Face recognition failed for face #%d: %v", i+1, err)
+			continue
+		}
+		
+		// Wenn Ergebnisse vorhanden sind und Gesichter gefunden wurden
+		if recognitionResult != nil && len(recognitionResult.Faces) > 0 && len(recognitionResult.Matches) > 0 {
+			// Für jedes gefundene Gesicht und dessen Matches DB-Einträge erstellen
+			for faceIndex, _ := range recognitionResult.Faces {
+				// Wir verwenden den faceIndex, um die entsprechenden Matches zu finden
+				if faceIndex >= len(recognitionResult.Matches) || len(recognitionResult.Matches[faceIndex]) == 0 {
+					// Keine Matches für dieses Gesicht
+					continue
+				}
+				
+				// Für jeden Match ein DB-Eintrag erstellen
+				for _, match := range recognitionResult.Matches[faceIndex] {
+					// Identity finden oder erstellen
+					var identity models.Identity
 					
-					// DIREKTER AUFRUF der UpdateRecognizedPerson-Methode für jede erkannte Person
-					// Ermittle den besten verfügbaren Kameranamen
-					cameraName := image.Source // Fallback: Standardmäßig die Quelle (typischerweise "frigate")
-					
-					// Wenn Metadaten vorhanden sind, den tatsächlichen Kameranamen verwenden
-					if image.SourceData != nil {
-						var metadata map[string]interface{}
-						if err := json.Unmarshal(image.SourceData, &metadata); err == nil {
-							// Priorität: Kameraname aus Metadaten oder Fallback auf Quelle
-							if camName, ok := metadata["camera"]; ok && camName != nil {
-								cameraName = fmt.Sprintf("%v", camName)
+					// Erst versuchen, vorhandene Identity zu finden
+					if err := p.db.Where("external_id = ?", match.SubjectID).First(&identity).Error; err != nil {
+						if err == gorm.ErrRecordNotFound {
+							// Neue Identity erstellen
+							identity = models.Identity{
+								Name:       match.SubjectID, // SubjectID als Standardname verwenden
+								ExternalID: match.SubjectID,
 							}
+						
+							if err := p.db.Create(&identity).Error; err != nil {
+								log.Errorf("Failed to create identity record: %v", err)
+								continue
+							}
+							log.Infof("Created new identity record: %s (ID: %d)", identity.Name, identity.ID)
+						} else {
+							log.Errorf("Failed to query identity: %v", err)
+							continue
 						}
 					}
 					
-					if err := p.haPublisher.UpdateRecognizedPerson(match.Identity.Name, cameraName, 
-						match.Confidence, image.ID, image.FilePath); err != nil {
-						log.Errorf("Direkter Aufruf für Person '%s' fehlgeschlagen: %v", match.Identity.Name, err)
+					// Match-Eintrag erstellen
+					matchRecord := models.Match{
+						FaceID:     dbFace.ID,
+						IdentityID: identity.ID,
+						Confidence: match.Similarity,
 					}
+					
+					if err := p.db.Create(&matchRecord).Error; err != nil {
+						log.Errorf("Failed to create match record: %v", err)
+						continue
+					}
+
+					// Match mit Identity nachladen für SSE
+					p.db.Model(&matchRecord).Association("Identity").Find(&matchRecord.Identity)
+					
+					// Match zur Liste hinzufügen
+					matches = append(matches, matchRecord)
+					
+					log.Infof("Created match record ID: %d (face: %d, identity: %d, confidence: %.2f)", 
+						matchRecord.ID, matchRecord.FaceID, matchRecord.IdentityID, matchRecord.Confidence)
 				}
-			} else {
-				log.Warnf("Keine Personen erkannt, keine Aktualisierung des Sensors")
 			}
-			
-			// Auch weiterhin den normalen Weg aufrufen
-			log.Infof("Sending recognition results to Home Assistant: %d matches found", len(allMatches))
-			if haErr := p.haPublisher.PublishCameraResult(&image, allMatches, processDuration, 1); haErr != nil {
-				log.Errorf("Failed to publish camera result to Home Assistant: %v", haErr)
-			}
+		} else {
+			log.Infof("No matching identity found for face #%d", i+1)
 		}
-	} else {
-		log.Info("CompreFace processing is disabled")
 	}
 
-	return &image, nil
+	return matches, nil
 }
 
 // contains prüft, ob ein String in einem Slice enthalten ist
@@ -343,119 +464,6 @@ func contains(s []string, e string) bool {
 		}
 	}
 	return false
-}
-
-// processWithCompreFace verarbeitet ein Bild mit CompreFace
-func (p *ImageProcessor) processWithCompreFace(ctx context.Context, imagePath string, image *models.Image) ([]models.Match, error) {
-	log.Infof("Processing image %s with CompreFace", imagePath)
-	
-	// 1. Bilddaten lesen
-	imageFile, err := os.Open(imagePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open image file: %w", err)
-	}
-	defer imageFile.Close()
-	
-	imageData, err := io.ReadAll(imageFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read image data: %w", err)
-	}
-
-	// 2. CompreFace aufrufen
-	result, err := p.compreface.Recognize(ctx, imageData, filepath.Base(imagePath))
-	if err != nil {
-		return nil, fmt.Errorf("CompreFace recognition failed: %w", err)
-	}
-
-	if result == nil || len(result.Result) == 0 {
-		log.Info("No faces detected by CompreFace")
-		return nil, nil
-	}
-
-	// 3. Ergebnisse verarbeiten
-	var allMatches []models.Match
-	
-	for _, faceResult := range result.Result {
-		// Box-Informationen als JSON vorbereiten
-		boxJSON := map[string]interface{}{
-			"x_min":       faceResult.Box.XMin,
-			"y_min":       faceResult.Box.YMin,
-			"x_max":       faceResult.Box.XMax,
-			"y_max":       faceResult.Box.YMax,
-			"probability": faceResult.Box.Probability,
-		}
-		
-		boxBytes, err := json.Marshal(boxJSON)
-		if err != nil {
-			log.Errorf("Failed to marshal bounding box data: %v", err)
-			continue
-		}
-
-		// Face-Eintrag erstellen
-		face := models.Face{
-			ImageID:     image.ID,
-			BoundingBox: datatypes.JSON(boxBytes),
-			Confidence:  faceResult.Box.Probability,
-			Detector:    "compreface",
-		}
-
-		if err := p.db.Create(&face).Error; err != nil {
-			log.Errorf("Failed to create face record: %v", err)
-			continue
-		}
-
-		log.Infof("Created face record ID: %d for image ID: %d", face.ID, image.ID)
-
-		// Alle Subjekte/Personen für dieses Gesicht durchgehen
-		for _, subject := range faceResult.Subjects {
-			// Identity finden oder erstellen
-			var identity models.Identity
-			
-			// Erst versuchen, vorhandene Identity zu finden
-			if err := p.db.Where("name = ?", subject.Subject).First(&identity).Error; err != nil {
-				if err == gorm.ErrRecordNotFound {
-					// Neue Identity erstellen
-					identity = models.Identity{
-						Name:      subject.Subject,
-						ExternalID: subject.Subject, // ExternalID = Name in CompreFace
-					}
-					
-					if err := p.db.Create(&identity).Error; err != nil {
-						log.Errorf("Failed to create identity record: %v", err)
-						continue
-					}
-					
-					log.Infof("Created new identity record ID: %d, name: %s", identity.ID, identity.Name)
-				} else {
-					log.Errorf("Database error when finding identity: %v", err)
-					continue
-				}
-			}
-
-			// Match-Eintrag erstellen
-			match := models.Match{
-				FaceID:     face.ID,
-				IdentityID: identity.ID,
-				Confidence: subject.Similarity,
-			}
-
-			if err := p.db.Create(&match).Error; err != nil {
-				log.Errorf("Failed to create match record: %v", err)
-				continue
-			}
-
-			// Match mit Identity nachladen für SSE
-			p.db.Model(&match).Association("Identity").Find(&match.Identity)
-			
-			// Match zur Liste hinzufügen
-			allMatches = append(allMatches, match)
-			
-			log.Infof("Created match record ID: %d (face: %d, identity: %d, confidence: %.2f)", 
-				match.ID, match.FaceID, match.IdentityID, match.Confidence)
-		}
-	}
-
-	return allMatches, nil
 }
 
 // ProcessFrigateEvent verarbeitet ein Ereignis aus Frigate via MQTT

@@ -43,7 +43,7 @@ NC='\033[0m' # No Color
 show_help() {
     echo -e "${BLUE}Double-Take-Go-Reborn Hardware-Konfigurationswechsler${NC}"
     echo
-    echo "Verwendung: $0 [hardware-typ]"
+    echo "Verwendung: $0 [hardware-typ] [provider-options]"
     echo
     echo "Hardware-Typen:"
     echo "  nvidia    - NVIDIA GPU-Konfiguration verwenden"
@@ -51,13 +51,25 @@ show_help() {
     echo "  cpu       - CPU-Konfiguration verwenden"
     echo "  apple     - Apple Silicon-Konfiguration verwenden"
     echo
-    echo "Optionen:"
-    echo "  -h, --help     - Diese Hilfe anzeigen"
-    echo "  -l, --list     - Verfügbare Konfigurationen auflisten"
-    echo "  -s, --status   - Aktuelle Konfiguration anzeigen"
-    echo "  --setup        - Ersteinrichtung durchführen (persönliches Hardware-Verzeichnis erstellen)"
+    echo "Provider-Optionen:"
+    echo "  --compreface=on|off   - CompreFace aktivieren/deaktivieren"
+    echo "  --insightface=on|off  - InsightFace aktivieren/deaktivieren"
+    echo "  --provider=compreface|insightface|both - Primären Erkennungsprovider setzen"
     echo
-    echo "Beispiel: $0 nvidia"
+    echo "Optionen:"
+    echo "  -h, --help         - Diese Hilfe anzeigen"
+    echo "  -l, --list         - Verfügbare Konfigurationen auflisten"
+    echo "  -s, --status       - Aktuelle Konfiguration anzeigen"
+    echo "  -i, --interactive  - Interaktiven Assistenten starten"
+    echo "  --setup            - Ersteinrichtung durchführen (persönliches Hardware-Verzeichnis erstellen)"
+    echo
+    echo "Beispiele:"
+    echo "  $0                  - Startet den interaktiven Assistenten"
+    echo "  $0 cpu              - Wechselt zur CPU-Konfiguration"
+    echo "  $0 -i               - Startet den interaktiven Assistenten"
+    echo "  $0 cpu --compreface=off         - Deaktiviert CompreFace in der CPU-Konfiguration"
+    echo "  $0 cpu --insightface=on         - Aktiviert InsightFace in der CPU-Konfiguration"
+    echo "  $0 cpu --provider=insightface   - Setzt InsightFace als primären Provider"
 }
 
 # Verfügbare Konfigurationen auflisten
@@ -103,6 +115,12 @@ show_status() {
         # CompreFace-Status überprüfen
         cf_enabled=$(grep "compreface:" -A 2 "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
         
+        # InsightFace-Status überprüfen
+        if_enabled=$(grep "insightface:" -A 2 "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
+        
+        # Primären Provider überprüfen
+        provider=$(grep "face_recognition_provider:" "$TARGET_CONFIG" | awk '{print $2}' | tr -d '"')
+        
         echo -e "  Typ: ${GREEN}$hardware_type${NC}"
         echo -e "  MQTT: ${mqtt_enabled:-false} ${mqtt_broker:+(Broker: $mqtt_broker)}"
         echo -e "  CompreFace: ${cf_enabled:-false}"
@@ -114,10 +132,64 @@ show_status() {
     fi
 }
 
+# Provider-Konfiguration aktualisieren
+update_provider_config() {
+    local config_file=$1
+    local provider_option=$2
+    local value=$3
+    
+    case $provider_option in
+        compreface)
+            # CompreFace aktivieren/deaktivieren
+            # Zeilennummer von "compreface:" finden
+            local cf_line=$(grep -n "^compreface:" "$config_file" | cut -d":" -f1)
+            if [ -n "$cf_line" ]; then
+                # Die nächste Zeile mit "enabled:" finden und ersetzen
+                local next_line=$((cf_line + 1))
+                sed -i.bak "${next_line}s/enabled: .*/enabled: $value/" "$config_file"
+                echo -e "${BLUE}CompreFace-Konfiguration aktualisiert${NC}"
+            else
+                echo -e "${RED}CompreFace-Konfiguration nicht gefunden${NC}"
+            fi
+            ;;
+        insightface)
+            # InsightFace aktivieren/deaktivieren
+            # Zeilennummer von "insightface:" finden
+            local if_line=$(grep -n "^insightface:" "$config_file" | cut -d":" -f1)
+            if [ -n "$if_line" ]; then
+                # Die nächste Zeile mit "enabled:" finden und ersetzen
+                local next_line=$((if_line + 1))
+                sed -i.bak "${next_line}s/enabled: .*/enabled: $value/" "$config_file"
+                echo -e "${BLUE}InsightFace-Konfiguration aktualisiert${NC}"
+            else
+                echo -e "${RED}InsightFace-Konfiguration nicht gefunden${NC}"
+            fi
+            ;;
+        provider)
+            # Primären Provider setzen
+            if grep -q "face_recognition_provider:" "$config_file"; then
+                sed -i.bak "s/face_recognition_provider: .*/face_recognition_provider: \"$value\"/" "$config_file"
+                echo -e "${BLUE}Provider-Konfiguration aktualisiert${NC}"
+            else
+                # Zeile hinzufügen, falls noch nicht vorhanden (am Ende der Datei)
+                echo "" >> "$config_file"
+                echo "face_recognition_provider: \"$value\"" >> "$config_file"
+                echo -e "${BLUE}Provider-Konfiguration hinzugefügt${NC}"
+            fi
+            ;;
+    esac
+    
+    # Backup-Datei entfernen
+    rm -f "${config_file}.bak"
+}
+
 # Konfiguration wechseln
 switch_config() {
     local hardware=$1
-    local source_file=""
+    shift # Ersten Parameter entfernen
+    
+    # Standardwerte für Konfigurationsdateinamen ableiten
+    local config_filename="config-${hardware}.yaml"
     
     case $hardware in
         nvidia|nvidia-gpu)
@@ -155,6 +227,35 @@ switch_config() {
     cp "$source_file" "$TARGET_CONFIG"
     echo -e "${GREEN}Konfiguration gewechselt zu: $hardware${NC}"
     
+    # Provider-Optionen verarbeiten
+    for arg in "$@"; do
+        if [[ $arg == --compreface=* ]]; then
+            local cf_value=${arg#*=}
+            if [ "$cf_value" = "on" ]; then
+                update_provider_config "$TARGET_CONFIG" "compreface" "true"
+                echo -e "${GREEN}CompreFace aktiviert${NC}"
+            elif [ "$cf_value" = "off" ]; then
+                update_provider_config "$TARGET_CONFIG" "compreface" "false"
+                echo -e "${YELLOW}CompreFace deaktiviert${NC}"
+            fi
+        elif [[ $arg == --insightface=* ]]; then
+            local if_value=${arg#*=}
+            if [ "$if_value" = "on" ]; then
+                update_provider_config "$TARGET_CONFIG" "insightface" "true"
+                echo -e "${GREEN}InsightFace aktiviert${NC}"
+            elif [ "$if_value" = "off" ]; then
+                update_provider_config "$TARGET_CONFIG" "insightface" "false"
+                echo -e "${YELLOW}InsightFace deaktiviert${NC}"
+            fi
+        elif [[ $arg == --provider=* ]]; then
+            local provider_value=${arg#*=}
+            if [ "$provider_value" = "compreface" ] || [ "$provider_value" = "insightface" ] || [ "$provider_value" = "both" ]; then
+                update_provider_config "$TARGET_CONFIG" "provider" "$provider_value"
+                echo -e "${GREEN}Primärer Erkennungsprovider auf $provider_value gesetzt${NC}"
+            fi
+        fi
+    done
+    
     # Info, wie man den Container neu startet und Angebot zum direkten Ausführen
     echo
     
@@ -180,7 +281,64 @@ switch_config() {
     echo -e "${BLUE}$docker_cmd${NC}"
     echo
     
+    # Provider-Einstellungen interaktiv konfigurieren
+    echo -e "\n${BLUE}Gesichtserkennungsprovider konfigurieren:${NC}"
+    
+    # CompreFace Einstellungen
+    cf_enabled=$(grep -A 2 "^compreface:" "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
+    if [ "$cf_enabled" = "true" ]; then
+        echo -e "1) CompreFace: ${GREEN}Aktiviert${NC}"
+        read -p "   CompreFace deaktivieren? (j/n): " cf_choice
+        if [[ "$cf_choice" =~ ^[jJyY]$ ]]; then
+            update_provider_config "$TARGET_CONFIG" "compreface" "false"
+        fi
+    else
+        echo -e "1) CompreFace: ${RED}Deaktiviert${NC}"
+        read -p "   CompreFace aktivieren? (j/n): " cf_choice
+        if [[ "$cf_choice" =~ ^[jJyY]$ ]]; then
+            update_provider_config "$TARGET_CONFIG" "compreface" "true"
+        fi
+    fi
+    
+    # InsightFace Einstellungen
+    if_enabled=$(grep -A 2 "^insightface:" "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
+    if [ "$if_enabled" = "true" ]; then
+        echo -e "2) InsightFace: ${GREEN}Aktiviert${NC}"
+        read -p "   InsightFace deaktivieren? (j/n): " if_choice
+        if [[ "$if_choice" =~ ^[jJyY]$ ]]; then
+            update_provider_config "$TARGET_CONFIG" "insightface" "false"
+        fi
+    else
+        echo -e "2) InsightFace: ${RED}Deaktiviert${NC}"
+        read -p "   InsightFace aktivieren? (j/n): " if_choice
+        if [[ "$if_choice" =~ ^[jJyY]$ ]]; then
+            update_provider_config "$TARGET_CONFIG" "insightface" "true"
+        fi
+    fi
+    
+    # Primärer Provider
+    echo -e "\n${BLUE}Primären Erkennungsprovider wählen:${NC}"
+    provider=$(grep "face_recognition_provider:" "$TARGET_CONFIG" | awk '{print $2}' | tr -d '"')
+    echo -e "   Aktuell: ${GREEN}${provider:-compreface}${NC}"
+    echo "   1. CompreFace"
+    echo "   2. InsightFace"
+    echo "   3. Beide (both)"
+    read -p "   Wähle den primären Provider (1-3, Enter für keine Änderung): " provider_choice
+    
+    case "$provider_choice" in
+        1)
+            update_provider_config "$TARGET_CONFIG" "provider" "compreface"
+            ;;
+        2)
+            update_provider_config "$TARGET_CONFIG" "provider" "insightface"
+            ;;
+        3)
+            update_provider_config "$TARGET_CONFIG" "provider" "both"
+            ;;
+    esac
+    
     # Fragen, ob der Container neu gestartet werden soll
+    echo
     read -p "Möchtest du den Container jetzt neu starten? (j/n): " restart_choice
     
     if [[ "$restart_choice" =~ ^[jJyY]$ ]]; then
@@ -225,6 +383,41 @@ if [ ! -d "$CONFIG_DIR" ]; then
     exit 1
 fi
 
+# Interaktive Menüauswahl für Hardware und Provider
+show_interactive_menu() {
+    clear
+    echo -e "${BLUE}====== Double-Take-Go-Reborn Konfigurationsassistent ======${NC}"
+    echo
+    echo -e "${YELLOW}Hardware-Auswahl:${NC}"
+    echo "1. CPU-Konfiguration"
+    echo "2. NVIDIA GPU-Konfiguration"
+    echo "3. AMD GPU-Konfiguration"
+    echo "4. Apple Silicon-Konfiguration"
+    echo
+    echo "q. Beenden"
+    echo
+    read -p "Bitte wähle eine Option (1-4, q): " menu_choice
+    
+    local hardware_type=""
+    
+    case "$menu_choice" in
+        1) hardware_type="cpu" ;;
+        2) hardware_type="nvidia" ;;
+        3) hardware_type="amd" ;;
+        4) hardware_type="apple" ;;
+        q|Q) echo "Abgebrochen."; exit 0 ;;
+        *) echo -e "${RED}Ungültige Auswahl!${NC}"; return 1 ;;
+    esac
+    
+    # Konfiguration wechseln
+    if [ -n "$hardware_type" ]; then
+        switch_config "$hardware_type"
+        return 0
+    fi
+    
+    return 1
+}
+
 # Hauptprogramm
 case "$1" in
     -h|--help)
@@ -235,6 +428,9 @@ case "$1" in
         ;;
     -s|--status)
         show_status
+        ;;
+    -i|--interactive)
+        show_interactive_menu
         ;;
     --setup)
         echo -e "${BLUE}Führe Ersteinrichtung durch...${NC}"
@@ -249,7 +445,8 @@ case "$1" in
             echo -e "${BLUE}Führe zuerst '$0 --setup' aus, um die Ersteinrichtung durchzuführen.${NC}"
             exit 1
         fi
-        show_help
+        # Interaktives Menü ohne Parameter anzeigen
+        show_interactive_menu
         ;;
     *)
         # Prüfen, ob das Hardware-Verzeichnis existiert, andernfalls automatisch initialisieren
@@ -257,7 +454,7 @@ case "$1" in
             echo -e "${YELLOW}Persönliches Hardware-Verzeichnis nicht gefunden. Führe automatische Ersteinrichtung durch...${NC}"
             init_config
         fi
-        switch_config "$1"
+        switch_config "$@"
         ;;
 esac
 

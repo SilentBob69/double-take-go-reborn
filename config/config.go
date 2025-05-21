@@ -16,11 +16,15 @@ type Config struct {
 	Log        LogConfig        `mapstructure:"log"`
 	DB         DBConfig         `mapstructure:"db"`
 	CompreFace CompreFaceConfig `mapstructure:"compreface"`
+	InsightFace InsightFaceConfig `mapstructure:"insightface"`
 	OpenCV     OpenCVConfig     `mapstructure:"opencv"`
 	MQTT       MQTTConfig       `mapstructure:"mqtt"`
 	Frigate    FrigateConfig    `mapstructure:"frigate"`
 	Cleanup    CleanupConfig    `mapstructure:"cleanup"`
 	Notifications NotificationsConfig `mapstructure:"notifications"`
+	Sync       SyncConfig       `mapstructure:"sync"`
+	// FaceRecognitionProvider bestimmt, welcher Gesichtserkennungsanbieter verwendet wird ("compreface" oder "insightface")
+	FaceRecognitionProvider string `mapstructure:"face_recognition_provider"`
 }
 
 // ServerConfig enthält Server-bezogene Einstellungen
@@ -64,6 +68,15 @@ type CompreFaceConfig struct {
 	ServiceID          string  `mapstructure:"service_id"`
 }
 
+// InsightFaceConfig enthält Konfigurationsoptionen für InsightFace
+type InsightFaceConfig struct {
+	Enabled            bool    `mapstructure:"enabled"`
+	URL                string  `mapstructure:"url"`
+	DetectionThreshold float64 `mapstructure:"detection_threshold"`
+	RecognitionThreshold float64 `mapstructure:"recognition_threshold"`
+	Timeout            int     `mapstructure:"timeout"`
+}
+
 // MQTTConfig enthält die Konfiguration für den MQTT-Client
 type MQTTConfig struct {
 	Enabled     bool   `mapstructure:"enabled"`
@@ -103,6 +116,15 @@ type CleanupConfig struct {
 type NotificationsConfig struct {
 	NewFaces  bool `mapstructure:"new_faces"`
 	KnownFaces bool `mapstructure:"known_faces"`
+}
+
+// SyncConfig enthält Einstellungen für die Synchronisierung mit externen Diensten
+type SyncConfig struct {
+	MaxRetries         int    `mapstructure:"max_retries"` 
+	RetryInitialDelay  int    `mapstructure:"retry_initial_delay"` // in Sekunden
+	RetryMaxDelay      int    `mapstructure:"retry_max_delay"`     // in Sekunden
+	RetryBackoffFactor float64 `mapstructure:"retry_backoff_factor"`
+	ProcessingInterval int    `mapstructure:"processing_interval"`  // in Sekunden
 }
 
 // PersonDetectionConfig enthält Konfigurationsoptionen für die OpenCV-Personenerkennung
@@ -201,6 +223,16 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("compreface.sync_interval_minutes", 15)
 	v.SetDefault("compreface.service_id", "")
 	
+	// InsightFace-Standardwerte
+	v.SetDefault("insightface.enabled", false)
+	v.SetDefault("insightface.url", "http://insightface:18081")
+	v.SetDefault("insightface.detection_threshold", 0.6)
+	v.SetDefault("insightface.recognition_threshold", 0.5)
+	v.SetDefault("insightface.timeout", 30)
+	
+	// Standard-Gesichtserkennungsanbieter
+	v.SetDefault("face_recognition_provider", "") // Leerer String bedeutet Auto-Wahl basierend auf enabled-Flags
+	
 	// OpenCV-Standardwerte
 	v.SetDefault("opencv.enabled", true)
 	v.SetDefault("opencv.use_gpu", false)
@@ -243,6 +275,13 @@ func setDefaults(v *viper.Viper) {
 	// Benachrichtigungs-Standardwerte
 	v.SetDefault("notifications.new_faces", true)
 	v.SetDefault("notifications.known_faces", true)
+	
+	// Sync-Standardwerte für ausstehende Operationen
+	v.SetDefault("sync.max_retries", 5)
+	v.SetDefault("sync.retry_initial_delay", 60)   // 60 Sekunden = 1 Minute
+	v.SetDefault("sync.retry_max_delay", 86400)    // 86400 Sekunden = 24 Stunden
+	v.SetDefault("sync.retry_backoff_factor", 2.0) // Exponentielles Backoff
+	v.SetDefault("sync.processing_interval", 300)  // 300 Sekunden = 5 Minuten
 }
 
 // ensureDirectories stellt sicher, dass alle erforderlichen Verzeichnisse existieren

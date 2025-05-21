@@ -9,7 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"strings"
+	"strconv"
 	"time"
 
 	"double-take-go-reborn/config"
@@ -19,8 +19,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Client für CompreFace-API
-type Client struct {
+// APIClient für CompreFace-API
+type APIClient struct {
 	config     config.CompreFaceConfig
 	httpClient *http.Client
 }
@@ -83,9 +83,9 @@ type SubjectExamplesWrapper struct {
 	Faces []SubjectExampleResponse `json:"faces"`
 }
 
-// NewClient erstellt einen neuen CompreFace-Client
-func NewClient(cfg config.CompreFaceConfig) *Client {
-	return &Client{
+// NewAPIClient erstellt einen neuen CompreFace-APIClient
+func NewAPIClient(cfg config.CompreFaceConfig) *APIClient {
+	return &APIClient{
 		config: cfg,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -94,7 +94,7 @@ func NewClient(cfg config.CompreFaceConfig) *Client {
 }
 
 // Ping prüft, ob der CompreFace-Dienst erreichbar ist
-func (c *Client) Ping(ctx context.Context) (bool, error) {
+func (c *APIClient) Ping(ctx context.Context) (bool, error) {
 	if !c.config.Enabled {
 		return false, fmt.Errorf("CompreFace is not enabled in config")
 	}
@@ -137,7 +137,7 @@ func (c *Client) Ping(ctx context.Context) (bool, error) {
 }
 
 // Recognize sendet ein Bild zur Gesichtserkennung an CompreFace mit optimierten Parametern
-func (c *Client) Recognize(ctx context.Context, imageData []byte, filename string) (*RecognitionResponse, error) {
+func (c *APIClient) Recognize(ctx context.Context, imageData []byte, filename string) (*RecognitionResponse, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
@@ -148,87 +148,66 @@ func (c *Client) Recognize(ctx context.Context, imageData []byte, filename strin
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Bildteil hinzufügen
+	// Formularfeld für das Bild erstellen
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %w", err)
 	}
 
-	// Bilddaten in das Formular kopieren
-	if _, err := part.Write(imageData); err != nil {
-		return nil, fmt.Errorf("failed to write image data: %w", err)
+	// Bilddaten in das Formularfeld schreiben
+	if _, err := io.Copy(part, bytes.NewReader(imageData)); err != nil {
+		return nil, fmt.Errorf("failed to copy image data: %w", err)
 	}
 
-	// Zusätzliche Parameter für verbesserte Erkennung hinzufügen
-	
-	// Parameter 1: Limit - Maximum der zurückgegebenen Treffer pro Gesicht (default: 5)
-	limit := "10"  // Erhöhen auf 10, um mehr potenzielle Treffer zu erhalten
-	if err := writer.WriteField("limit", limit); err != nil {
-		log.Warnf("Failed to add limit parameter: %v", err)
-	}
-
-	// Parameter 2: der Schwellenwert für die Ähnlichkeit (default: 0.8 bzw. 80%)
-	// Wir verwenden den konfigurierten Wert, aber konvertieren von 0-100 zu 0-1
-	similarityThreshold := fmt.Sprintf("%.2f", c.config.SimilarityThreshold/100.0)
-	if err := writer.WriteField("threshold", similarityThreshold); err != nil {
-		log.Warnf("Failed to add threshold parameter: %v", err)
-	}
-
-	// Parameter 3: Face Plugins für zusätzliche Gesichtsmerkmale
-	// age,gender,detector,calculator,mask,landmarks,pose,calculating
-	// Wir aktivieren zusätzlich calculator (für 128-dim Embeddings) und landmarks (für Gesichtsmerkmale)
-	if err := writer.WriteField("face_plugins", "calculator,landmarks"); err != nil {
-		log.Warnf("Failed to add face_plugins parameter: %v", err)
-	}
-
-	// Parameter 4: Detection-Probability-Threshold
-	// Dieser Wert bestimmt, ab welcher Wahrscheinlichkeit ein Gesicht erkannt wird
-	detProbThreshold := fmt.Sprintf("%.2f", c.config.DetProbThreshold)
-	if err := writer.WriteField("det_prob_threshold", detProbThreshold); err != nil {
-		log.Warnf("Failed to add det_prob_threshold parameter: %v", err)
-	}
-
+	// Boundary abschließen
 	if err := writer.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
-	// URL für die Gesichtserkennung erstellen
+	// URL für die Erkennung erstellen
+	// Die URL sollte so aussehen: {api_url}/api/v1/recognition/recognize
 	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/recognize")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
 
+	// Limit-Parameter hinzufügen (maximale Anzahl von Treffern pro Gesicht)
+	apiURLWithParams, err := url.Parse(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse API URL: %w", err)
+	}
+
+	q := apiURLWithParams.Query()
+	q.Set("limit", "10") // Standardwert: 10 Treffer pro Gesicht
+	q.Set("det_prob_threshold", fmt.Sprintf("%g", c.config.DetProbThreshold))
+	q.Set("prediction_count", "3")
+	// Ähnlichkeitsschwelle in Prozent (z.B. 80.0 für 80%)
+	q.Set("face_plugins", "")
+	apiURLWithParams.RawQuery = q.Encode()
+
 	// Request erstellen
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURLWithParams.String(), body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Header setzen
+	// Content-Type-Header setzen (wichtig für Multipart-Form-Daten)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	// API-Key-Header setzen
 	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
-
-	// Start der Zeitmessung
-	start := time.Now()
 
 	// Request senden
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	
-	// Zeitmessung beenden
-	duration := time.Since(start)
-	log.Debugf("CompreFace recognition request took %s", duration)
+	defer resp.Body.Close()
 
-	// Prüfen ob Request erfolgreich war
+	// Status-Code prüfen
 	if resp.StatusCode != http.StatusOK {
-		// Bei Fehler den Response-Body lesen
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
 		return nil, fmt.Errorf("CompreFace API returned error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
-	defer resp.Body.Close()
 
 	// Antwort auswerten
 	var result RecognitionResponse
@@ -236,18 +215,23 @@ func (c *Client) Recognize(ctx context.Context, imageData []byte, filename strin
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	log.Debugf("CompreFace detected %d faces", len(result.Result))
+	log.Debugf("CompreFace recognize successful, found %d faces", len(result.Result))
 	return &result, nil
 }
 
+// SubjectsResponse repräsentiert die Antwort der CompreFace API für die Liste der Subjekte
+type SubjectsResponse struct {
+	Subjects []string `json:"subjects"`
+}
+
 // GetAllSubjects ruft alle bekannten Subjekte/Personen von CompreFace ab
-func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
+func (c *APIClient) GetAllSubjects(ctx context.Context) ([]string, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
 
-	// URL genau nach der Dokumentation erstellen
-	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/")
+	// URL für die Abfrage aller Subjekte
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
@@ -258,12 +242,9 @@ func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Headers genau nach der Dokumentation setzen
-	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
+	// Header setzen
 	req.Header.Set("Content-Type", "application/json")
-
-	// Ausführliche Logging für Debugging-Zwecke
-	log.Infof("Sending request to CompreFace: %s", apiURL)
+	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
 
 	// Request senden
 	resp, err := c.httpClient.Do(req)
@@ -272,134 +253,188 @@ func (c *Client) GetAllSubjects(ctx context.Context) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
-	// Antwort auslesen (für Logging-Zwecke)
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
 	// Status-Code prüfen
 	if resp.StatusCode != http.StatusOK {
-		log.Errorf("CompreFace API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("CompreFace API returned error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// Antwort auswerten
-	var result struct {
-		Subjects []string `json:"subjects"`
-	}
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+	// Das korrekte Format der Antwort ist: {"subjects": ["name1", "name2", ...]}
+	// Daher müssen wir zuerst die Antwort in eine Struktur deserialisieren
+	var response SubjectsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	log.Infof("Successfully retrieved %d subjects from CompreFace", len(result.Subjects))
-	return result.Subjects, nil
+	log.Infof("Retrieved %d subjects from CompreFace", len(response.Subjects))
+	return response.Subjects, nil
 }
 
 // SyncIdentities synchronisiert die Identitäten zwischen CompreFace und der lokalen Datenbank
-func (c *Client) SyncIdentities(ctx context.Context, db *gorm.DB) error {
+// Dabei werden Identitäten in beiden Richtungen synchronisiert:
+// 1. Lokale Identitäten werden in CompreFace erstellt, wenn sie dort nicht existieren
+// 2. CompreFace-Identitäten werden in die lokale Datenbank importiert, wenn sie dort nicht existieren
+func (c *APIClient) SyncIdentities(ctx context.Context, db *gorm.DB) error {
 	if !c.config.Enabled {
 		return fmt.Errorf("CompreFace is not enabled in config")
 	}
 
-	// Alle Subjekte von CompreFace abrufen
-	compreSubjects, err := c.GetAllSubjects(ctx)
+	log.Info("Starting identity synchronization with CompreFace")
+
+	// CompreFace-Subjekte abrufen
+	subjects, err := c.GetAllSubjects(ctx)
 	if err != nil {
-		log.WithError(err).Error("Failed to get subjects from CompreFace")
-		return fmt.Errorf("failed to get subjects from CompreFace: %w", err)
+		return fmt.Errorf("failed to retrieve subjects from CompreFace: %w", err)
 	}
 
-	// Map für schnellen Zugriff erstellen
-	compreSubjectMap := make(map[string]bool)
-	for _, name := range compreSubjects {
-		compreSubjectMap[strings.ToLower(name)] = true // Kleinbuchstaben für Vergleich
+	// Subjekte in Map umwandeln für einfachen Zugriff
+	subjectMap := make(map[string]bool)
+	for _, subject := range subjects {
+		subjectMap[subject] = true
 	}
 
-	// Alle lokalen Identitäten abrufen
-	var localIdentities []models.Identity
-	if err := db.Find(&localIdentities).Error; err != nil {
-		log.WithError(err).Error("Failed to get identities from local database")
-		return fmt.Errorf("failed to get local identities: %w", err)
+	// Bekannte Identitäten aus der Datenbank abrufen
+	var identities []models.Identity
+	if err := db.Find(&identities).Error; err != nil {
+		return fmt.Errorf("failed to retrieve identities from database: %w", err)
 	}
 
-	// Map für schnellen Zugriff erstellen
-	localIdentityMap := make(map[string]bool)
-	for _, identity := range localIdentities {
-		localIdentityMap[strings.ToLower(identity.Name)] = true // Kleinbuchstaben für Vergleich
-	}
-
-	// Überprüfen, welche Subjekte in CompreFace sind, aber nicht lokal
-	newIdentitiesCount := 0
-	for _, compreName := range compreSubjects {
-		if !localIdentityMap[strings.ToLower(compreName)] {
-			// Subjekt in CompreFace, aber nicht lokal -> erstellen
-			newIdentity := models.Identity{
-				Name:       compreName,
-				ExternalID: compreName, // ExternalID = Name in CompreFace
-			}
-			if err := db.Create(&newIdentity).Error; err != nil {
-				log.WithError(err).Errorf("Failed to create local identity for CompreFace subject: %s", compreName)
-				// Trotz Fehler fortsetzen
+	// Identitäten in CompreFace erstellen, die nicht existieren
+	for _, identity := range identities {
+		// Verwende den Namen für CompreFace, statt der ID
+		subjectName := identity.Name
+		
+		// Falls die Identität bereits eine externe ID hat, überprüfe diese
+		var subjectToCheck string
+		if identity.ExternalID != "" {
+			subjectToCheck = identity.ExternalID
+		} else {
+			subjectToCheck = subjectName
+		}
+		
+		if _, exists := subjectMap[subjectToCheck]; !exists {
+			log.Infof("Creating subject in CompreFace: %s", subjectName)
+			_, err := c.CreateSubject(ctx, subjectName)
+			if err != nil {
+				log.Warnf("Failed to create subject %s in CompreFace: %v", subjectName, err)
 			} else {
-				newIdentitiesCount++
-				log.Infof("Created new local identity for CompreFace subject: %s", compreName)
+				// Aktualisiere die ExternalID, wenn sie noch nicht gesetzt ist
+				if identity.ExternalID == "" {
+					identity.ExternalID = subjectName
+					db.Save(&identity)
+				}
 			}
 		}
 	}
 
-	log.Infof("CompreFace sync completed: %d subjects in CompreFace, created %d new local identities",
-		len(compreSubjects), newIdentitiesCount)
+	// Identitätsmap für einfachen Zugriff erstellen
+	identityMap := make(map[string]bool)
+	externalIdMap := make(map[string]bool)
+	
+	for _, identity := range identities {
+		// Namen und externe IDs merken
+		identityMap[identity.Name] = true
+		
+		if identity.ExternalID != "" {
+			externalIdMap[identity.ExternalID] = true
+		}
+	}
+
+	// CompreFace-Subjekte in die lokale Datenbank importieren, wenn sie nicht existieren
+	importedCount := 0
+	for subject := range subjectMap {
+		// Prüfen, ob wir das Subjekt bereits als Namen haben
+		if _, exists := identityMap[subject]; exists {
+			continue
+		}
+		
+		// Prüfen, ob wir das Subjekt bereits als externe ID haben
+		if _, exists := externalIdMap[subject]; exists {
+			continue
+		}
+		
+		// Wir verwenden den Subjektnamen direkt als Identitätsnamen
+		name := subject
+		
+		// Folgende Prüfung ist hilfreich für bereits vorhandene numerische IDs,
+		// damit diese einen lesbaren Namen bekommen
+		_, err := strconv.ParseUint(subject, 10, 64)
+		if err == nil {
+			// Es ist eine Zahl, wir fügen ein Prefix hinzu
+			name = fmt.Sprintf("Person %s", subject)
+		}
+		
+		// Neue Identität in der lokalen Datenbank erstellen
+		newIdentity := models.Identity{
+			Name:       name,
+			ExternalID: subject,
+		}
+		
+		if err := db.Create(&newIdentity).Error; err != nil {
+			log.Warnf("Failed to create identity for CompreFace subject %s: %v", subject, err)
+		} else {
+			log.Infof("Imported CompreFace subject %s as identity %s (ID: %d)", subject, name, newIdentity.ID)
+			importedCount++
+		}
+	}
+
+	log.Infof("Imported %d CompreFace subjects to local database", importedCount)
+	log.Info("Identity synchronization with CompreFace completed")
 	return nil
 }
 
-// AddSubjectExample fügt ein Beispielbild für ein Subjekt/eine Person hinzu
-func (c *Client) AddSubjectExample(ctx context.Context, subjectName string, imageData []byte, filename string) (*AddResponse, error) {
+// AddExample fügt ein Beispielbild zu einem Subjekt hinzu
+func (c *APIClient) AddExample(ctx context.Context, imageData []byte, filename, subjectID string) (*AddResponse, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
+
+	log.Debugf("Adding face example for subject: %s", subjectID)
 
 	// Multipart-Form-Daten erstellen
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Bildteil hinzufügen
+	// Formularfeld für das Bild erstellen
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %w", err)
 	}
+
+	// Bilddaten in das Formularfeld schreiben
 	if _, err := io.Copy(part, bytes.NewReader(imageData)); err != nil {
 		return nil, fmt.Errorf("failed to copy image data: %w", err)
 	}
 
-	// Multipart-Form abschließen
+	// Subjekt-Feld hinzufügen
+	if err := writer.WriteField("subject", subjectID); err != nil {
+		return nil, fmt.Errorf("failed to add subject field: %w", err)
+	}
+
+	if err := writer.WriteField("det_prob_threshold", fmt.Sprintf("%g", c.config.DetProbThreshold)); err != nil {
+		return nil, fmt.Errorf("failed to add det_prob_threshold field: %w", err)
+	}
+
+	// Boundary abschließen
 	if err := writer.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
-	// Ziel-URL mit Subjektnamen erstellen
-	baseURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/faces")
+	// URL für das Hinzufügen eines Beispiels erstellen
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/faces")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
 
-	u, err := url.Parse(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %w", err)
-	}
-
-	// Query-Parameter hinzufügen
-	q := u.Query()
-	q.Set("subject", subjectName)
-	u.RawQuery = q.Encode()
-
 	// Request erstellen
-	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), body)
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Header setzen
+	// Content-Type-Header setzen (wichtig für Multipart-Form-Daten)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	// API-Key-Header setzen
 	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
 
 	// Request senden
@@ -410,7 +445,7 @@ func (c *Client) AddSubjectExample(ctx context.Context, subjectName string, imag
 	defer resp.Body.Close()
 
 	// Status-Code prüfen
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("CompreFace API returned error (status %d): %s", resp.StatusCode, string(bodyBytes))
 	}
@@ -421,84 +456,37 @@ func (c *Client) AddSubjectExample(ctx context.Context, subjectName string, imag
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	log.Infof("Added example for subject %s with image ID %s", result.Subject, result.ImageID)
+	log.Infof("Successfully added example for subject %s with image ID: %s", subjectID, result.ImageID)
 	return &result, nil
 }
 
+// AddSubjectExample ist ein Alias für AddExample für Abwärtskompatibilität
+func (c *APIClient) AddSubjectExample(ctx context.Context, subjectID string, imageData []byte, filename string) (*AddResponse, error) {
+	// Rufe die eigentliche Implementierung mit korrekter Reihenfolge der Parameter auf
+	return c.AddExample(ctx, imageData, filename, subjectID)
+}
+
 // CreateSubject erstellt ein neues Subjekt in CompreFace
-func (c *Client) CreateSubject(ctx context.Context, subjectName string) (*SubjectResponse, error) {
+func (c *APIClient) CreateSubject(ctx context.Context, subjectID string) (*SubjectResponse, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
 
-	// URL für die Subjekt-Erstellung
+	// URL für die Erstellung eines Subjekts
 	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
 
 	// Request-Body erstellen
-	reqBody := map[string]string{"subject": subjectName}
-	reqBodyBytes, err := json.Marshal(reqBody)
+	requestBody := map[string]string{"subject": subjectID}
+	requestBodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	// Request erstellen
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(reqBodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Header setzen
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
-
-	// Request senden
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Status-Code prüfen
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("CompreFace API returned error (status %d): %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	// Antwort auswerten
-	var result SubjectResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	log.Infof("Created new subject: %s", result.Subject)
-	return &result, nil
-}
-
-// RenameSubject benennt ein bestehendes Subjekt um
-// Wenn das Ziel-Subjekt bereits existiert, werden die Subjekte zusammengeführt
-func (c *Client) RenameSubject(ctx context.Context, oldSubjectName, newSubjectName string) (*SubjectRenameResponse, error) {
-	if !c.config.Enabled {
-		return nil, fmt.Errorf("CompreFace is not enabled in config")
-	}
-
-	// URL für die Subjekt-Umbenennung
-	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/", oldSubjectName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create API URL: %w", err)
-	}
-
-	// Request-Body erstellen
-	reqBody := map[string]string{"subject": newSubjectName}
-	reqBodyBytes, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request body: %w", err)
-	}
-
-	// Request erstellen
-	req, err := http.NewRequestWithContext(ctx, "PUT", apiURL, bytes.NewReader(reqBodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(requestBodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -521,23 +509,23 @@ func (c *Client) RenameSubject(ctx context.Context, oldSubjectName, newSubjectNa
 	}
 
 	// Antwort auswerten
-	var result SubjectRenameResponse
+	var result SubjectResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	log.Infof("Renamed subject from '%s' to '%s': update status: %v", oldSubjectName, newSubjectName, result.Updated)
+	log.Infof("Created subject: %s", result.Subject)
 	return &result, nil
 }
 
-// DeleteSubject löscht ein Subjekt und alle zugehörigen Beispielbilder
-func (c *Client) DeleteSubject(ctx context.Context, subjectName string) (*SubjectResponse, error) {
+// DeleteSubject löscht ein Subjekt in CompreFace
+func (c *APIClient) DeleteSubject(ctx context.Context, subjectID string) (*SubjectResponse, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
 
 	// URL für das Löschen eines Subjekts
-	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/", subjectName)
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/", subjectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
@@ -575,14 +563,66 @@ func (c *Client) DeleteSubject(ctx context.Context, subjectName string) (*Subjec
 	return &result, nil
 }
 
-// DeleteAllSubjects löscht alle Subjekte und alle zugehörigen Beispielbilder
-func (c *Client) DeleteAllSubjects(ctx context.Context) (*DeleteAllResponse, error) {
+// RenameSubject benennt ein Subjekt in CompreFace um
+func (c *APIClient) RenameSubject(ctx context.Context, oldSubjectID, newSubjectID string) (*SubjectRenameResponse, error) {
+	if !c.config.Enabled {
+		return nil, fmt.Errorf("CompreFace is not enabled in config")
+	}
+
+	// URL für das Umbenennen eines Subjekts
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/", oldSubjectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create API URL: %w", err)
+	}
+
+	// Request-Body erstellen
+	requestBody := map[string]string{"subject": newSubjectID}
+	requestBodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	// Request erstellen
+	req, err := http.NewRequestWithContext(ctx, "PUT", apiURL, bytes.NewBuffer(requestBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Header setzen
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", c.config.RecognitionAPIKey)
+
+	// Request senden
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Status-Code prüfen
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("CompreFace API returned error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	// Antwort auswerten
+	var result SubjectRenameResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	log.Infof("Renamed subject from %s to %s, success: %v", oldSubjectID, newSubjectID, result.Updated)
+	return &result, nil
+}
+
+// DeleteAllSubjects löscht alle Subjekte in CompreFace
+func (c *APIClient) DeleteAllSubjects(ctx context.Context) (*DeleteAllResponse, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
 
 	// URL für das Löschen aller Subjekte
-	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects")
+	apiURL, err := url.JoinPath(c.config.URL, "/api/v1/recognition/subjects/")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API URL: %w", err)
 	}
@@ -621,7 +661,7 @@ func (c *Client) DeleteAllSubjects(ctx context.Context) (*DeleteAllResponse, err
 }
 
 // GetSubjectExamples gibt alle Beispielbilder eines Subjekts zurück
-func (c *Client) GetSubjectExamples(ctx context.Context, subjectName string) ([]SubjectExampleResponse, error) {
+func (c *APIClient) GetSubjectExamples(ctx context.Context, subjectName string) ([]SubjectExampleResponse, error) {
 	if !c.config.Enabled {
 		return nil, fmt.Errorf("CompreFace is not enabled in config")
 	}
@@ -678,7 +718,7 @@ func (c *Client) GetSubjectExamples(ctx context.Context, subjectName string) ([]
 }
 
 // DeleteSubjectExample löscht ein einzelnes Beispielbild eines Subjekts
-func (c *Client) DeleteSubjectExample(ctx context.Context, imageID string) error {
+func (c *APIClient) DeleteSubjectExample(ctx context.Context, imageID string) error {
 	if !c.config.Enabled {
 		return fmt.Errorf("CompreFace is not enabled in config")
 	}

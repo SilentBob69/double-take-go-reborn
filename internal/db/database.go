@@ -73,6 +73,7 @@ func Initialize(cfg *config.Config) error {
 		&models.Face{},
 		&models.Identity{},
 		&models.Match{},
+		&models.PendingOperation{},
 	); err != nil {
 		log.Errorf("Database migration failed: %v", err)
 		return fmt.Errorf("database migration failed: %w", err)

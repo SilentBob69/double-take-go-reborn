@@ -14,16 +14,16 @@ server:
   metrics_enabled: true
 
 mqtt:
-  enabled: false
-  broker: "localhost"
+  enabled: true
+  broker: "192.168.0.55"
   port: 1883
-  username: ""
-  password: ""
+  username: "hans"
+  password: "desert"
   client_id: "double-take-go"
   topic_prefix: "double-take"
   topic: "frigate/events"
   homeassistant:
-    enabled: false  # Auf true setzen, um Home Assistant Discovery zu aktivieren
+    enabled: true  # Home Assistant Discovery aktiviert
     discovery_prefix: "homeassistant"  # Standard-Präfix für Home Assistant
     publish_results: true  # Erkennungsergebnisse veröffentlichen
 
@@ -38,7 +38,7 @@ opencv:
   use_gpu: false
   person_detection:
     method: "hog"  # Options: "hog", "dnn"
-    confidence_threshold: 0.85
+    confidence_threshold: 0.5
     scale_factor: 1.05
     min_neighbors: 2
     min_size_width: 64

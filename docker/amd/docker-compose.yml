@@ -30,21 +30,24 @@ services:
   # ========================================================================
   # InsightFace mit AMD GPU-Beschleunigung (OpenCL)
   insightface:
-    image: insightface/insightface-rest:v0.7.3
+    build:
+      context: ../insightface
+      dockerfile: Dockerfile
     container_name: insightface
     restart: always
     ports:
       - "18081:18081"
     volumes:
-      - ../../data/insightface:/workspace/models
+      - ../../data/insightface:/app/models  # Modelle persistent speichern
     environment:
       - TZ=Europe/Berlin
-      - PYTHONUNBUFFERED=0
+      - PYTHONUNBUFFERED=1
       - INFERENCE_BACKEND=ort  # ONNX Runtime mit OpenCL-Beschleunigung
       - USE_OPENCL=1  # OpenCL-Beschleunigung aktivieren
     platform: linux/amd64
+    devices:
+      - /dev/dri:/dev/dri  # GPU-Zugriff für OpenCL
     # Beim ersten Start werden Modelle heruntergeladen, was einige Zeit dauern kann
-    # Bitte haben Sie Geduld, bis der Container vollständig gestartet ist
 
   # HINWEIS: CompreFace und MQTT werden als externe Dienste verwendet
   # und sind nicht Teil dieser docker-compose Konfiguration.

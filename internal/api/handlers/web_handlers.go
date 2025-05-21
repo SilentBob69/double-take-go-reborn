@@ -21,6 +21,7 @@ import (
 	"double-take-go-reborn/internal/core/models"
 	"double-take-go-reborn/internal/core/processor"
 	"double-take-go-reborn/internal/integrations/compreface"
+	syncservice "double-take-go-reborn/internal/services/sync"
 	"double-take-go-reborn/internal/server/sse"
 	"double-take-go-reborn/internal/utils"
 
@@ -38,7 +39,8 @@ type WebHandler struct {
 	templates   *template.Template // Alle Template mit Standardfunktionen
 	sseHub      *sse.Hub
 	workerPool  *processor.WorkerPool // Zugriff auf den Worker-Pool
-	compreface  *compreface.Client    // Zugriff auf den CompreFace-Client
+	compreface  *compreface.APIClient    // Zugriff auf den CompreFace-Client
+	syncService *syncservice.Service     // Synchronisierungsservice für ausstehende Operationen
 	translations map[string]map[string]string // Cache für Übersetzungen
 	transMutex  sync.RWMutex               // Mutex für thread-sicheren Zugriff
 	activeLanguage string                 // Aktuelle Sprache für Standardanzeige
@@ -142,13 +144,14 @@ func (h *WebHandler) getImagePath(filename string) string {
 }
 
 // NewWebHandler erstellt einen neuen Web-Handler
-func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool *processor.WorkerPool, compreFaceClient *compreface.Client) (*WebHandler, error) {
+func NewWebHandler(db *gorm.DB, cfg *config.Config, sseHub *sse.Hub, workerPool *processor.WorkerPool, compreFaceClient *compreface.APIClient, syncService *syncservice.Service) (*WebHandler, error) {
 	h := &WebHandler{
 		db:          db,
 		cfg:         cfg,
 		sseHub:      sseHub,
 		workerPool:  workerPool,
 		compreface:  compreFaceClient,
+		syncService: syncService,
 		translations: make(map[string]map[string]string),
 	}
 
@@ -1141,13 +1144,23 @@ func (h *WebHandler) handleDeleteIdentity(c *gin.Context) {
 		return
 	}
 
-	// Identität in CompreFace löschen, falls aktiviert
-	if h.cfg.CompreFace.Enabled {
-		ctx := c.Request.Context()
+	// WICHTIG: Wir priorisieren das Löschen aus der lokalen Datenbank
+	// und stellen alle externen Operationen (wie CompreFace-Löschung) in eine Warteschlange
+	// So ist die Benutzererfahrung nicht durch Netzwerkprobleme beeinträchtigt
+
+	compreFaceDeleteError := false
+	
+	// Versuche sofortiges Löschen in CompreFace, falls aktiviert und erreichbar
+	if h.cfg.CompreFace.Enabled && h.compreface != nil {
+		// Prüfen, ob CompreFace erreichbar ist mit einem kurzen Timeout
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+		defer cancel()
+		
+		// Versuche direkte Löschung mit Timeout
 		_, err := h.compreface.DeleteSubject(ctx, identity.Name)
 		if err != nil {
-			log.WithError(err).Warn("Fehler beim Löschen des Subjekts in CompreFace")
-			// Fortfahren trotz Fehler
+			compreFaceDeleteError = true
+			log.WithError(err).Warn("Direktes Löschen des Subjekts in CompreFace fehlgeschlagen - wird in Warteschlange gestellt")
 		}
 	}
 
@@ -1156,6 +1169,23 @@ func (h *WebHandler) handleDeleteIdentity(c *gin.Context) {
 		log.WithError(err).Error("Fehler beim Löschen der Identität aus der Datenbank")
 		c.Redirect(http.StatusFound, fmt.Sprintf("/identities/%d", identity.ID))
 		return
+	}
+
+	// Wenn CompreFace-Löschung fehlgeschlagen ist und SyncService verfügbar ist,
+	// zur Warteschlange hinzufügen
+	if compreFaceDeleteError && h.syncService != nil {
+		log.Infof("Identity %s (%d) wird zur Lösch-Warteschlange hinzugefügt", identity.Name, identity.ID)
+		err := h.syncService.AddPendingOperation(
+			models.POTypeDeleteIdentity,
+			models.POResourceIdentity, 
+			identity.Name,
+			identity.ID,
+			nil, // Keine zusätzlichen Daten nötig
+		)
+		
+		if err != nil {
+			log.WithError(err).Error("Fehler beim Hinzufügen der Löschoperation zur Warteschlange")
+		}
 	}
 
 	// Zurück zur Identitätsübersicht
@@ -1222,6 +1252,29 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		compreFaceStatus = "Deaktiviert"
 	}
 	
+	// InsightFace-Status prüfen
+	insightFaceStatus := "Unbekannt"
+	if h.cfg.InsightFace.Enabled {
+		// Prüfen ob InsightFace REST Server erreichbar ist
+		client := &http.Client{
+			Timeout: 5 * time.Second,
+		}
+		resp, err := client.Get(h.cfg.InsightFace.URL + "/info")
+		if err != nil {
+			log.Warnf("Konnte keine Verbindung zu InsightFace herstellen: %v", err)
+			insightFaceStatus = "Nicht erreichbar"
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				insightFaceStatus = "Verbunden"
+			} else {
+				insightFaceStatus = fmt.Sprintf("Fehler: HTTP %d", resp.StatusCode)
+			}
+		}
+	} else {
+		insightFaceStatus = "Deaktiviert"
+	}
+	
 	// CompreFace-Subjects aus der Datenbank abrufen
 	var identities []models.Identity
 	var compreFaceSubjects []string
@@ -1275,8 +1328,11 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		"MQTTTopic":      h.cfg.MQTT.Topic,
 		"CompreFaceURL":  h.cfg.CompreFace.URL,
 		"CompreEnabled":  h.cfg.CompreFace.Enabled,
+		"InsightFaceURL": h.cfg.InsightFace.URL,
+		"InsightEnabled": h.cfg.InsightFace.Enabled,
 		"DataDir":        "/data", // Hardcoded Standardwert, falls nicht in der Config
 		"Version":        "1.0.0", // Hier könnte eine Versionsnummer eingetragen werden
+		"ActiveProvider": h.cfg.FaceRecognitionProvider,
 	}
 	
 	// Template-Daten
@@ -1295,6 +1351,7 @@ func (h *WebHandler) handleDiagnostics(c *gin.Context) {
 		"DBStats": dbStats,
 		"Services": gin.H{
 			"CompreFace": compreFaceStatus,
+			"InsightFace": insightFaceStatus,
 			"MQTT": mqttStatus,
 			"OpenCV": opencvStatus,
 		},
