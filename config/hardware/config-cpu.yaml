@@ -38,7 +38,7 @@ opencv:
   use_gpu: false
   person_detection:
     method: "hog"  # Options: "hog", "dnn"
-    confidence_threshold: 0.7
+    confidence_threshold: 0.6
     scale_factor: 1.05
     min_neighbors: 2
     min_size_width: 64

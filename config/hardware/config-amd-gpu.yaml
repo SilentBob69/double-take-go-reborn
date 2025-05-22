@@ -40,7 +40,7 @@ opencv:
   target: "opencl"   # Target compute device is OpenCL
   person_detection:
     method: "dnn"  # DNN method is preferred for GPU acceleration
-    confidence_threshold: 0.7
+    confidence_threshold: 0.6
     scale_factor: 1.03
     min_neighbors: 3
     min_size_width: 64
