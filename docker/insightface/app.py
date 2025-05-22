@@ -18,19 +18,62 @@ logger = logging.getLogger("insightface-api")
 # FastAPI-App initialisieren
 app = FastAPI(title="InsightFace API")
 
-# InsightFace Analyzer initialisieren
-# Für GPU: providers=['CUDAExecutionProvider'] oder providers=['TensorrtExecutionProvider']
-# Für CPU: providers=['CPUExecutionProvider']
-providers = ['CPUExecutionProvider']  # Standard, wird durch ENV überschrieben
-backend = os.environ.get('INFERENCE_BACKEND', 'onnx').lower()
+# InsightFace Analyzer initialisieren mit automatischer Provider-Auswahl
+def get_optimal_providers():
+    """Ermittelt die optimalen Provider basierend auf Hardware und Einstellungen"""
+    backend = os.environ.get('INFERENCE_BACKEND', 'auto').lower()
+    
+    # Verfügbare Provider aus onnxruntime ermitteln
+    import onnxruntime
+    available_providers = onnxruntime.get_available_providers()
+    logger.info(f"Verfügbare onnxruntime Provider: {available_providers}")
+    
+    # Provider-Liste mit Fallbacks
+    if backend == 'auto':
+        # Nur verfügbare Provider verwenden
+        providers = []
+        for provider in ['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'ROCMExecutionProvider', 'CPUExecutionProvider']:
+            if provider in available_providers:
+                providers.append(provider)
+        # Sicherstellen, dass CPUExecutionProvider immer verfügbar ist
+        if not providers or 'CPUExecutionProvider' not in providers:
+            providers.append('CPUExecutionProvider')
+        return providers
+    elif backend == 'trt' or backend == 'tensorrt':
+        providers = []
+        if 'TensorrtExecutionProvider' in available_providers:
+            providers.append('TensorrtExecutionProvider')
+        if 'CUDAExecutionProvider' in available_providers:
+            providers.append('CUDAExecutionProvider')
+        providers.append('CPUExecutionProvider')
+        return providers
+    elif backend == 'cuda':
+        providers = ['CPUExecutionProvider']
+        if 'CUDAExecutionProvider' in available_providers:
+            providers.insert(0, 'CUDAExecutionProvider')
+        return providers
+    elif backend == 'rocm':
+        providers = ['CPUExecutionProvider']
+        if 'ROCMExecutionProvider' in available_providers:
+            providers.insert(0, 'ROCMExecutionProvider')
+        return providers
+    elif backend == 'opencl' or backend == 'ort':
+        providers = ['CPUExecutionProvider']
+        if 'OpenCLExecutionProvider' in available_providers:
+            os.environ['USE_OPENCL'] = '1'
+            providers.insert(0, 'OpenCLExecutionProvider')
+        return providers
+    elif backend == 'coreml' or backend == 'apple':
+        providers = ['CPUExecutionProvider']
+        if 'CoreMLExecutionProvider' in available_providers:
+            providers.insert(0, 'CoreMLExecutionProvider')
+        return providers
+    else:
+        return ['CPUExecutionProvider']
 
-if backend == 'trt' or backend == 'tensorrt':
-    providers = ['TensorrtExecutionProvider']
-elif backend == 'cuda':
-    providers = ['CUDAExecutionProvider']
-elif backend == 'ort' or backend == 'opencl':
-    os.environ['USE_OPENCL'] = '1'
-    providers = ['OpenCLExecutionProvider', 'CPUExecutionProvider']
+# Provider-Liste ermitteln
+providers = get_optimal_providers()
+backend = os.environ.get('INFERENCE_BACKEND', 'auto').lower()
 
 logger.info(f"Initialisiere InsightFace mit Backend: {backend}, Providers: {providers}")
 
@@ -44,11 +87,30 @@ def read_root():
 
 @app.get("/info")
 def get_info():
+    # Aktive Provider ermitteln (die tatsächlich verwendet werden)
+    try:
+        # Verschiedene Möglichkeiten, die verfügbaren Provider zu ermitteln
+        if hasattr(insightface, 'utils') and hasattr(insightface.utils, 'get_available_providers'):
+            available_providers = [provider for provider in providers 
+                                if provider in insightface.utils.get_available_providers()]
+        elif hasattr(insightface, 'get_available_providers'):
+            available_providers = [provider for provider in providers 
+                                if provider in insightface.get_available_providers()]
+        else:
+            import onnxruntime
+            available_providers = [provider for provider in providers 
+                                if provider in onnxruntime.get_available_providers()]
+    except Exception as e:
+        logger.warning(f"Konnte verfügbare Provider nicht ermitteln: {str(e)}")
+        available_providers = ['Unbekannt']
+    
     return {
         "status": "ok",
         "version": insightface.__version__,
         "backend": backend,
-        "providers": providers
+        "requested_providers": providers,
+        "available_providers": available_providers,
+        "active_provider": available_providers[0] if available_providers else "None"
     }
 
 @app.post("/detect")

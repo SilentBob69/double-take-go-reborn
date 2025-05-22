@@ -15,10 +15,10 @@ server:
 
 mqtt:
   enabled: true
-  broker: "192.168.0.55"
+  broker: "mqtt-broker-ip"
   port: 1883
-  username: "hans"
-  password: "desert"
+  username: "your-mqtt-username"
+  password: "your-mqtt-password"
   client_id: "double-take-go"
   topic_prefix: "double-take"
   topic: "frigate/events"
@@ -36,6 +36,8 @@ storage:
 opencv:
   enabled: true
   use_gpu: true
+  backend: "cuda"  # Use CUDA backend for OpenCV DNN
+  target: "cuda"   # Target compute device is CUDA
   person_detection:
     method: "dnn"  # DNN method is preferred for GPU acceleration
     confidence_threshold: 0.85
@@ -43,9 +45,6 @@ opencv:
     min_neighbors: 3
     min_size_width: 64
     min_size_height: 128
-    # GPU-specific DNN parameters
-    backend: "cuda"  # Use CUDA backend for OpenCV DNN
-    target: "cuda"   # Target compute device is CUDA
 
 # =========================================================================
 # OPTIONAL: CompreFace-Integration für Gesichtserkennung
@@ -59,7 +58,7 @@ compreface:
   detection_api_url: "http://compreface:8000/api/v1/detection/detect"
   recognition_api_url: "http://compreface:8000/api/v1/recognition/recognize"
   verification_api_url: "http://compreface:8000/api/v1/verification/verify"
-  api_key: "YOUR_API_KEY_HERE"
+  api_key: "your-compreface-api-key-here"
   detection_threshold: 0.7
   recognition_threshold: 0.7
   limit: 0

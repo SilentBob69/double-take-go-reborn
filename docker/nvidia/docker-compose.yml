@@ -45,7 +45,7 @@ services:
     environment:
       - TZ=Europe/Berlin
       - PYTHONUNBUFFERED=1
-      - INFERENCE_BACKEND=trt  # TensorRT für NVIDIA GPU-Beschleunigung
+      - INFERENCE_BACKEND=auto  # Automatische Provider-Erkennung mit Fallback
     platform: linux/amd64
     deploy:
       resources:

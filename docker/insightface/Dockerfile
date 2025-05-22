@@ -36,7 +36,7 @@ COPY app.py /app/
 
 # Gesichtsmodelle herunterladen und warm-up
 RUN python -c "import insightface; from insightface.app import FaceAnalysis; \
-    analyzer = FaceAnalysis(providers=['CPUExecutionProvider'], allowed_modules=['detection', 'recognition']); \
+    analyzer = FaceAnalysis(allowed_modules=['detection', 'recognition']); \
     analyzer.prepare(ctx_id=0, det_size=(640, 640))"
 
 # Umgebungsvariablen

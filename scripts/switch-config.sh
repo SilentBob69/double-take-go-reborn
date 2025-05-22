@@ -1,36 +1,17 @@
 #!/bin/bash
-# switch-config.sh - Wechselt zwischen Hardware-Konfigurationen für Double-Take-Go-Reborn
+# switch-config.sh - Robuste Version des Konfigurationswechslers
 # Autor: Double-Take Team
-# Datum: 2025-05-18
+# Datum: 2025-05-21
 
 set -e  # Bei Fehlern abbrechen
 
-# Pfade automatisch ermitteln (funktioniert unabhängig vom Installationsort)
+# Pfade automatisch ermitteln
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CONFIG_DIR="$PROJECT_ROOT/config"
-HARDWARE_DIR="$CONFIG_DIR/hardware"
-MY_HARDWARE_DIR="$CONFIG_DIR/my-hardware"
+MY_HARDWARE_DIR="$CONFIG_DIR/my-hardware"  # Hier liegen die Hauptkonfigurationen
+HARDWARE_DIR="$CONFIG_DIR/hardware"        # Fallback-Verzeichnis
 TARGET_CONFIG="$CONFIG_DIR/config.yaml"
-
-# Erstelle my-hardware, falls es nicht existiert
-init_config() {
-    if [ ! -d "$MY_HARDWARE_DIR" ]; then
-        echo -e "${YELLOW}Persönliches Hardware-Verzeichnis nicht gefunden. Erstelle...${NC}"
-        mkdir -p "$MY_HARDWARE_DIR"
-        
-        # Kopiere Basis-Konfigurationen, wenn vorhanden
-        if [ -d "$HARDWARE_DIR" ] && [ -n "$(ls -A "$HARDWARE_DIR"/*.yaml 2>/dev/null)" ]; then
-            echo -e "${BLUE}Kopiere Basis-Konfigurationen...${NC}"
-            cp "$HARDWARE_DIR"/*.yaml "$MY_HARDWARE_DIR"/
-            echo -e "${GREEN}Basiskonfigurationen wurden kopiert.${NC}"
-            echo -e "${YELLOW}WICHTIG: Bitte passe deine persönlichen Einstellungen in den Dateien unter $MY_HARDWARE_DIR an!${NC}"
-        else
-            echo -e "${RED}Keine Basiskonfigurationen im hardware-Verzeichnis gefunden.${NC}"
-            echo -e "${YELLOW}Bitte stelle sicher, dass hardware-Konfigurationen in $HARDWARE_DIR existieren.${NC}"
-        fi
-    fi
-}
 
 # Farbcodes für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -39,9 +20,30 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Einen Konfigurationswert in einer YAML-Datei ändern
+update_yaml_value() {
+    local file=$1
+    local key=$2
+    local value=$3
+    local tmpfile=$(mktemp)
+    
+    while IFS= read -r line; do
+        if [[ $line =~ ^[[:space:]]*$key:[[:space:]] ]]; then
+            # Einrückung beibehalten
+            indent=$(echo "$line" | sed -E "s/^([[:space:]]*)$key:.*/\\1/")
+            echo "${indent}$key: $value"
+        else
+            echo "$line"
+        fi
+    done < "$file" > "$tmpfile"
+    
+    # Ersetze die Originaldatei mit der bearbeiteten Datei
+    mv "$tmpfile" "$file"
+}
+
 # Hilfefunktion
 show_help() {
-    echo -e "${BLUE}Double-Take-Go-Reborn Hardware-Konfigurationswechsler${NC}"
+    echo -e "${BLUE}Double-Take-Go-Reborn Konfigurationswechsler${NC}"
     echo
     echo "Verwendung: $0 [hardware-typ] [provider-options]"
     echo
@@ -54,22 +56,14 @@ show_help() {
     echo "Provider-Optionen:"
     echo "  --compreface=on|off   - CompreFace aktivieren/deaktivieren"
     echo "  --insightface=on|off  - InsightFace aktivieren/deaktivieren"
-    echo "  --provider=compreface|insightface|both - Primären Erkennungsprovider setzen"
+    echo "  --provider=compreface|insightface|both - Primären Erkennungsanbieter setzen"
     echo
     echo "Optionen:"
-    echo "  -h, --help         - Diese Hilfe anzeigen"
-    echo "  -l, --list         - Verfügbare Konfigurationen auflisten"
-    echo "  -s, --status       - Aktuelle Konfiguration anzeigen"
-    echo "  -i, --interactive  - Interaktiven Assistenten starten"
-    echo "  --setup            - Ersteinrichtung durchführen (persönliches Hardware-Verzeichnis erstellen)"
-    echo
-    echo "Beispiele:"
-    echo "  $0                  - Startet den interaktiven Assistenten"
-    echo "  $0 cpu              - Wechselt zur CPU-Konfiguration"
-    echo "  $0 -i               - Startet den interaktiven Assistenten"
-    echo "  $0 cpu --compreface=off         - Deaktiviert CompreFace in der CPU-Konfiguration"
-    echo "  $0 cpu --insightface=on         - Aktiviert InsightFace in der CPU-Konfiguration"
-    echo "  $0 cpu --provider=insightface   - Setzt InsightFace als primären Provider"
+    echo "  -h, --help      - Diese Hilfe anzeigen"
+    echo "  -l, --list      - Verfügbare Konfigurationen auflisten"
+    echo "  -s, --status    - Aktuelle Konfiguration anzeigen"
+    echo "  -i, --interactive - Interaktiven Assistenten starten"
+    echo "  -L, --logs      - Container-Logs anzeigen (folgen)"
 }
 
 # Verfügbare Konfigurationen auflisten
@@ -87,6 +81,80 @@ list_configs() {
     else
         echo -e "${YELLOW}Keine persönlichen Konfigurationen gefunden.${NC}"
     fi
+    
+    echo -e "\n${GREEN}Standard-Konfigurationen:${NC}"
+    for file in "$HARDWARE_DIR"/config-*.yaml; do
+        if [ -f "$file" ]; then
+            name=$(basename "$file" | sed 's/config-\(.*\)\.yaml/\1/')
+            echo "  - $name"
+        fi
+    done
+}
+
+# Container-Logs anzeigen
+show_logs() {
+    # Hardware-Typ als Parameter übernehmen oder aus der Konfiguration ermitteln
+    local hardware_type="$1"
+    
+    # Wenn kein Hardware-Typ übergeben wurde, aus der Konfiguration ermitteln
+    if [ -z "$hardware_type" ]; then
+        hardware_type="cpu" # Standard-Fallback
+        if [ -f "$TARGET_CONFIG" ]; then
+            if grep -q "backend: \"cuda\"" "$TARGET_CONFIG"; then
+                hardware_type="nvidia"
+            elif grep -q "backend: \"opencl\"" "$TARGET_CONFIG"; then
+                hardware_type="amd"
+            elif grep -q "metal_enabled: true" "$TARGET_CONFIG"; then
+                hardware_type="apple"
+            fi
+        fi
+    fi
+    
+    echo -e "${BLUE}Hardware-Typ für Logs: $hardware_type${NC}"
+    
+    # Docker-Verzeichnis bestimmen - konsistent mit der switch_config-Funktion
+    local docker_dir=""
+    case $hardware_type in
+        nvidia)
+            docker_dir="$PROJECT_ROOT/docker/nvidia"
+            ;;
+        amd)
+            docker_dir="$PROJECT_ROOT/docker/amd"
+            ;;
+        cpu)
+            docker_dir="$PROJECT_ROOT/docker/cpu"
+            ;;
+        apple)
+            docker_dir="$PROJECT_ROOT/docker/apple-silicon"
+            ;;
+        *)
+            # Fallback auf CPU, falls der Typ nicht erkannt wird
+            docker_dir="$PROJECT_ROOT/docker/cpu"
+            echo -e "${YELLOW}Hardware-Typ nicht erkannt, verwende CPU-Container.${NC}"
+            ;;
+    esac
+
+    # Prüfen, ob Container existiert und läuft
+    echo -e "${BLUE}Suche nach laufenden Containern in $docker_dir...${NC}"
+    pushd "$docker_dir" > /dev/null
+    
+    container_name=$(docker compose ps --services 2>/dev/null | grep double-take || echo "")
+    if [ -z "$container_name" ]; then
+        echo -e "${RED}Kein laufender Double-Take-Container gefunden.${NC}"
+        echo -e "${YELLOW}Starten Sie zuerst den Container mit:${NC}"
+        echo -e "cd $docker_dir && docker compose up -d"
+        popd > /dev/null
+        return 1
+    fi
+    
+    echo -e "${GREEN}Container gefunden: $container_name${NC}"
+    echo -e "${BLUE}Logs werden angezeigt (Ctrl+C zum Beenden):${NC}"
+    echo
+    
+    # Logs anzeigen
+    docker compose logs --follow
+    
+    popd > /dev/null
 }
 
 # Aktuelle Konfiguration anzeigen
@@ -94,10 +162,8 @@ show_status() {
     if [ -f "$TARGET_CONFIG" ]; then
         echo -e "${BLUE}Aktuelle Konfiguration:${NC}"
         
-        # Versuche, den Konfigurationstyp zu erkennen
-        hardware_type="Unbekannt"
-        
         # Hardware-Typ aus der Konfiguration extrahieren
+        hardware_type="Unbekannt"
         if grep -q "backend: \"cuda\"" "$TARGET_CONFIG"; then
             hardware_type="NVIDIA GPU"
         elif grep -q "backend: \"opencl\"" "$TARGET_CONFIG"; then
@@ -107,6 +173,10 @@ show_status() {
         elif grep -q "metal" "$TARGET_CONFIG"; then
             hardware_type="Apple Silicon"
         fi
+        
+        # Status von OpenCV und Personenerkennung
+        opencv_enabled=$(grep "enabled" "$TARGET_CONFIG" | head -1 | awk '{print $2}')
+        person_method=$(grep -A 3 "person_detection:" "$TARGET_CONFIG" | grep "method:" | awk '{print $2}' | tr -d '"')
         
         # MQTT-Status überprüfen
         mqtt_enabled=$(grep "mqtt:" -A 2 "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
@@ -122,17 +192,18 @@ show_status() {
         provider=$(grep "face_recognition_provider:" "$TARGET_CONFIG" | awk '{print $2}' | tr -d '"')
         
         echo -e "  Typ: ${GREEN}$hardware_type${NC}"
+        echo -e "  OpenCV: ${opencv_enabled:-false}"
+        echo -e "  Personenerkennung: ${person_method:-hog}"
         echo -e "  MQTT: ${mqtt_enabled:-false} ${mqtt_broker:+(Broker: $mqtt_broker)}"
         echo -e "  CompreFace: ${cf_enabled:-false}"
-        
-        echo
-        echo -e "${YELLOW}Hinweis: Diese Analyse basiert auf Mustern in der Konfigurationsdatei und ist möglicherweise nicht 100% akkurat.${NC}"
+        echo -e "  InsightFace: ${if_enabled:-false}"
+        echo -e "  Primärer Provider: ${provider:-compreface}"
     else
         echo -e "${RED}Keine aktive Konfiguration gefunden.${NC}"
     fi
 }
 
-# Provider-Konfiguration aktualisieren
+# Konfigurationsanbieter aktualisieren
 update_provider_config() {
     local config_file=$1
     local provider_option=$2
@@ -140,47 +211,292 @@ update_provider_config() {
     
     case $provider_option in
         compreface)
-            # CompreFace aktivieren/deaktivieren
-            # Zeilennummer von "compreface:" finden
-            local cf_line=$(grep -n "^compreface:" "$config_file" | cut -d":" -f1)
-            if [ -n "$cf_line" ]; then
-                # Die nächste Zeile mit "enabled:" finden und ersetzen
-                local next_line=$((cf_line + 1))
-                sed -i.bak "${next_line}s/enabled: .*/enabled: $value/" "$config_file"
-                echo -e "${BLUE}CompreFace-Konfiguration aktualisiert${NC}"
+            # Suche nach compreface:-Block und ändere den enabled-Wert
+            local tmpfile=$(mktemp)
+            local in_compreface_block=false
+            local changed=false
+            
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^compreface: ]]; then
+                    in_compreface_block=true
+                    echo "$line"
+                elif [[ "$in_compreface_block" == true && "$line" =~ ^[[:space:]]*enabled: ]]; then
+                    echo "  enabled: $value"
+                    changed=true
+                    in_compreface_block=false
+                else
+                    echo "$line"
+                fi
+            done < "$config_file" > "$tmpfile"
+            
+            if [[ "$changed" == true ]]; then
+                mv "$tmpfile" "$config_file"
+                # Stille Ausführung
             else
-                echo -e "${RED}CompreFace-Konfiguration nicht gefunden${NC}"
+                rm "$tmpfile"
+                # Stille Ausführung bei Fehlern
             fi
             ;;
         insightface)
-            # InsightFace aktivieren/deaktivieren
-            # Zeilennummer von "insightface:" finden
-            local if_line=$(grep -n "^insightface:" "$config_file" | cut -d":" -f1)
-            if [ -n "$if_line" ]; then
-                # Die nächste Zeile mit "enabled:" finden und ersetzen
-                local next_line=$((if_line + 1))
-                sed -i.bak "${next_line}s/enabled: .*/enabled: $value/" "$config_file"
-                echo -e "${BLUE}InsightFace-Konfiguration aktualisiert${NC}"
+            # Suche nach insightface:-Block und ändere den enabled-Wert
+            local tmpfile=$(mktemp)
+            local in_insightface_block=false
+            local changed=false
+            local block_exists=false
+            
+            # Prüfen, ob der Block überhaupt existiert
+            if grep -q "^insightface:" "$config_file"; then
+                block_exists=true
+            fi
+            
+            if [[ "$block_exists" == true ]]; then
+                # Block existiert - nur enabled-Wert ändern
+                while IFS= read -r line; do
+                    if [[ "$line" =~ ^insightface: ]]; then
+                        in_insightface_block=true
+                        echo "$line"
+                    elif [[ "$in_insightface_block" == true && "$line" =~ ^[[:space:]]*enabled: ]]; then
+                        echo "  enabled: $value"
+                        changed=true
+                        in_insightface_block=false
+                    else
+                        echo "$line"
+                    fi
+                done < "$config_file" > "$tmpfile"
+                
+                if [[ "$changed" == true ]]; then
+                    mv "$tmpfile" "$config_file"
+                else
+                    rm "$tmpfile"
+                fi
             else
-                echo -e "${RED}InsightFace-Konfiguration nicht gefunden${NC}"
+                # Block existiert nicht - hinzufügen wenn aktiviert werden soll
+                if [[ "$value" == "true" ]]; then
+                    echo "# InsightFace-Block existiert nicht, aber soll aktiviert werden"
+                    echo "# Füge Standard-Block am Ende der Datei hinzu"
+                    cat "$config_file" > "$tmpfile"
+                    echo "" >> "$tmpfile"
+                    echo "# =========================================================================" >> "$tmpfile"
+                    echo "# InsightFace-Integration für Gesichtserkennung (Alternative zu CompreFace)" >> "$tmpfile"
+                    echo "# =========================================================================" >> "$tmpfile"
+                    echo "insightface:" >> "$tmpfile"
+                    echo "  enabled: true" >> "$tmpfile"
+                    echo "  url: \"http://insightface:18081\"" >> "$tmpfile"
+                    echo "  detect_url: \"http://insightface:18081/extract\"" >> "$tmpfile"
+                    echo "  recognize_url: \"http://insightface:18081/recognize\"" >> "$tmpfile"
+                    echo "  add_face_url: \"http://insightface:18081/add_face\"" >> "$tmpfile"
+                    echo "  detection_threshold: 0.6" >> "$tmpfile"
+                    echo "  recognition_threshold: 0.5" >> "$tmpfile"
+                    echo "  max_faces: 10" >> "$tmpfile"
+                    echo "  status_check_interval: 1" >> "$tmpfile"
+                    echo "  status_check_timeout: 30" >> "$tmpfile"
+                    mv "$tmpfile" "$config_file"
+                    # Stille Ausführung ohne Fehlermeldung
+                else
+                    # Wenn InsightFace deaktiviert werden soll, aber der Block nicht existiert,
+                    # müssen wir nichts tun
+                    rm "$tmpfile"
+                fi
             fi
             ;;
         provider)
             # Primären Provider setzen
             if grep -q "face_recognition_provider:" "$config_file"; then
-                sed -i.bak "s/face_recognition_provider: .*/face_recognition_provider: \"$value\"/" "$config_file"
-                echo -e "${BLUE}Provider-Konfiguration aktualisiert${NC}"
+                # Provider aktualisieren
+                local tmpfile=$(mktemp)
+                while IFS= read -r line; do
+                    if [[ "$line" =~ face_recognition_provider: ]]; then
+                        # Stelle sicher, dass der Wert ohne Anführungszeichen ist und dann füge sie korrekt hinzu
+                        local clean_value=$(echo "$value" | sed 's/"//g')
+                        echo "  face_recognition_provider: \"$clean_value\"" 
+                    else
+                        echo "$line"
+                    fi
+                done < "$config_file" > "$tmpfile"
+                mv "$tmpfile" "$config_file"
+                # Stille Ausführung
             else
-                # Zeile hinzufügen, falls noch nicht vorhanden (am Ende der Datei)
-                echo "" >> "$config_file"
-                echo "face_recognition_provider: \"$value\"" >> "$config_file"
-                echo -e "${BLUE}Provider-Konfiguration hinzugefügt${NC}"
+                # Prüfen, ob ein processor-Block existiert
+                if grep -q "^processor:" "$config_file"; then
+                    # Füge face_recognition_provider in den processor-Block ein
+                    local tmpfile=$(mktemp)
+                    local in_processor_block=false
+                    local provider_added=false
+                    
+                    while IFS= read -r line; do
+                        echo "$line"
+                        
+                        # Wenn wir im processor-Block sind und die letzte Zeile des Blocks erreicht haben
+                        if [[ "$in_processor_block" == true && ! "$line" =~ ^[[:space:]] ]] && [[ "$provider_added" == false ]]; then
+                            # Füge den Provider vor dem Ende des Blocks ein
+                            echo "  # Provider für die Gesichtserkennung: \"compreface\" oder \"insightface\"" >> "$tmpfile"
+                            echo "  face_recognition_provider: \"$value\"" >> "$tmpfile"
+                            provider_added=true
+                            in_processor_block=false
+                        elif [[ "$line" =~ ^processor: ]]; then
+                            in_processor_block=true
+                        elif [[ "$in_processor_block" == true && ! "$line" =~ ^[[:space:]] ]]; then
+                            # Ende des processor-Blocks erreicht
+                            in_processor_block=false
+                        fi
+                    done < "$config_file" > "$tmpfile"
+                    
+                    # Wenn wir am Ende der Datei ankommen und noch im processor-Block sind
+                    if [[ "$in_processor_block" == true && "$provider_added" == false ]]; then
+                        echo "  # Provider für die Gesichtserkennung: \"compreface\" oder \"insightface\"" >> "$tmpfile"
+                        echo "  face_recognition_provider: \"$value\"" >> "$tmpfile"
+                    fi
+                    
+                    mv "$tmpfile" "$config_file"
+                    # Stille Ausführung
+                else
+                    # Wenn kein processor-Block existiert, fügen wir einen hinzu
+                    echo "" >> "$config_file"
+                    echo "processor:" >> "$config_file"
+                    echo "  image_processing_interval: 5" >> "$config_file"
+                    echo "  max_workers: 5" >> "$config_file"
+                    echo "  max_processing_time: 30" >> "$config_file"
+                    echo "  # Provider für die Gesichtserkennung: \"compreface\" oder \"insightface\"" >> "$config_file"
+                    echo "  face_recognition_provider: \"$value\"" >> "$config_file"
+                    # Stille Ausführung
+                fi
             fi
             ;;
     esac
+}
+
+# Hardware-spezifische Felder aus der Quellkonfiguration extrahieren
+extract_hardware_config() {
+    local source_config=$1
+    local target_config=$2
     
-    # Backup-Datei entfernen
-    rm -f "${config_file}.bak"
+    # 1. use_gpu-Wert übernehmen
+    if grep -q "use_gpu:" "$source_config"; then
+        local use_gpu=$(grep "use_gpu:" "$source_config" | awk '{print $2}')
+        update_yaml_value "$target_config" "use_gpu" "$use_gpu"
+    fi
+    
+    # 2. backend-Wert übernehmen
+    if grep -q "backend:" "$source_config"; then
+        # Extrahiere den Wert ohne Anführungszeichen
+        local backend=$(grep "backend:" "$source_config" | awk '{print $2}' | sed 's/"//g')
+        if grep -q "backend:" "$target_config"; then
+            update_yaml_value "$target_config" "backend" "$backend"
+        else
+            # Backend in backend-Block einfügen, falls nicht vorhanden
+            if grep -q "opencv:" "$TARGET_CONFIG"; then
+                # Nach dem opencv-Block suchen und backend dort einfügen
+                local tmp=$(mktemp)
+                # Anführungszeichen um backend-Wert setzen, damit YAML korrekt ist
+                awk -v backend="$backend" '
+                /opencv:/ { print; in_block = 1; next }
+                in_block && /enabled:/ { print "    enabled: true\n    backend: \"" backend "\""; in_block = 0; next }
+                { print }
+                ' "$TARGET_CONFIG" > "$tmp" && mv "$tmp" "$TARGET_CONFIG"
+                rm -f "${TARGET_CONFIG}.bak" 2>/dev/null
+            fi
+        fi
+    fi
+    
+    # 3. target-Wert übernehmen
+    if grep -q "target:" "$source_config"; then
+        # Extrahiere den Wert ohne Anführungszeichen
+        local target=$(grep "target:" "$source_config" | awk '{print $2}' | sed 's/"//g')
+        if grep -q "target:" "$target_config"; then
+            update_yaml_value "$target_config" "target" "$target"
+        else
+            # Target in den opencv-Block einfügen, falls nicht vorhanden
+            if grep -q "opencv:" "$TARGET_CONFIG"; then
+                # Nach dem backend-Eintrag suchen und target dort einfügen
+                local tmp=$(mktemp)
+                # Anführungszeichen um target-Wert setzen, damit YAML korrekt ist
+                awk -v target="$target" '
+                /backend:/ { print; print "  target: \"" target "\""; next }
+                { print }
+                ' "$TARGET_CONFIG" > "$tmp" && mv "$tmp" "$TARGET_CONFIG"
+                rm -f "${TARGET_CONFIG}.bak" 2>/dev/null
+            fi
+        fi
+    fi
+    
+    # 3. metal_enabled-Wert übernehmen (für Apple Silicon)
+    if grep -q "metal_enabled:" "$source_config"; then
+        local metal_enabled=$(grep "metal_enabled:" "$source_config" | awk '{print $2}')
+        if grep -q "metal_enabled:" "$target_config"; then
+            update_yaml_value "$target_config" "metal_enabled" "$metal_enabled"
+        else
+            # Metal-Wert einfügen, falls benötigt
+            if grep -q "opencv:" "$TARGET_CONFIG"; then
+                # Nach dem opencv-Block suchen und metal_enabled dort einfügen
+                # Plattformunabhängiger Ansatz ohne komplexe sed-Befehle
+                tmp=$(mktemp)
+                awk -v metal_enabled="$metal_enabled" '
+                /opencv:/ { print; in_block = 1; next }
+                in_block && /backend:/ { print "    backend: \"metal\"\n    metal_enabled: " metal_enabled; in_block = 0; next }
+                { print }
+                ' "$TARGET_CONFIG" > "$tmp" && mv "$tmp" "$TARGET_CONFIG"
+                rm -f "${TARGET_CONFIG}.bak" 2>/dev/null
+            fi
+        fi
+    fi
+    
+    # 4. max_workers-Wert übernehmen
+    if grep -q "max_workers:" "$source_config"; then
+        local max_workers=$(grep "max_workers:" "$source_config" | awk '{print $2}')
+        if grep -q "max_workers:" "$target_config"; then
+            update_yaml_value "$target_config" "max_workers" "$max_workers"
+        fi
+    fi
+    
+    # 5. Personendetektionsmethode übernehmen
+    if grep -q "person_detection:" -A 5 "$source_config"; then
+        # Extrahiere den Wert ohne Anführungszeichen
+        local method=$(grep -A 5 "person_detection:" "$source_config" | grep "method:" | awk '{print $2}' | tr -d '"')
+        
+        if [ -n "$method" ]; then
+            local tmpfile=$(mktemp)
+            local in_opencv=false
+            local in_person_detection=false
+            local method_updated=false
+            
+            while IFS= read -r line; do
+                if [[ "$line" =~ ^[[:space:]]*opencv: ]]; then
+                    in_opencv=true
+                    echo "$line"
+                elif [[ "$in_opencv" == true && "$line" =~ ^[[:space:]]*person_detection: ]]; then
+                    in_person_detection=true
+                    echo "$line"
+                elif [[ "$in_person_detection" == true && "$line" =~ ^[[:space:]]*method: ]]; then
+                    # Einrückung beibehalten
+                    indent=$(echo "$line" | sed -E "s/^([[:space:]]*)method:.*/\1/")
+                    echo "${indent}method: \"$method\"  # Options: hog, dnn"
+                    method_updated=true
+                else
+                    echo "$line"
+                fi
+                
+                # Ende des person_detection-Blocks erkennen
+                if [[ "$in_person_detection" == true && "$line" =~ ^[[:space:]]{2}[a-z] && ! "$line" =~ ^[[:space:]]{4} ]]; then
+                    in_person_detection=false
+                fi
+                
+                # Ende des OpenCV-Blocks erkennen
+                if [[ "$in_opencv" == true && "$line" =~ ^[a-z] ]]; then
+                    in_opencv=false
+                    in_person_detection=false
+                fi
+            done < "$target_config" > "$tmpfile"
+            
+            if [[ "$method_updated" == true ]]; then
+                mv "$tmpfile" "$target_config"
+                # Stille Ausführung ohne unnötige Bestätigung
+            else
+                rm "$tmpfile"
+                # Stille Ausführung ohne Fehlermeldung
+                # Methode wird bei nächster Ausführung aktualisiert
+            fi
+        fi
+    fi
 }
 
 # Konfiguration wechseln
@@ -188,22 +504,16 @@ switch_config() {
     local hardware=$1
     shift # Ersten Parameter entfernen
     
-    # Standardwerte für Konfigurationsdateinamen ableiten
-    local config_filename="config-${hardware}.yaml"
-    
+    # Hardware-Typ definieren
     case $hardware in
-        nvidia|nvidia-gpu)
-            source_file="$MY_HARDWARE_DIR/config-nvidia-gpu.yaml"
-            ;;
-        amd|amd-gpu)
-            source_file="$MY_HARDWARE_DIR/config-amd-gpu.yaml"
-            ;;
-        cpu)
-            source_file="$MY_HARDWARE_DIR/config-cpu.yaml"
-            ;;
-        apple|apple-silicon)
-            source_file="$MY_HARDWARE_DIR/config-apple-silicon.yaml"
-            ;;
+        nvidia|nvidia-gpu) 
+            config_name="config-nvidia-gpu.yaml" ;;
+        amd|amd-gpu) 
+            config_name="config-amd-gpu.yaml" ;;
+        cpu) 
+            config_name="config-cpu.yaml" ;;
+        apple|apple-silicon) 
+            config_name="config-apple-silicon.yaml" ;;
         *)
             echo -e "${RED}Unbekannter Hardware-Typ: $hardware${NC}"
             show_help
@@ -211,21 +521,43 @@ switch_config() {
             ;;
     esac
     
+    # Richtigen Pfad zur Konfigurationsdatei finden
+    source_file=""
+    
+    # Erst in my-hardware suchen (bevorzugt)
+    if [ -f "$MY_HARDWARE_DIR/$config_name" ]; then
+        source_file="$MY_HARDWARE_DIR/$config_name"
+        echo -e "${BLUE}Verwende benutzerdefinierte Konfiguration: $config_name${NC}"
+    # Dann im Standard-Hardware-Verzeichnis suchen
+    elif [ -f "$HARDWARE_DIR/$config_name" ]; then
+        source_file="$HARDWARE_DIR/$config_name"
+        echo -e "${BLUE}Verwende Standard-Konfiguration: $config_name${NC}"
+    # Wenn nichts gefunden, im Projekt-Stammverzeichnis suchen
+    elif [ -f "$CONFIG_DIR/$config_name" ]; then
+        source_file="$CONFIG_DIR/$config_name"
+        echo -e "${BLUE}Verwende Konfiguration aus Hauptverzeichnis: $config_name${NC}"
+    fi
+    
     if [ ! -f "$source_file" ]; then
         echo -e "${RED}Konfigurationsdatei nicht gefunden: $source_file${NC}"
-        echo "Bitte überprüfe, ob die persönlichen Hardware-Konfigurationen existieren."
+        echo "Bitte überprüfe, ob die Hardware-Konfigurationen existieren."
         exit 1
     fi
     
-    # Sicherheitskopie der aktuellen Konfiguration erstellen, falls vorhanden
+    # Konfiguration prüfen
     if [ -f "$TARGET_CONFIG" ]; then
-        cp "$TARGET_CONFIG" "${TARGET_CONFIG}.bak"
-        echo -e "${BLUE}Sicherheitskopie der aktuellen Konfiguration erstellt: ${TARGET_CONFIG}.bak${NC}"
+        # Konfiguration existiert bereits - weitermachen ohne Backup
+        :  # Null-Befehl (no-op)
+    else
+        # Wenn keine Konfigurationsdatei existiert, die Hardware-Konfiguration komplett übernehmen
+        cp "$source_file" "$TARGET_CONFIG"
+        echo -e "${GREEN}Neue Konfiguration erstellt aus: $hardware${NC}"
+        return 0
     fi
     
-    # Konfiguration kopieren
-    cp "$source_file" "$TARGET_CONFIG"
-    echo -e "${GREEN}Konfiguration gewechselt zu: $hardware${NC}"
+    # Hardware-spezifische Felder aus der Quellkonfiguration extrahieren und in die Zielkonfiguration übernehmen
+    extract_hardware_config "$source_file" "$TARGET_CONFIG"
+    echo -e "${GREEN}Hardware-Konfiguration gewechselt zu: $hardware${NC}"
     
     # Provider-Optionen verarbeiten
     for arg in "$@"; do
@@ -233,33 +565,31 @@ switch_config() {
             local cf_value=${arg#*=}
             if [ "$cf_value" = "on" ]; then
                 update_provider_config "$TARGET_CONFIG" "compreface" "true"
-                echo -e "${GREEN}CompreFace aktiviert${NC}"
+                # Nur eine zusammenfassende Nachricht am Ende
             elif [ "$cf_value" = "off" ]; then
                 update_provider_config "$TARGET_CONFIG" "compreface" "false"
-                echo -e "${YELLOW}CompreFace deaktiviert${NC}"
+                # Nur eine zusammenfassende Nachricht am Ende
             fi
         elif [[ $arg == --insightface=* ]]; then
             local if_value=${arg#*=}
             if [ "$if_value" = "on" ]; then
                 update_provider_config "$TARGET_CONFIG" "insightface" "true"
-                echo -e "${GREEN}InsightFace aktiviert${NC}"
+                # Nur eine zusammenfassende Nachricht am Ende
             elif [ "$if_value" = "off" ]; then
                 update_provider_config "$TARGET_CONFIG" "insightface" "false"
-                echo -e "${YELLOW}InsightFace deaktiviert${NC}"
+                # Nur eine zusammenfassende Nachricht am Ende
             fi
         elif [[ $arg == --provider=* ]]; then
             local provider_value=${arg#*=}
             if [ "$provider_value" = "compreface" ] || [ "$provider_value" = "insightface" ] || [ "$provider_value" = "both" ]; then
                 update_provider_config "$TARGET_CONFIG" "provider" "$provider_value"
-                echo -e "${GREEN}Primärer Erkennungsprovider auf $provider_value gesetzt${NC}"
+                # Nur eine zusammenfassende Nachricht am Ende
             fi
         fi
     done
     
-    # Info, wie man den Container neu startet und Angebot zum direkten Ausführen
+    # Container-Neustart-Info
     echo
-    
-    # Container-Command basierend auf Hardware-Typ festlegen
     local docker_dir=""
     case $hardware in
         nvidia|nvidia-gpu)
@@ -281,109 +611,80 @@ switch_config() {
     echo -e "${BLUE}$docker_cmd${NC}"
     echo
     
-    # Provider-Einstellungen interaktiv konfigurieren
-    echo -e "\n${BLUE}Gesichtserkennungsprovider konfigurieren:${NC}"
+    # Zusammenfassung der Änderungen anzeigen
+    echo -e "\n${GREEN}Folgende Änderungen wurden vorgenommen:${NC}"
+    echo -e "- Hardware: ${BLUE}$hardware${NC}"
     
-    # CompreFace Einstellungen
-    cf_enabled=$(grep -A 2 "^compreface:" "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
-    if [ "$cf_enabled" = "true" ]; then
-        echo -e "1) CompreFace: ${GREEN}Aktiviert${NC}"
-        read -p "   CompreFace deaktivieren? (j/n): " cf_choice
-        if [[ "$cf_choice" =~ ^[jJyY]$ ]]; then
-            update_provider_config "$TARGET_CONFIG" "compreface" "false"
-        fi
-    else
-        echo -e "1) CompreFace: ${RED}Deaktiviert${NC}"
-        read -p "   CompreFace aktivieren? (j/n): " cf_choice
-        if [[ "$cf_choice" =~ ^[jJyY]$ ]]; then
-            update_provider_config "$TARGET_CONFIG" "compreface" "true"
-        fi
+    # CompreFace Status anzeigen
+    if [[ "$@" == *"--compreface=on"* ]]; then
+        echo -e "- CompreFace: ${GREEN}aktiviert${NC}"
+    elif [[ "$@" == *"--compreface=off"* ]]; then
+        echo -e "- CompreFace: ${YELLOW}deaktiviert${NC}"
     fi
     
-    # InsightFace Einstellungen
-    if_enabled=$(grep -A 2 "^insightface:" "$TARGET_CONFIG" | grep "enabled:" | awk '{print $2}')
-    if [ "$if_enabled" = "true" ]; then
-        echo -e "2) InsightFace: ${GREEN}Aktiviert${NC}"
-        read -p "   InsightFace deaktivieren? (j/n): " if_choice
-        if [[ "$if_choice" =~ ^[jJyY]$ ]]; then
-            update_provider_config "$TARGET_CONFIG" "insightface" "false"
-        fi
-    else
-        echo -e "2) InsightFace: ${RED}Deaktiviert${NC}"
-        read -p "   InsightFace aktivieren? (j/n): " if_choice
-        if [[ "$if_choice" =~ ^[jJyY]$ ]]; then
-            update_provider_config "$TARGET_CONFIG" "insightface" "true"
-        fi
+    # InsightFace Status anzeigen
+    if [[ "$@" == *"--insightface=on"* ]]; then
+        echo -e "- InsightFace: ${GREEN}aktiviert${NC}"
+    elif [[ "$@" == *"--insightface=off"* ]]; then
+        echo -e "- InsightFace: ${YELLOW}deaktiviert${NC}"
     fi
     
-    # Primärer Provider
-    echo -e "\n${BLUE}Primären Erkennungsprovider wählen:${NC}"
-    provider=$(grep "face_recognition_provider:" "$TARGET_CONFIG" | awk '{print $2}' | tr -d '"')
-    echo -e "   Aktuell: ${GREEN}${provider:-compreface}${NC}"
-    echo "   1. CompreFace"
-    echo "   2. InsightFace"
-    echo "   3. Beide (both)"
-    read -p "   Wähle den primären Provider (1-3, Enter für keine Änderung): " provider_choice
+    # Primären Provider anzeigen
+    for arg in "$@"; do
+        if [[ "$arg" == --provider=* ]]; then
+            provider_value=${arg#*=}
+            echo -e "- Provider: ${BLUE}$provider_value${NC}"
+        fi
+    done
     
-    case "$provider_choice" in
-        1)
-            update_provider_config "$TARGET_CONFIG" "provider" "compreface"
-            ;;
-        2)
-            update_provider_config "$TARGET_CONFIG" "provider" "insightface"
-            ;;
-        3)
-            update_provider_config "$TARGET_CONFIG" "provider" "both"
-            ;;
-    esac
+    # Docker-Restart Optionen anzeigen
+    echo -e "\n${YELLOW}Zum Anwenden der Änderungen:${NC}"
+    echo -e "cd $docker_dir && docker compose down && docker compose build && docker compose up -d"
     
     # Fragen, ob der Container neu gestartet werden soll
     echo
-    read -p "Möchtest du den Container jetzt neu starten? (j/n): " restart_choice
+    read -p "Container jetzt neu starten? (j/n): " restart_choice
     
     if [[ "$restart_choice" =~ ^[jJyY]$ ]]; then
-        echo -e "${GREEN}Führe Container-Neustart aus...${NC}"
         pushd "$docker_dir" > /dev/null
+        echo -e "${BLUE}Stoppe Container...${NC}"
         docker compose down
         
         # Fragen, ob ein Clean-Build durchgeführt werden soll
-        read -p "Clean-Build durchführen (--no-cache)? Empfohlen bei Template/Config-Änderungen (j/n): " clean_build_choice
+        read -p "Clean-Build durchführen? (j/n): " clean_build_choice
         
-        echo -e "${YELLOW}Container gestoppt. Baue neues Image und starte Container...${NC}"
         if [[ "$clean_build_choice" =~ ^[jJyY]$ ]]; then
-            echo -e "${BLUE}Führe Clean-Build aus (--no-cache)...${NC}"
+            echo -e "${BLUE}Führe Clean-Build aus...${NC}"
             docker compose build --no-cache
         else
             echo -e "${BLUE}Führe normalen Build aus...${NC}"
             docker compose build
         fi
         
+        echo -e "${BLUE}Starte Container...${NC}"
         docker compose up -d
         
-        echo -e "${GREEN}Container erfolgreich neu gestartet!${NC}"
+        echo -e "${GREEN}Fertig! Container neu gestartet.${NC}"
         popd > /dev/null
         
-        # Optional: Anzeigen der Logs
-        read -p "Möchtest du die Container-Logs anzeigen? (j/n): " logs_choice
-        if [[ "$logs_choice" =~ ^[jJyY]$ ]]; then
-            pushd "$docker_dir" > /dev/null
-            echo -e "${BLUE}Container-Logs (Strg+C zum Beenden):${NC}"
-            docker compose logs -f
-            popd > /dev/null
+        # Fragen, ob Logs angezeigt werden sollen
+        echo
+        read -p "Möchten Sie die Container-Logs anzeigen? (j/n): " show_logs_choice
+        if [[ "$show_logs_choice" =~ ^[jJyY]$ ]]; then
+            # Hardware-Typ als Parameter übergeben
+            show_logs "$hardware"
+        else
+            echo -e "${BLUE}Sie können die Logs jederzeit mit diesem Befehl anzeigen:${NC}"
+            echo -e "$0 --logs"
+            echo -e "oder kürzer:${NC}"
+            echo -e "$0 -L"
         fi
     else
         echo -e "${YELLOW}Container-Neustart übersprungen.${NC}"
     fi
 }
 
-# Prüfen und ggf. initialisieren von Verzeichnissen, bevor irgendwas anderes passiert
-if [ ! -d "$CONFIG_DIR" ]; then
-    echo -e "${RED}Fehler: Konfigurationsverzeichnis nicht gefunden: $CONFIG_DIR${NC}"
-    echo -e "${YELLOW}Bitte stelle sicher, dass du das Skript aus dem richtigen Verzeichnis aufrufst.${NC}"
-    exit 1
-fi
-
-# Interaktive Menüauswahl für Hardware und Provider
+# Interaktive Menüauswahl für Hardware
 show_interactive_menu() {
     clear
     echo -e "${BLUE}====== Double-Take-Go-Reborn Konfigurationsassistent ======${NC}"
@@ -409,9 +710,87 @@ show_interactive_menu() {
         *) echo -e "${RED}Ungültige Auswahl!${NC}"; return 1 ;;
     esac
     
+    # Provider-Optionen abfragen
+    local provider_args=""
+    echo
+    echo -e "${YELLOW}Gesichtserkennungs-Provider:${NC}"
+    
+    # CompreFace aktivieren/deaktivieren
+    echo -e "\nCompreFace aktivieren?"
+    select cf_choice in "Ja" "Nein" "Nicht ändern"; do
+        case $cf_choice in
+            "Ja") 
+                provider_args="$provider_args --compreface=on"
+                break
+                ;;
+            "Nein")
+                provider_args="$provider_args --compreface=off"
+                break
+                ;;
+            "Nicht ändern")
+                break
+                ;;
+            *) echo "Ungültige Auswahl" ;;
+        esac
+    done
+    
+    # InsightFace aktivieren/deaktivieren
+    echo -e "\nInsightFace aktivieren?"
+    select if_choice in "Ja" "Nein" "Nicht ändern"; do
+        case $if_choice in
+            "Ja") 
+                provider_args="$provider_args --insightface=on"
+                break
+                ;;
+            "Nein")
+                provider_args="$provider_args --insightface=off"
+                break
+                ;;
+            "Nicht ändern")
+                break
+                ;;
+            *) echo "Ungültige Auswahl" ;;
+        esac
+    done
+    
+    # Primären Provider wählen - vereinfacht ohne komplexe Parameter
+    echo -e "\nPrimären Erkennungsanbieter wählen:"
+    select provider_choice in "CompreFace" "InsightFace" "Beide" "Nicht ändern"; do
+        case $provider_choice in
+            "CompreFace") 
+                # Direkt Variable setzen statt parameter-string
+                provider="compreface"
+                break
+                ;;
+            "InsightFace")
+                provider="insightface"
+                break
+                ;;
+            "Beide")
+                provider="both"
+                break
+                ;;
+            "Nicht ändern")
+                provider=""
+                break
+                ;;
+            *) echo "Ungültige Auswahl" ;;
+        esac
+    done
+    
+    # Wenn Provider gewählt wurde, als Parameter hinzufügen
+    if [ -n "$provider" ]; then
+        provider_args="$provider_args --provider=$provider"
+    fi
+    
     # Konfiguration wechseln
     if [ -n "$hardware_type" ]; then
-        switch_config "$hardware_type"
+        # Provider-Argumente an das Kommando anhängen, wenn vorhanden
+        if [ -n "$provider_args" ]; then
+            switch_config "$hardware_type" $provider_args
+        else
+            switch_config "$hardware_type"
+        fi
         return 0
     fi
     
@@ -429,31 +808,17 @@ case "$1" in
     -s|--status)
         show_status
         ;;
+    -L|--logs)
+        show_logs
+        ;;
     -i|--interactive)
         show_interactive_menu
         ;;
-    --setup)
-        echo -e "${BLUE}Führe Ersteinrichtung durch...${NC}"
-        init_config
-        echo -e "${GREEN}Ersteinrichtung abgeschlossen.${NC}"
-        echo -e "${YELLOW}Verwende '$0 --list' um verfügbare Konfigurationen anzuzeigen.${NC}"
-        ;;
     "")
-        # Prüfen, ob das Hardware-Verzeichnis existiert, andernfalls Hinweis zum Setup
-        if [ ! -d "$MY_HARDWARE_DIR" ] || [ -z "$(ls -A "$MY_HARDWARE_DIR" 2>/dev/null)" ]; then
-            echo -e "${YELLOW}Persönliches Hardware-Verzeichnis fehlt oder ist leer.${NC}"
-            echo -e "${BLUE}Führe zuerst '$0 --setup' aus, um die Ersteinrichtung durchzuführen.${NC}"
-            exit 1
-        fi
         # Interaktives Menü ohne Parameter anzeigen
         show_interactive_menu
         ;;
     *)
-        # Prüfen, ob das Hardware-Verzeichnis existiert, andernfalls automatisch initialisieren
-        if [ ! -d "$MY_HARDWARE_DIR" ]; then
-            echo -e "${YELLOW}Persönliches Hardware-Verzeichnis nicht gefunden. Führe automatische Ersteinrichtung durch...${NC}"
-            init_config
-        fi
         switch_config "$@"
         ;;
 esac
