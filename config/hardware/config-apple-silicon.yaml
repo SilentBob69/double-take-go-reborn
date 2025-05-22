@@ -41,7 +41,7 @@ opencv:
   person_detection:
     method: "dnn"  # DNN method is optimized for Apple Neural Engine
     model: "ssd_mobilenet"  # Better performance on Apple Silicon
-    confidence_threshold: 0.85
+    confidence_threshold: 0.7
     scale_factor: 1.03
     min_neighbors: 3
     min_size_width: 64

@@ -365,21 +365,30 @@ func (pd *PersonDetector) Initialize(ctx context.Context) error {
 			// DNN-Modell laden
 			net := gocv.ReadNet(modelPath, configPath)
 			if net.Empty() {
+				log.Errorf("Konnte DNN-Modell nicht laden: %s", modelPath)
 				return fmt.Errorf("konnte DNN-Modell nicht laden: %s", modelPath)
 			}
+			
+			// Zuerst das Netzwerk zuweisen
+			pd.dnnNet = net
+			log.Infof("DNN-Modell erfolgreich geladen: %s", modelPath)
 			
 			// Setze Backend-Optionen wenn GPU aktiviert ist
 			if pd.cfg.UseGPU {
 				backend, target := getGPUBackend(*pd.cfg)
+				pd.backend = backend
+				pd.target = target
+				
+				// Jetzt setzen wir die Backend-Parameter auf dem initialisierten Netzwerk
 				pd.dnnNet.SetPreferableBackend(gocv.NetBackendType(backend))
 				pd.dnnNet.SetPreferableTarget(gocv.NetTargetType(target))
-				log.Debugf("DNN nutzt GPU-Backend: %v, Target: %v", backend, target)
+				log.Infof("DNN verwendet GPU-Backend: %v, Target: %v", backend, target)
+			} else {
+				log.Infof("DNN verwendet CPU-Backend (GPU nicht aktiviert)")
 			}
 			
 			// Loggen, welches Backend tatsächlich verwendet wird
-			log.Infof("DNN-Modell geladen mit Backend %d und Target %d", pd.backend, pd.target)
-			
-			pd.dnnNet = net
+			log.Infof("DNN-Modell erfolgreich konfiguriert mit Backend %d und Target %d", pd.backend, pd.target)
 		}
 	}
 	
@@ -401,6 +410,11 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 	defer img.Close()
 
 	var persons []DetectedPerson
+	
+	// Statistik-Variablen für die Erkennungsergebnisse
+	valideDetektionen := 0
+	skippedLowConf := 0
+	skippedWrongClass := 0
 
 	// Bild für Performance skalieren wenn nötig
 	var processImg gocv.Mat
@@ -429,14 +443,47 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 	// Je nach konfiguriertem Detektor
 	if pd.detectorType == HOGDetector {
 		// HOG-basierte Personenerkennung mit konfigurierten Parametern
-		// Personen mit HOG-Descriptor erkennen
-		// Angepasste Parameter - ohne zusätzliche Konfigurationsparameter
-		rects := pd.hogDescriptor.DetectMultiScale(processImg)
+		log.Infof("Verwende HOG-Methode für Personenerkennung mit Schwellenwert: %.2f", pd.confidenceThreshold)
 		
-		// HOG liefert keine direkten Konfidenzwerte, daher setzen wir 0.8 als Standard
+		// Log für bessere Fehlerbehebung
+		log.Debugf("HOG-Parameter: ScaleFactor=%.2f, Confidence=%.2f", 
+			pd.cfg.PersonDetection.ScaleFactor, pd.confidenceThreshold)
+		
+		// Standard-Methode für HOG-Detektion verwenden
+		rects := pd.hogDescriptor.DetectMultiScale(processImg)
+		log.Infof("HOG-Erkennung: %d potenzielle Personen gefunden", len(rects))
+		
+		// HOG liefert keine direkten Konfidenzwerte, daher erstellen wir dynamische Werte
 		weights := make([]float64, len(rects))
 		for i := range weights {
-			weights[i] = 0.8 // Standard-Konfidenz für HOG
+			// Dynamische Konfidenzwerte basierend auf der Größe des Rechtecks
+			// Größere Rechtecke bekommen höhere Konfidenz (zwischen 0.75 und 0.95)
+			area := float64(rects[i].Dx() * rects[i].Dy())
+			maxArea := float64(processImg.Cols() * processImg.Rows()) / 4 // Max 1/4 des Bildes
+			normalizedArea := area / maxArea
+			if normalizedArea > 1.0 {
+				normalizedArea = 1.0
+			}
+			// Konfidenz zwischen 0.75 und 0.95 basierend auf Größe
+			weights[i] = 0.75 + (normalizedArea * 0.2)
+		}
+		
+		// Wenn keine weights zurückgegeben wurden (sollte nicht passieren), erstellen wir standardisierte
+		if len(weights) == 0 && len(rects) > 0 {
+			log.Warnf("HOG-Detektor hat keine Konfidenzwerte zurückgegeben, verwende dynamische Werte")
+			weights = make([]float64, len(rects))
+			for i := range weights {
+				// Dynamische Konfidenzwerte basierend auf der Größe des Rechtecks
+				// Größere Rechtecke bekommen höhere Konfidenz (zwischen 0.75 und 0.95)
+				area := float64(rects[i].Dx() * rects[i].Dy())
+				maxArea := float64(processImg.Cols() * processImg.Rows()) / 4 // Max 1/4 des Bildes
+				normalizedArea := area / maxArea
+				if normalizedArea > 1.0 {
+					normalizedArea = 1.0
+				}
+				// Konfidenz zwischen 0.75 und 0.95 basierend auf Größe
+				weights[i] = 0.75 + (normalizedArea * 0.2)
+			}
 		}
 
 		// Skalierung zurück, wenn Bild verkleinert wurde
@@ -472,6 +519,10 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 		}
 	} else if pd.detectorType == DNNDetector && !pd.dnnNet.Empty() {
 		// DNN-basierte Personenerkennung
+		log.Infof("Verwende DNN-Methode für Personenerkennung mit Schwellenwert: %.2f", pd.confidenceThreshold)
+		log.Infof("DNN-Konfiguration: Backend: %d, Target: %d, Bildgröße: %dx%d", 
+			pd.backend, pd.target, pd.dnnInputWidth, pd.dnnInputHeight)
+		
 		// Bild in Blob umwandeln für DNN
 		blob := gocv.BlobFromImage(
 			processImg,
@@ -482,34 +533,45 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 			false,                                     // Crop
 		)
 		defer blob.Close()
+		log.Debug("Bild in Blob-Format konvertiert für DNN-Verarbeitung")
 
 		// Forward pass durch das Netzwerk
 		pd.dnnNet.SetInput(blob, "")
+		log.Debug("Starte Forward Pass durch das DNN-Netzwerk")
 		prob := pd.dnnNet.Forward("")
 		defer prob.Close()
+		log.Debugf("Forward Pass abgeschlossen, erhalte %d Ergebniszeilen", prob.Rows())
 
 		// Ergebnisse verarbeiten
 		rows := prob.Rows()
+		log.Infof("DNN hat %d mögliche Detektionen zurückgegeben", rows)
+		
+		// Zähler für valide Detektionen und übersprungene Detektionen
+		valideDetektionen := 0
+		skippedLowConf := 0
+		skippedWrongClass := 0
+		
 		// SSD-Format interpretieren: [img_id, class_id, confidence, left, top, right, bottom]
 		for i := 0; i < rows; i++ {
-			confidence := prob.GetFloatAt(i, 2)
-			
-			// Nur weitermachen, wenn die Konfidenz über dem Schwellenwert liegt
-			if float64(confidence) < pd.confidenceThreshold {
-				continue
-			}
-			
-			// Klassen-ID prüfen - wir interessieren uns nur für Personen
+			// Zuerst Klassen-ID prüfen - wir interessieren uns nur für Personen
 			classID := int(prob.GetFloatAt(i, 1))
 			if classID != pd.personClassId {
+				log.Debugf("DNN: Überspringe Detektion #%d mit Klasse %d (nicht Person)", i, classID)
+				skippedWrongClass++
 				continue
 			}
 			
 			// Konfidenzwert auslesen und prüfen
 			conf := prob.GetFloatAt(i, 2)
 			if float64(conf) < pd.confidenceThreshold {
+				log.Debugf("DNN: Überspringe Person #%d mit zu niedriger Konfidenz: %.3f < %.3f", 
+					i, conf, pd.confidenceThreshold)
+				skippedLowConf++
 				continue
 			}
+			
+			// Inkrementiere Zähler für valide Detektionen
+			valideDetektionen++
 			
 			// Bounding Box extrahieren - sicherstellen, dass Koordinaten korrekt skaliert sind
 			// Die DNN-Ausgabe enthält normalisierte Koordinaten (0-1), die auf die tatsächliche Bildgröße skaliert werden müssen
@@ -520,12 +582,16 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 			x2 := float64(prob.GetFloatAt(i, 5))
 			y2 := float64(prob.GetFloatAt(i, 6))
 			
+			// Detaillierte Ausgabe der rohen Koordinaten
+			log.Debugf("DNN: Person #%d mit Konfidenz %.3f, Rohe Koordinaten: (%.3f,%.3f)-(%.3f,%.3f)", 
+				i, conf, x1, y1, x2, y2)
+			
 			// Prüfen, ob die Werte im Bereich 0-1 liegen (normalisiert)
 			// Falls nicht, nehmen wir an, dass sie bereits in Pixelkoordinaten sind
 			needScaling := true
 			if x1 > 1.0 || y1 > 1.0 || x2 > 1.0 || y2 > 1.0 {
 				needScaling = false
-				log.Debugf("Koordinaten scheinen bereits in Pixeleinheiten zu sein: (%.2f,%.2f)-(%.2f,%.2f)", x1, y1, x2, y2)
+				log.Debugf("DNN: Koordinaten scheinen bereits in Pixeleinheiten zu sein")  
 			}
 			
 			// Skalieren auf die Bildmaße, wenn nötig
@@ -564,7 +630,13 @@ func (pd *PersonDetector) DetectPersons(ctx context.Context, imgPath string) ([]
 		}
 	}
 
-	log.Debugf("OpenCV: %d Personen in %s erkannt", len(persons), filepath.Base(imgPath))
+	// Zusammenfassung der Erkennungsergebnisse
+	if pd.detectorType == DNNDetector {
+		log.Infof("OpenCV-DNN: %d Personen in %s erkannt (von %d möglichen Detektionen, %d falsche Klasse, %d zu niedrige Konfidenz)", 
+			len(persons), filepath.Base(imgPath), valideDetektionen+skippedLowConf+skippedWrongClass, skippedWrongClass, skippedLowConf)
+	} else {
+		log.Infof("OpenCV-HOG: %d Personen in %s erkannt", len(persons), filepath.Base(imgPath))
+	}
 	
 	// Visualisierung der erkannten Personen für Debug-Stream
 	log.Debugf("Beginne Visualisierung für %d erkannte Personen", len(persons))
